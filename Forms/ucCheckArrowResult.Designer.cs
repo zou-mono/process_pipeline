@@ -28,30 +28,74 @@
         /// </summary>
         private void InitializeComponent()
         {
+            System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(ucCheckArrowResult));
             this.dgvProblems = new System.Windows.Forms.DataGridView();
+            this.tblLayoutPanel = new System.Windows.Forms.TableLayoutPanel();
+            this.toolbar = new System.Windows.Forms.ToolStrip();
+            this.btnReversePolyline = new System.Windows.Forms.ToolStripButton();
             ((System.ComponentModel.ISupportInitialize)(this.dgvProblems)).BeginInit();
+            this.tblLayoutPanel.SuspendLayout();
+            this.toolbar.SuspendLayout();
             this.SuspendLayout();
             // 
             // dgvProblems
             // 
             this.dgvProblems.ColumnHeadersHeightSizeMode = System.Windows.Forms.DataGridViewColumnHeadersHeightSizeMode.AutoSize;
-            this.dgvProblems.Location = new System.Drawing.Point(65, 96);
+            this.dgvProblems.Location = new System.Drawing.Point(3, 66);
             this.dgvProblems.Name = "dgvProblems";
             this.dgvProblems.RowTemplate.Height = 23;
-            this.dgvProblems.Size = new System.Drawing.Size(240, 150);
+            this.dgvProblems.Size = new System.Drawing.Size(194, 71);
             this.dgvProblems.TabIndex = 0;
             this.dgvProblems.CellContentClick += new System.Windows.Forms.DataGridViewCellEventHandler(this.lvProblems_CellContentClick);
             this.dgvProblems.SelectionChanged += new System.EventHandler(this.dgvProblems_SelectionChanged);
+            // 
+            // tblLayoutPanel
+            // 
+            this.tblLayoutPanel.ColumnCount = 1;
+            this.tblLayoutPanel.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 48.5F));
+            this.tblLayoutPanel.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 51.5F));
+            this.tblLayoutPanel.Controls.Add(this.toolbar, 0, 0);
+            this.tblLayoutPanel.Controls.Add(this.dgvProblems, 0, 1);
+            this.tblLayoutPanel.Location = new System.Drawing.Point(84, 69);
+            this.tblLayoutPanel.Name = "tblLayoutPanel";
+            this.tblLayoutPanel.RowCount = 2;
+            this.tblLayoutPanel.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 33.33333F));
+            this.tblLayoutPanel.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 66.66666F));
+            this.tblLayoutPanel.Size = new System.Drawing.Size(353, 189);
+            this.tblLayoutPanel.TabIndex = 1;
+            // 
+            // toolbar
+            // 
+            this.toolbar.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
+            this.btnReversePolyline});
+            this.toolbar.Location = new System.Drawing.Point(0, 0);
+            this.toolbar.Name = "toolbar";
+            this.toolbar.Size = new System.Drawing.Size(353, 25);
+            this.toolbar.TabIndex = 1;
+            this.toolbar.Text = "toolStrip1";
+            // 
+            // btnReversePolyline
+            // 
+            this.btnReversePolyline.DisplayStyle = System.Windows.Forms.ToolStripItemDisplayStyle.Image;
+            this.btnReversePolyline.Image = ((System.Drawing.Image)(resources.GetObject("btnReversePolyline.Image")));
+            this.btnReversePolyline.ImageTransparentColor = System.Drawing.Color.Magenta;
+            this.btnReversePolyline.Name = "btnReversePolyline";
+            this.btnReversePolyline.Size = new System.Drawing.Size(23, 22);
+            this.btnReversePolyline.Text = "反转管线绘制方向";
             // 
             // ucCheckArrowResult
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 12F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.Controls.Add(this.dgvProblems);
+            this.Controls.Add(this.tblLayoutPanel);
             this.Name = "ucCheckArrowResult";
-            this.Size = new System.Drawing.Size(403, 367);
+            this.Size = new System.Drawing.Size(516, 338);
             this.Load += new System.EventHandler(this.ucCheckArrowResult_Load);
             ((System.ComponentModel.ISupportInitialize)(this.dgvProblems)).EndInit();
+            this.tblLayoutPanel.ResumeLayout(false);
+            this.tblLayoutPanel.PerformLayout();
+            this.toolbar.ResumeLayout(false);
+            this.toolbar.PerformLayout();
             this.ResumeLayout(false);
 
         }
@@ -59,5 +103,8 @@
         #endregion
 
         private System.Windows.Forms.DataGridView dgvProblems;
+        private System.Windows.Forms.TableLayoutPanel tblLayoutPanel;
+        private System.Windows.Forms.ToolStrip toolbar;
+        private System.Windows.Forms.ToolStripButton btnReversePolyline;
     }
 }

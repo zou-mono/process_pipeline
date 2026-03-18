@@ -26,7 +26,18 @@ namespace process_pipeline.Forms
         {
             InitializeComponent();
             this.problems = problems ?? new List<ProblemItem>();  // 防止 null
-           
+
+            tblLayoutPanel.Dock = DockStyle.Fill;
+            toolbar.Dock = DockStyle.Fill;
+
+            // 第一行：工具条固定高度
+            tblLayoutPanel.RowStyles[0].SizeType = SizeType.Absolute;  
+            tblLayoutPanel.RowStyles[0].Height = 25;  // 工具条高度
+
+            // 第二行：ListView 占满剩余
+            tblLayoutPanel.RowStyles[1].SizeType = SizeType.Percent;  
+            tblLayoutPanel.RowStyles[1].Height = 100F;  // 工具条高度
+
             // 构造函数时获取一次（作为默认）
             doc = AcadApp.DocumentManager.MdiActiveDocument;
 
@@ -43,7 +54,8 @@ namespace process_pipeline.Forms
         public void UpdateProblems(List<ProblemItem> newProblems)
         {
             problems = newProblems ?? new List<ProblemItem>();
-            SetupDataGridView();
+            //SetupDataGridView();
+            PopulateDataGridView();
         }
 
         // 定义四列
@@ -57,35 +69,40 @@ namespace process_pipeline.Forms
             dgvProblems.AllowUserToResizeRows = false;
             dgvProblems.ReadOnly = true;                 // 只读
             dgvProblems.SelectionMode = DataGridViewSelectionMode.FullRowSelect; // 整行选中
-            dgvProblems.MultiSelect = false;             // 单选
+            dgvProblems.MultiSelect = true;             // 单选
             dgvProblems.RowHeadersVisible = false;       // 隐藏最左侧的自带行头(小箭头那列)
             dgvProblems.BackgroundColor = Color.White;   // 背景色
             dgvProblems.BorderStyle = BorderStyle.None;
 
             // ================= 现代风格表头设置 =================
             dgvProblems.EnableHeadersVisualStyles = false; // 【关键】必须关闭，才能自定义表头颜色
-            dgvProblems.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(41, 57, 85); // 藏青色背景
+            //dgvProblems.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(41, 57, 85); // 藏青色背景
+            dgvProblems.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(68, 68, 68); 
             dgvProblems.ColumnHeadersDefaultCellStyle.ForeColor = Color.White;                // 白色文字
             dgvProblems.ColumnHeadersDefaultCellStyle.Font = new System.Drawing.Font("微软雅黑", 10F, FontStyle.Bold); // 加粗
             dgvProblems.ColumnHeadersDefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter; // 居中
             dgvProblems.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.Single;
-            dgvProblems.ColumnHeadersHeight = 35;
+            //dgvProblems.ColumnHeadersHeight = 35;
             dgvProblems.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
 
             // ================= 数据行样式设置 =================
             dgvProblems.GridColor = Color.LightGray;     // 浅灰色网格线
-            dgvProblems.RowTemplate.Height = 30;         // 行高
+            //dgvProblems.RowTemplate.Height = 30;         // 行高
             dgvProblems.DefaultCellStyle.Font = new System.Drawing.Font("微软雅黑", 9F, FontStyle.Regular);
             dgvProblems.DefaultCellStyle.SelectionBackColor = Color.FromArgb(0, 120, 215); // 选中时的Win10蓝
             // 斑马线交替行颜色（浅灰），让表格更好看
             dgvProblems.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(245, 245, 245); 
 
             // ================= 添加列 =================
+            dgvProblems.Columns.Add("colIndex", "NO");
+            dgvProblems.Columns["colIndex"].Width = 35;
+            dgvProblems.Columns["colIndex"].DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
+
             dgvProblems.Columns.Add("colPipeId", "管线ID");
-            dgvProblems.Columns["colPipeId"].Width = 120;
+            dgvProblems.Columns["colPipeId"].Width = 80;
 
             dgvProblems.Columns.Add("colLocation", "位置");
-            dgvProblems.Columns["colLocation"].Width = 180;
+            dgvProblems.Columns["colLocation"].Width = 150;
 
             dgvProblems.Columns.Add("colDesc", "问题描述");
             // 最后一列自动填满剩余空间，不用担心右边留白
@@ -96,6 +113,8 @@ namespace process_pipeline.Forms
         {
             dgvProblems.Rows.Clear();
             
+            int index = 1; // 定义一个从 1 开始的序号计数器
+
             foreach (var problem in problems)
             {
                 // 格式化位置
@@ -103,12 +122,20 @@ namespace process_pipeline.Forms
                     ? "未知" 
                     : $"({problem.Location.X:F2}, {problem.Location.Y:F2})";
 
-                // 直接添加一行数据，并返回行索引
-                int rowIndex = dgvProblems.Rows.Add(problem.PipeId, posStr, problem.Description);
+                // 注意这里：把 index.ToString() 放在第一个参数位置
+                int rowIndex = dgvProblems.Rows.Add(index.ToString(), problem.PipeId, posStr, problem.Description);
+
+                //// 直接添加一行数据，并返回行索引
+                //int rowIndex = dgvProblems.Rows.Add(problem.PipeId, posStr, problem.Description);
 
                 // 把整个 ProblemItem 对象存到该行的 Tag 中，点击时可用
                 dgvProblems.Rows[rowIndex].Tag = problem;
+
+                index++;
             }
+
+            // 清除默认选中状态
+            dgvProblems.ClearSelection(); 
         }
 
         private void ucCheckArrowResult_Load(object sender, EventArgs e)
