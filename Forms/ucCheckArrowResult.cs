@@ -47,6 +47,8 @@ namespace process_pipeline.Forms
             // 1. 初始化表格列和现代样式
             SetupDataGridView();
 
+            SetupToolbar();
+
             // 2. 填充数据
             PopulateDataGridView();
         }
@@ -56,6 +58,11 @@ namespace process_pipeline.Forms
             problems = newProblems ?? new List<ProblemItem>();
             //SetupDataGridView();
             PopulateDataGridView();
+        }
+
+        private void SetupToolbar() {
+            //btnReversePolyline.Size = new Size(25, 25);
+            //tooltip.SetToolTip(btnReversePolyline, "反转折线（自定义提示样式）");
         }
 
         // 定义四列
@@ -140,23 +147,13 @@ namespace process_pipeline.Forms
 
         private void ucCheckArrowResult_Load(object sender, EventArgs e)
         {
-            //lvProblems.SuspendLayout();
-            
-            //lvProblems.AutoResizeColumns(ColumnHeaderAutoResizeStyle.ColumnContent);
-            //if (lvProblems.Items.Count > 0)
-            //{
-            //    lvProblems.Items[lvProblems.Items.Count - 1].EnsureVisible();
-            //}
+            dgvProblems.ClearSelection();
+            //toolbar.ShowItemToolTips = true;
+
+            //// 强制刷新 ToolStrip 的 ToolTip
+            //toolbar.Invalidate();
+            //toolbar.Update();
         }
-
-        //private void lvProblems_SelectedIndexChanged(object sender, EventArgs e)
-        //{
-        //    if (dgvProblems.SelectedItems.Count == 0) return;
-        //    var p = (ProblemItem)dgvProblems.SelectedItems[0].Tag;
-
-        //    SelectByHandleCommands sbh = new SelectByHandleCommands();
-        //    sbh.SelectByHandle(p.PipeId);
-        //}
 
         private void lvProblems_CellContentClick(object sender, DataGridViewCellEventArgs e)
         {
@@ -177,6 +174,11 @@ namespace process_pipeline.Forms
                 SelectByHandleCommands sbh = new SelectByHandleCommands();
                 sbh.SelectByHandle(p.PipeId);
             }
+        }
+
+        private void btnReversePolyline_Click(object sender, EventArgs e)
+        {
+
         }
     }
 
@@ -222,6 +224,13 @@ namespace process_pipeline.Forms
             paletteSet.Size = new System.Drawing.Size(601, 751);  // 故意微调一次，强制布局
             paletteSet.Visible = true;
             paletteSet.Activate(0);
+
+            // 关键两行：强制抢焦点
+            paletteSet.Focus();
+            if (currentControl != null && !currentControl.IsDisposed)
+            {
+                currentControl.Focus();
+            }
         }
 
         public void Hide()

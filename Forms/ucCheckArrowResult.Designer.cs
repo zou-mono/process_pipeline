@@ -66,11 +66,13 @@
             // 
             // toolbar
             // 
+            this.toolbar.ImageScalingSize = new System.Drawing.Size(25, 25);
             this.toolbar.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.btnReversePolyline});
             this.toolbar.Location = new System.Drawing.Point(0, 0);
             this.toolbar.Name = "toolbar";
-            this.toolbar.Size = new System.Drawing.Size(353, 25);
+            this.toolbar.RenderMode = System.Windows.Forms.ToolStripRenderMode.System;
+            this.toolbar.Size = new System.Drawing.Size(353, 32);
             this.toolbar.TabIndex = 1;
             this.toolbar.Text = "toolStrip1";
             // 
@@ -80,8 +82,10 @@
             this.btnReversePolyline.Image = ((System.Drawing.Image)(resources.GetObject("btnReversePolyline.Image")));
             this.btnReversePolyline.ImageTransparentColor = System.Drawing.Color.Magenta;
             this.btnReversePolyline.Name = "btnReversePolyline";
-            this.btnReversePolyline.Size = new System.Drawing.Size(23, 22);
+            this.btnReversePolyline.Size = new System.Drawing.Size(29, 29);
             this.btnReversePolyline.Text = "反转管线绘制方向";
+            this.btnReversePolyline.TextImageRelation = System.Windows.Forms.TextImageRelation.TextAboveImage;
+            this.btnReversePolyline.Click += new System.EventHandler(this.btnReversePolyline_Click);
             // 
             // ucCheckArrowResult
             // 
