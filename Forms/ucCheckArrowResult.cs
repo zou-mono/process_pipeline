@@ -26,84 +26,130 @@ namespace process_pipeline.Forms
         {
             InitializeComponent();
             this.problems = problems ?? new List<ProblemItem>();  // 防止 null
-            
+           
             // 构造函数时获取一次（作为默认）
             doc = AcadApp.DocumentManager.MdiActiveDocument;
 
-            // 让 lvProblems 停靠填充整个控件
-            lvProblems.Dock = DockStyle.Fill;
+            // 让 dgv停靠填充整个控件
+            dgvProblems.Dock = DockStyle.Fill;
+           
+            // 1. 初始化表格列和现代样式
+            SetupDataGridView();
 
-            SetupListViewColumns();
-
-            // 初始化列表
-            PopulateListView();
+            // 2. 填充数据
+            PopulateDataGridView();
         }
 
         public void UpdateProblems(List<ProblemItem> newProblems)
         {
             problems = newProblems ?? new List<ProblemItem>();
-            PopulateListView();
+            SetupDataGridView();
         }
 
         // 定义四列
-        private void SetupListViewColumns()
+        private void SetupDataGridView()
         {
-            lvProblems.Columns.Clear();
+            dgvProblems.Columns.Clear();
 
-            // 添加列（标题 + 宽度可调整）
-            lvProblems.Columns.Add("管线ID", 120);      // PipeID 的 Handle（更易读）
-            //lvProblems.Columns.Add("箭头ID", 120);      // ArrowID 的 Handle（如果有）
-            lvProblems.Columns.Add("位置", 180);              // Position (x,y,z)
-            lvProblems.Columns.Add("问题描述", 300);          // Description
+            // ================= 基础行为设置 =================
+            dgvProblems.AllowUserToAddRows = false;      // 隐藏底部空白新增行
+            dgvProblems.AllowUserToDeleteRows = false;
+            dgvProblems.AllowUserToResizeRows = false;
+            dgvProblems.ReadOnly = true;                 // 只读
+            dgvProblems.SelectionMode = DataGridViewSelectionMode.FullRowSelect; // 整行选中
+            dgvProblems.MultiSelect = false;             // 单选
+            dgvProblems.RowHeadersVisible = false;       // 隐藏最左侧的自带行头(小箭头那列)
+            dgvProblems.BackgroundColor = Color.White;   // 背景色
+            dgvProblems.BorderStyle = BorderStyle.None;
 
-            lvProblems.View = View.Details;
-            lvProblems.FullRowSelect = true;
-            lvProblems.GridLines = true;
+            // ================= 现代风格表头设置 =================
+            dgvProblems.EnableHeadersVisualStyles = false; // 【关键】必须关闭，才能自定义表头颜色
+            dgvProblems.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(41, 57, 85); // 藏青色背景
+            dgvProblems.ColumnHeadersDefaultCellStyle.ForeColor = Color.White;                // 白色文字
+            dgvProblems.ColumnHeadersDefaultCellStyle.Font = new System.Drawing.Font("微软雅黑", 10F, FontStyle.Bold); // 加粗
+            dgvProblems.ColumnHeadersDefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter; // 居中
+            dgvProblems.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.Single;
+            dgvProblems.ColumnHeadersHeight = 35;
+            dgvProblems.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
+
+            // ================= 数据行样式设置 =================
+            dgvProblems.GridColor = Color.LightGray;     // 浅灰色网格线
+            dgvProblems.RowTemplate.Height = 30;         // 行高
+            dgvProblems.DefaultCellStyle.Font = new System.Drawing.Font("微软雅黑", 9F, FontStyle.Regular);
+            dgvProblems.DefaultCellStyle.SelectionBackColor = Color.FromArgb(0, 120, 215); // 选中时的Win10蓝
+            // 斑马线交替行颜色（浅灰），让表格更好看
+            dgvProblems.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(245, 245, 245); 
+
+            // ================= 添加列 =================
+            dgvProblems.Columns.Add("colPipeId", "管线ID");
+            dgvProblems.Columns["colPipeId"].Width = 120;
+
+            dgvProblems.Columns.Add("colLocation", "位置");
+            dgvProblems.Columns["colLocation"].Width = 180;
+
+            dgvProblems.Columns.Add("colDesc", "问题描述");
+            // 最后一列自动填满剩余空间，不用担心右边留白
+            dgvProblems.Columns["colDesc"].AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill; 
         }
 
-        private void PopulateListView()
+        private void PopulateDataGridView()
         {
-            lvProblems.Items.Clear();
+            dgvProblems.Rows.Clear();
+            
             foreach (var problem in problems)
             {
-                // 创建一行
-                var item = new ListViewItem();
-
-                // 第一列：Pipe Handle（Handle 是更友好的显示方式）
-                item.Text = problem.PipeId;
-
-                //// 第二列：Arrow Handle（如果没有匹配箭头，就显示 "无" 或空）
-                //string arrowHandle = String.IsNullOrEmpty(problem.ArrowId) ? "无" : problem.ArrowId;
-                //item.SubItems.Add(arrowHandle);
-
-                // 第三列：位置（格式化 Point3d）
+                // 格式化位置
                 string posStr = problem.Location == null 
                     ? "未知" 
                     : $"({problem.Location.X:F2}, {problem.Location.Y:F2})";
-                item.SubItems.Add(posStr);
 
-                // 第四列：问题描述
-                item.SubItems.Add(problem.Description);
+                // 直接添加一行数据，并返回行索引
+                int rowIndex = dgvProblems.Rows.Add(problem.PipeId, posStr, problem.Description);
 
-                // 把整个 ProblemItem 对象存到 Tag，点击时可用
-                item.Tag = problem;
-
-                lvProblems.Items.Add(item);
+                // 把整个 ProblemItem 对象存到该行的 Tag 中，点击时可用
+                dgvProblems.Rows[rowIndex].Tag = problem;
             }
         }
 
         private void ucCheckArrowResult_Load(object sender, EventArgs e)
         {
+            //lvProblems.SuspendLayout();
+            
+            //lvProblems.AutoResizeColumns(ColumnHeaderAutoResizeStyle.ColumnContent);
+            //if (lvProblems.Items.Count > 0)
+            //{
+            //    lvProblems.Items[lvProblems.Items.Count - 1].EnsureVisible();
+            //}
+        }
+
+        //private void lvProblems_SelectedIndexChanged(object sender, EventArgs e)
+        //{
+        //    if (dgvProblems.SelectedItems.Count == 0) return;
+        //    var p = (ProblemItem)dgvProblems.SelectedItems[0].Tag;
+
+        //    SelectByHandleCommands sbh = new SelectByHandleCommands();
+        //    sbh.SelectByHandle(p.PipeId);
+        //}
+
+        private void lvProblems_CellContentClick(object sender, DataGridViewCellEventArgs e)
+        {
 
         }
 
-        private void lvProblems_SelectedIndexChanged(object sender, EventArgs e)
+        private void dgvProblems_SelectionChanged(object sender, EventArgs e)
         {
-            if (lvProblems.SelectedItems.Count == 0) return;
-            var p = (ProblemItem)lvProblems.SelectedItems[0].Tag;
-
-            SelectByHandleCommands sbh = new SelectByHandleCommands();
-            sbh.SelectByHandle(p.PipeId);
+            // 确保有选中的行
+            if (dgvProblems.SelectedRows.Count == 0) return;
+            
+            // 获取选中的第一行
+            var row = dgvProblems.SelectedRows[0];
+            
+            // 从 Tag 里面取出对象
+            if (row.Tag is ProblemItem p)
+            {
+                SelectByHandleCommands sbh = new SelectByHandleCommands();
+                sbh.SelectByHandle(p.PipeId);
+            }
         }
     }
 
@@ -125,23 +171,28 @@ namespace process_pipeline.Forms
         {
             var currentDoc = AcadApp.DocumentManager.MdiActiveDocument;
             if (currentDoc == null) return;
-            
+
             if (paletteSet == null || paletteSet.IsDisposed)
             {
                 // 必须提供一个 Guid 作为 toolId（可以随便生成一个固定值）
                 Guid paletteGuid = Guid.NewGuid(); // 随便生成一个，不要重复即可
-    
+
                 paletteSet = new PaletteSet("管线箭头检查", "PipeCheckPalette", paletteGuid)
                 {
                     DockEnabled = DockSides.Left | DockSides.Right | DockSides.Top | DockSides.Bottom,
                     MinimumSize = new Size(600, 400),
+                    Size = new System.Drawing.Size(600, 750),           // 初始稍大
                     Visible = true
                 };
 
                 currentControl = new ucCheckArrowResult(problems);
                 paletteSet.Add("检查结果", currentControl);
             }
+            else {
+                Update(problems);
+            }
 
+            paletteSet.Size = new System.Drawing.Size(601, 751);  // 故意微调一次，强制布局
             paletteSet.Visible = true;
             paletteSet.Activate(0);
         }

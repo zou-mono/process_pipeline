@@ -28,32 +28,36 @@
         /// </summary>
         private void InitializeComponent()
         {
-            this.lvProblems = new System.Windows.Forms.ListView();
+            this.dgvProblems = new System.Windows.Forms.DataGridView();
+            ((System.ComponentModel.ISupportInitialize)(this.dgvProblems)).BeginInit();
             this.SuspendLayout();
             // 
-            // lvProblems
+            // dgvProblems
             // 
-            this.lvProblems.HideSelection = false;
-            this.lvProblems.Location = new System.Drawing.Point(12, 15);
-            this.lvProblems.Name = "lvProblems";
-            this.lvProblems.Size = new System.Drawing.Size(121, 97);
-            this.lvProblems.TabIndex = 0;
-            this.lvProblems.UseCompatibleStateImageBehavior = false;
-            this.lvProblems.SelectedIndexChanged += new System.EventHandler(this.lvProblems_SelectedIndexChanged);
+            this.dgvProblems.ColumnHeadersHeightSizeMode = System.Windows.Forms.DataGridViewColumnHeadersHeightSizeMode.AutoSize;
+            this.dgvProblems.Location = new System.Drawing.Point(65, 96);
+            this.dgvProblems.Name = "dgvProblems";
+            this.dgvProblems.RowTemplate.Height = 23;
+            this.dgvProblems.Size = new System.Drawing.Size(240, 150);
+            this.dgvProblems.TabIndex = 0;
+            this.dgvProblems.CellContentClick += new System.Windows.Forms.DataGridViewCellEventHandler(this.lvProblems_CellContentClick);
+            this.dgvProblems.SelectionChanged += new System.EventHandler(this.dgvProblems_SelectionChanged);
             // 
             // ucCheckArrowResult
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 12F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.Controls.Add(this.lvProblems);
+            this.Controls.Add(this.dgvProblems);
             this.Name = "ucCheckArrowResult";
+            this.Size = new System.Drawing.Size(403, 367);
             this.Load += new System.EventHandler(this.ucCheckArrowResult_Load);
+            ((System.ComponentModel.ISupportInitialize)(this.dgvProblems)).EndInit();
             this.ResumeLayout(false);
 
         }
 
         #endregion
 
-        private System.Windows.Forms.ListView lvProblems;
+        private System.Windows.Forms.DataGridView dgvProblems;
     }
 }

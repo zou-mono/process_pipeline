@@ -97,7 +97,7 @@ namespace process_pipeline.Commands
 
                     tr.Commit();
 
-                    Ed.WriteMessage($"\n成功：已选中句柄为 [{handleStr}] 的要素，并跳转到其范围！");
+                    //Ed.WriteMessage($"\n成功：已选中句柄为 [{handleStr}] 的要素，并跳转到其范围！");
                 }
             }
             catch (System.Exception ex)

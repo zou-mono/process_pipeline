@@ -27,7 +27,8 @@ namespace process_pipeline.Commands
             using (new SysVarScope(new Dictionary<string, object>
             {
                 { "SELECTIONEFFECT", 0 },
-                { "PRESELECTIONEFFECT", 0 }
+                { "PRESELECTIONEFFECT", 0 },
+                { "SELECTIONEFFCOLOR", 5 },
             }))
             {
                 // 1. 优先获取预选集（用户提前选中的对象）
@@ -37,24 +38,6 @@ namespace process_pipeline.Commands
                 object preSelEff = AcadApp.GetSystemVariable("PRESELECTIONEFFECT");
 
                 DbgLog.Write(Ed, $"[Inside using] SELECTIONEFFECT={selEff}, PRESELECTIONEFFECT={preSelEff}");
-                //var highlighted = new HashSet<ObjectId>();
-                //SelectionAddedEventHandler onAdded = (s, e) =>
-                //{
-                //    using (var tr = Db.TransactionManager.StartOpenCloseTransaction())
-                //    {
-                //        for (int i = 0; i < e.AddedObjects.Count; i++)
-                //        {
-                //            var id = e.AddedObjects[i].ObjectId;
-                //            if (highlighted.Contains(id)) continue;
-
-                //            var ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
-                //            ent?.Highlight();
-                //            highlighted.Add(id);
-                //        }
-                //        tr.Commit();
-                //    }
-                //    Ed.UpdateScreen();
-                //};
 
                 //PromptSelectionResult impliedRes = Ed.GetSelection();
                 if (impliedRes.Status == PromptStatus.OK && impliedRes.Value.Count > 0)
@@ -83,6 +66,7 @@ namespace process_pipeline.Commands
                     }
 
                     ss = res.Value;
+                    //Ed.SetImpliedSelection(ss.GetObjectIds());
 
                     //finally { 
                     //    Ed.SelectionAdded -= onAdded;
