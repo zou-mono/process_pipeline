@@ -23,6 +23,7 @@ namespace process_pipeline.Forms
     {
         private List<ProblemItem> _currentProblems = new List<ProblemItem>();
         private Document doc;
+        private SortableBindingList<ProblemItemViewModel> _sortableList;
 
         // 公开属性（只读），外部只能读取，不能直接修改
         public IReadOnlyList<ProblemItem> CurrentProblems => _currentProblems.AsReadOnly();
@@ -160,7 +161,14 @@ namespace process_pipeline.Forms
                 DataPropertyName = "Description",
                 AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill,
                 FillWeight = 100
-            });            //dgvProblems.Columns.Add("colIndex", "NO");
+            });            
+            
+            foreach (DataGridViewColumn col in dgvProblems.Columns)
+            {
+                col.SortMode = DataGridViewColumnSortMode.Automatic;  // 默认就是，但显式设置更保险
+            }
+
+            //dgvProblems.Columns.Add("colIndex", "NO");
             //dgvProblems.Columns["colIndex"].Width = 35;
             //dgvProblems.Columns["colIndex"].DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
 
@@ -172,15 +180,13 @@ namespace process_pipeline.Forms
 
             //dgvProblems.Columns.Add("colDesc", "问题描述");
             //// 最后一列自动填满剩余空间，不用担心右边留白
-            //dgvProblems.Columns["colDesc"].AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill; 
+            //dgvProblems.Columns["colDesc"].AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
+
+            //dgvProblems.ColumnHeaderMouseClick += dgvProblems_ColumnHeaderMouseClick;
         }
 
         private void PopulateDataGridView()
         {
-            //dgvProblems.Rows.Clear();
-            
-            //int index = 1; // 定义一个从 1 开始的序号计数器
-
             // 转换为绑定源
             var bindableList = _currentProblems.Select((p, _ind) => new ProblemItemViewModel
             {
@@ -191,29 +197,12 @@ namespace process_pipeline.Forms
                 OriginalItem = p // 保存原始对象
             }).ToList();
 
+            _sortableList = new SortableBindingList<ProblemItemViewModel>(bindableList);
             // 绑定数据源（避免手动Add）
-            dgvProblems.DataSource = bindableList;
+            dgvProblems.DataSource = _sortableList;
 
             // 清除默认选中状态
             dgvProblems.ClearSelection(); 
-            //foreach (var problem in _currentProblems)
-            //{
-            //    // 格式化位置
-            //    string posStr = problem.Location == null
-            //        ? "未知"
-            //        : $"({problem.Location.X:F2}, {problem.Location.Y:F2})";
-
-            //    // 注意这里：把 index.ToString() 放在第一个参数位置
-            //    int rowIndex = dgvProblems.Rows.Add(index.ToString(), problem.PipeId, posStr, problem.Description);
-
-            //    //// 直接添加一行数据，并返回行索引
-            //    //int rowIndex = dgvProblems.Rows.Add(problem.PipeId, posStr, problem.Description);
-
-            //    // 把整个 ProblemItem 对象存到该行的 Tag 中，点击时可用
-            //    dgvProblems.Rows[rowIndex].Tag = problem;
-
-            //    index++;
-            //}
         }
 
         private void ucCheckArrowResult_Load(object sender, EventArgs e)
@@ -296,7 +285,9 @@ namespace process_pipeline.Forms
             var currentDoc = AcadApp.DocumentManager.MdiActiveDocument;
             if (currentDoc == null) return;
 
-            _currentProblems = initialProblems ?? new List<ProblemItem>();
+            //_currentProblems = initialProblems ?? new List<ProblemItem>();
+
+            Update(initialProblems);
 
             if (_paletteSet == null || _paletteSet.IsDisposed)
             {
@@ -318,9 +309,6 @@ namespace process_pipeline.Forms
                 _currentControl = new ucCheckArrowResult(initialProblems);
                 _currentControl.Disposed += (s, e) => _currentControl = null;  // 控件释放后置空
                 _paletteSet.Add("检查结果", _currentControl);
-            }
-            else {
-                Update(initialProblems);
             }
 
             _paletteSet.Size = new System.Drawing.Size(601, 751);  // 故意微调一次，强制布局
