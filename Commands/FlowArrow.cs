@@ -159,7 +159,7 @@ namespace process_pipeline.Commands
                     if (candidates.Count == 0) { 
                         problems.Add(new ProblemItem
                         {
-                            PipeId = pipe_handle,
+                            PipeId = pipeId,
                             Type = ProblemType.NoAdjacentItems,
                             Level = ProblemLevel.Error,
                             Location = Geometry.RepresentativePoint(pipe_ent),
@@ -222,7 +222,7 @@ namespace process_pipeline.Commands
                     {
                         problems.Add(new ProblemItem
                         {
-                            PipeId = pipe_handle,
+                            PipeId = pipeId,
                             Type = ProblemType.NoAdjacentItems,
                             Level = ProblemLevel.Error,
                             Location = Geometry.RepresentativePoint(pipe_ent),
@@ -239,7 +239,7 @@ namespace process_pipeline.Commands
                         {
                             problems.Add(new ProblemItem
                             {
-                                PipeId = pipe_handle,
+                                PipeId = pipeId,
                                 Type = ProblemType.DirectionConflict,
                                 Level = ProblemLevel.Error,
                                 Location = Geometry.RepresentativePoint(pipe_ent),
@@ -251,7 +251,7 @@ namespace process_pipeline.Commands
                                 if (closestArrow.IsReverse) { 
                                     problems.Add(new ProblemItem
                                     {
-                                        PipeId = pipe_handle,
+                                        PipeId = pipeId,
                                         Type = ProblemType.DirectionConflict,
                                         Level = ProblemLevel.Warning,
                                         Location = Geometry.RepresentativePoint(pipe_ent),

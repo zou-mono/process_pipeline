@@ -59,10 +59,10 @@ namespace process_pipeline.Forms
                 var item = new ListViewItem();
 
                 // 第一列：Pipe Handle（Handle 是更友好的显示方式）
-                item.Text = problem.PipeId;
+                item.Text = problem.PipeId.ToString();
 
                 // 第二列：Arrow Handle（如果没有匹配箭头，就显示 "无" 或空）
-                string arrowHandle = String.IsNullOrEmpty(problem.ArrowId) ? "无" : problem.ArrowId;
+                string arrowHandle = String.IsNullOrEmpty(problem.ArrowId.ToString()) ? "无" : problem.ArrowId.ToString();
                 item.SubItems.Add(arrowHandle);
 
                 // 第三列：位置（格式化 Point3d）

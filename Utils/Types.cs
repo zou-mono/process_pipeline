@@ -39,10 +39,10 @@ namespace process_pipeline.Utils
         //    { ProblemType.NoAdjacentItems, "当前要素仅存在部分邻近的关联要素（未完全匹配）" }
         //};
 
-        public string PipeId { get; set; }  // 管线 ID
+        public ObjectId PipeId { get; set; }  // 管线 ID
         public ProblemLevel Level { get; set; }  // 问题等级
         public ProblemType Type { get; set; }  // 问题类型
-        public string ArrowId { get; set; }  // 匹配箭头 ID (可选)
+        public ObjectId ArrowId { get; set; }  // 匹配箭头 ID (可选)
         public string Description { get; set; }  // "无匹配箭头" 或 "方向不一致 (差值 XX°)"
         public Point3d Location { get; set; }  // 管线起点或最近点
         public bool IsFixed { get; set; }

@@ -167,22 +167,6 @@ namespace process_pipeline.Forms
             {
                 col.SortMode = DataGridViewColumnSortMode.Automatic;  // 默认就是，但显式设置更保险
             }
-
-            //dgvProblems.Columns.Add("colIndex", "NO");
-            //dgvProblems.Columns["colIndex"].Width = 35;
-            //dgvProblems.Columns["colIndex"].DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
-
-            //dgvProblems.Columns.Add("colPipeId", "管线ID");
-            //dgvProblems.Columns["colPipeId"].Width = 80;
-
-            //dgvProblems.Columns.Add("colLocation", "位置");
-            //dgvProblems.Columns["colLocation"].Width = 150;
-
-            //dgvProblems.Columns.Add("colDesc", "问题描述");
-            //// 最后一列自动填满剩余空间，不用担心右边留白
-            //dgvProblems.Columns["colDesc"].AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
-
-            //dgvProblems.ColumnHeaderMouseClick += dgvProblems_ColumnHeaderMouseClick;
         }
 
         private void PopulateDataGridView()
@@ -191,7 +175,7 @@ namespace process_pipeline.Forms
             var bindableList = _currentProblems.Select((p, _ind) => new ProblemItemViewModel
             {
                 NO = _ind + 1,
-                PipeId = p.PipeId,
+                PipeId = p.PipeId.Handle.ToString(),
                 Location = p.Location == null ? "未知" : $"({p.Location.X:F2}, {p.Location.Y:F2})",
                 Description = p.Description,
                 OriginalItem = p // 保存原始对象
@@ -208,23 +192,25 @@ namespace process_pipeline.Forms
         private void ucCheckArrowResult_Load(object sender, EventArgs e)
         {
             dgvProblems.ClearSelection();
-            //toolbar.ShowItemToolTips = true;
-
-            //// 强制刷新 ToolStrip 的 ToolTip
-            //toolbar.Invalidate();
-            //toolbar.Update();
         }
 
         private void dgvProblems_SelectionChanged(object sender, EventArgs e)
         {
+            doc = AcadApp.DocumentManager.MdiActiveDocument;
+            if (doc is null || doc.IsDisposed) return;
+
             // 确保有选中的行
             if (dgvProblems.SelectedRows.Count == 0) return;
-            
-            // 获取选中的第一行
-            var selectedData = dgvProblems.SelectedRows[0].DataBoundItem as ProblemItemViewModel;
-            if (selectedData == null || selectedData.OriginalItem == null) return;
+ 
+            // 获取所有选中的 ProblemItem
+            var selectedItems = dgvProblems.SelectedRows
+                .Cast<DataGridViewRow>()
+                .Select(row => row.DataBoundItem as ProblemItemViewModel)
+                .Where(vm => vm != null && vm.OriginalItem != null)
+                .Select(vm => vm.OriginalItem)
+                .ToList();      
 
-            ProblemItem p = selectedData.OriginalItem;
+            if (selectedItems.Count == 0) return;
 
             // 执行选中管线逻辑（记得加事务保护）
             using (var docLock = doc.LockDocument())
@@ -232,8 +218,30 @@ namespace process_pipeline.Forms
             {
                 try
                 {
-                    SelectByHandleCommands sbh = new SelectByHandleCommands();
-                    sbh.SelectByHandle(p.PipeId);
+                    if (selectedItems.Count == 1)
+                    {
+                        ProblemItem op = selectedItems[0];
+                        SelectByHandleCommands sbh = new SelectByHandleCommands();
+                        sbh.SelectByHandle(op.PipeId);   // 你的跳转选中函数
+                    }
+                    else 
+                    { 
+                        // 多选：只选中实体，不跳转视图
+                        var objectIds = selectedItems.Select(p => p.PipeId).ToArray();
+
+                        // 使用 SetImpliedSelection 只选中实体（不跳转）
+                        doc.Editor.SetImpliedSelection(objectIds);
+
+                        // 可选：高亮所有选中的实体
+                        foreach (var oid in objectIds)
+                        {
+                            if (!oid.IsNull)
+                            {
+                                var ent = tr.GetObject(oid, OpenMode.ForRead) as Entity;
+                                ent?.Highlight();
+                            }
+                        }
+                    }
                     tr.Commit();
                 }
                 catch (Exception ex)
@@ -334,7 +342,7 @@ namespace process_pipeline.Forms
         {
             if (pipeId.IsNull) return;
 
-            var item = _currentProblems.FirstOrDefault(p => p.PipeId == pipeId.Handle.ToString());
+            var item = _currentProblems.FirstOrDefault(p => p.PipeId == pipeId);
             if (item != null)
             {
                 //item.IsFixed = true;
