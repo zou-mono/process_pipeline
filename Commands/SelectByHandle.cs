@@ -1,6 +1,7 @@
 ﻿using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
+using Autodesk.AutoCAD.Geometry;
 using Autodesk.AutoCAD.Runtime;
 using process_pipeline.Core;
 using process_pipeline.Util;
@@ -44,7 +45,7 @@ namespace process_pipeline.Commands
                 {  
                     Handle handle = new Handle(handleValue);
                     objId = Db.GetObjectId(false, handle, 0);
-                    SelectByHandle(objId);
+                    SelectByHandles(new[] { objId });
                 }
                 catch
                 {
@@ -58,32 +59,56 @@ namespace process_pipeline.Commands
             }
         }
 
-        public void SelectByHandle(ObjectId selObj)
+        public void SelectByHandles(IEnumerable<ObjectId> selObjs, bool bZoomToExtent=true)
         {
+            if (selObjs == null || !selObjs.Any()) return;
+
             try
             {
-                string handleStr = selObj.ToString();
+                // 转成数组，便于处理
+                var objectIds = selObjs.Where(id => !id.IsNull && !id.IsErased).ToArray();
 
+                //string handleStr = selObj.ToString();
+
+                using (var docLock = Doc.LockDocument())
                 // 事务处理 + 打开实体
                 using (Transaction tr = Db.TransactionManager.StartTransaction())
                 {
-                    Entity ent = tr.GetObject(selObj, OpenMode.ForRead) as Entity;
-                    if (ent == null)
+                    // 1. 高亮所有实体 + 计算联合包围盒
+                    Extents3d totalExtents = new Extents3d();
+                    bool hasValidEntity = false;
+
+                    if (bZoomToExtent) { 
+                        foreach (var oid in objectIds)
+                        {
+                            if (oid.IsNull || oid.IsErased) continue;
+
+                            Entity ent = tr.GetObject(oid, OpenMode.ForRead) as Entity;
+                            if (ent == null) continue;
+
+                            ent.Highlight();  // 高亮当前实体
+                            totalExtents.AddExtents(ent.GeometricExtents);
+                            hasValidEntity = true;
+                        }
+                    }
+
+                    if (!hasValidEntity)
                     {
-                        Ed.WriteMessage($"\n错误：句柄 [{handleStr}] 对应的不是可显示的实体！");
+                        Ed.WriteMessage("\n没有找到任何有效的实体");
+                        tr.Commit();
                         return;
                     }
 
-                    ent.Highlight();
-                    // 5. 设置为当前选中（高亮）
-                    Ed.SetImpliedSelection(new ObjectId[] { selObj });
+                    // 2. 批量设置为当前选中（夹点、高亮等）
+                    Doc.Editor.SetImpliedSelection(objectIds);
 
-                    // 6. 跳转到实体范围（缩放）
-                    Extents3d extents = ent.GeometricExtents;
-                    Ed.ZoomToExtents(extents);
+                    //// 3. 缩放到联合包围盒（所有实体的整体范围）
+                    //// 稍微扩大一点范围，避免太紧
+                    //totalExtents.MinPoint = totalExtents.MinPoint - new Vector3d(10, 10, 10);
+                    //totalExtents.MaxPoint = totalExtents.MaxPoint + new Vector3d(10, 10, 10);
 
+                    Ed.ZoomToExtents(totalExtents);
                     tr.Commit();
-
                     //Ed.WriteMessage($"\n成功：已选中句柄为 [{handleStr}] 的要素，并跳转到其范围！");
                 }
             }

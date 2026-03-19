@@ -211,34 +211,18 @@ namespace process_pipeline.Forms
                 .ToList();      
 
             if (selectedItems.Count == 0) return;
+                
+            var objectIds = selectedItems.Select(p => p.PipeId).ToArray();
+            SelectByHandleCommands sbh = new SelectByHandleCommands();
 
-            // 执行选中管线逻辑（记得加事务保护）
-            //using (var docLock = doc.LockDocument())
-
-            if (selectedItems.Count == 1)
+            if (objectIds.Count() > 500)
             {
-                ProblemItem op = selectedItems[0];
-                SelectByHandleCommands sbh = new SelectByHandleCommands();
-                sbh.SelectByHandle(op.PipeId);   // 你的跳转选中函数
+                sbh.SelectByHandles(objectIds, false);   // 你的跳转选中函数
             }
-            else 
-            { 
-                // 多选：只选中实体，不跳转视图
-                var objectIds = selectedItems.Select(p => p.PipeId).ToArray();
-
-                // 使用 SetImpliedSelection 只选中实体（不跳转）
-                doc.Editor.SetImpliedSelection(objectIds);
-
-                // 可选：高亮所有选中的实体
-                //foreach (var oid in objectIds)
-                //{
-                //    if (!oid.IsNull)
-                //    {
-                //        var ent = tr.GetObject(oid, OpenMode.ForRead) as Entity;
-                //        ent?.Highlight();
-                //    }
-                //}
+            else { 
+                sbh.SelectByHandles(objectIds);   // 你的跳转选中函数
             }
+            
         }
 
         private void btnReversePolyline_Click(object sender, EventArgs e)
