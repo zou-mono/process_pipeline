@@ -173,8 +173,8 @@ namespace process_pipeline.Commands
                     double pipeSegAngle = double.MaxValue;
                     double dist = double.MaxValue;
                     double arrowRealAngle = double.MaxValue;
-                    double angleDiff = double.MaxValue;
-                    double realDiff = double.MaxValue;
+                    //double angleDiff = double.MaxValue;
+                    //double realDiff = double.MaxValue;
                     Point3d ap;
                     Point3d closePoint;
 

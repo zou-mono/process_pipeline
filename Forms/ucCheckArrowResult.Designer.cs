@@ -46,7 +46,6 @@
             this.dgvProblems.RowTemplate.Height = 23;
             this.dgvProblems.Size = new System.Drawing.Size(194, 71);
             this.dgvProblems.TabIndex = 0;
-            this.dgvProblems.CellContentClick += new System.Windows.Forms.DataGridViewCellEventHandler(this.lvProblems_CellContentClick);
             this.dgvProblems.SelectionChanged += new System.EventHandler(this.dgvProblems_SelectionChanged);
             // 
             // tblLayoutPanel

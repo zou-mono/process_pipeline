@@ -18,6 +18,7 @@ using static System.Windows.Forms.VisualStyles.VisualStyleElement;
 
 namespace process_pipeline.Forms
 {
+    // 视图模型类
     public partial class ucCheckArrowResult : UserControl
     {
         private List<ProblemItem> _currentProblems = new List<ProblemItem>();
@@ -94,6 +95,7 @@ namespace process_pipeline.Forms
         private void SetupDataGridView()
         {
             dgvProblems.Columns.Clear();
+            dgvProblems.AutoGenerateColumns = false; // 禁止自动生成列
 
             // ================= 基础行为设置 =================
             dgvProblems.AllowUserToAddRows = false;      // 隐藏底部空白新增行
@@ -126,48 +128,92 @@ namespace process_pipeline.Forms
             dgvProblems.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(245, 245, 245); 
 
             // ================= 添加列 =================
-            dgvProblems.Columns.Add("colIndex", "NO");
-            dgvProblems.Columns["colIndex"].Width = 35;
-            dgvProblems.Columns["colIndex"].DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
+            dgvProblems.Columns.Add(new DataGridViewTextBoxColumn
+            {
+                Name = "colIndex",
+                HeaderText = "NO",
+                DataPropertyName = "NO", // 绑定匿名类的NO属性
+                Width = 35,
+                DefaultCellStyle = { Alignment = DataGridViewContentAlignment.MiddleCenter }
+            });
 
-            dgvProblems.Columns.Add("colPipeId", "管线ID");
-            dgvProblems.Columns["colPipeId"].Width = 80;
+            dgvProblems.Columns.Add(new DataGridViewTextBoxColumn
+            {
+                Name = "colPipeId",
+                HeaderText = "管线ID",
+                DataPropertyName = "PipeId",
+                Width = 80
+            });
 
-            dgvProblems.Columns.Add("colLocation", "位置");
-            dgvProblems.Columns["colLocation"].Width = 150;
+            dgvProblems.Columns.Add(new DataGridViewTextBoxColumn
+            {
+                Name = "colLocation",
+                HeaderText = "位置",
+                DataPropertyName = "Location",
+                Width = 120
+            });
 
-            dgvProblems.Columns.Add("colDesc", "问题描述");
-            // 最后一列自动填满剩余空间，不用担心右边留白
-            dgvProblems.Columns["colDesc"].AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill; 
+            dgvProblems.Columns.Add(new DataGridViewTextBoxColumn
+            {
+                Name = "colDesc",
+                HeaderText = "问题描述",
+                DataPropertyName = "Description",
+                AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill,
+                FillWeight = 100
+            });            //dgvProblems.Columns.Add("colIndex", "NO");
+            //dgvProblems.Columns["colIndex"].Width = 35;
+            //dgvProblems.Columns["colIndex"].DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
+
+            //dgvProblems.Columns.Add("colPipeId", "管线ID");
+            //dgvProblems.Columns["colPipeId"].Width = 80;
+
+            //dgvProblems.Columns.Add("colLocation", "位置");
+            //dgvProblems.Columns["colLocation"].Width = 150;
+
+            //dgvProblems.Columns.Add("colDesc", "问题描述");
+            //// 最后一列自动填满剩余空间，不用担心右边留白
+            //dgvProblems.Columns["colDesc"].AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill; 
         }
 
         private void PopulateDataGridView()
         {
             dgvProblems.Rows.Clear();
             
-            int index = 1; // 定义一个从 1 开始的序号计数器
+            //int index = 1; // 定义一个从 1 开始的序号计数器
 
-            foreach (var problem in _currentProblems)
+            // 转换为绑定源
+            var bindableList = _currentProblems.Select((p, _ind) => new ProblemItemViewModel
             {
-                // 格式化位置
-                string posStr = problem.Location == null 
-                    ? "未知" 
-                    : $"({problem.Location.X:F2}, {problem.Location.Y:F2})";
+                NO = _ind + 1,
+                PipeId = p.PipeId,
+                Location = p.Location == null ? "未知" : $"({p.Location.X:F2}, {p.Location.Y:F2})",
+                Description = p.Description,
+                OriginalItem = p // 保存原始对象
+            }).ToList();
 
-                // 注意这里：把 index.ToString() 放在第一个参数位置
-                int rowIndex = dgvProblems.Rows.Add(index.ToString(), problem.PipeId, posStr, problem.Description);
-
-                //// 直接添加一行数据，并返回行索引
-                //int rowIndex = dgvProblems.Rows.Add(problem.PipeId, posStr, problem.Description);
-
-                // 把整个 ProblemItem 对象存到该行的 Tag 中，点击时可用
-                dgvProblems.Rows[rowIndex].Tag = problem;
-
-                index++;
-            }
+            // 绑定数据源（避免手动Add）
+            dgvProblems.DataSource = bindableList;
 
             // 清除默认选中状态
             dgvProblems.ClearSelection(); 
+            //foreach (var problem in _currentProblems)
+            //{
+            //    // 格式化位置
+            //    string posStr = problem.Location == null
+            //        ? "未知"
+            //        : $"({problem.Location.X:F2}, {problem.Location.Y:F2})";
+
+            //    // 注意这里：把 index.ToString() 放在第一个参数位置
+            //    int rowIndex = dgvProblems.Rows.Add(index.ToString(), problem.PipeId, posStr, problem.Description);
+
+            //    //// 直接添加一行数据，并返回行索引
+            //    //int rowIndex = dgvProblems.Rows.Add(problem.PipeId, posStr, problem.Description);
+
+            //    // 把整个 ProblemItem 对象存到该行的 Tag 中，点击时可用
+            //    dgvProblems.Rows[rowIndex].Tag = problem;
+
+            //    index++;
+            //}
         }
 
         private void ucCheckArrowResult_Load(object sender, EventArgs e)
@@ -180,35 +226,37 @@ namespace process_pipeline.Forms
             //toolbar.Update();
         }
 
-        private void lvProblems_CellContentClick(object sender, DataGridViewCellEventArgs e)
-        {
-
-        }
-
         private void dgvProblems_SelectionChanged(object sender, EventArgs e)
         {
             // 确保有选中的行
             if (dgvProblems.SelectedRows.Count == 0) return;
             
             // 获取选中的第一行
-            var row = dgvProblems.SelectedRows[0];
-            
-            if (!(row.Tag is ProblemItem p) || string.IsNullOrEmpty(p.PipeId)) return;
+            var selectedData = dgvProblems.SelectedRows[0].DataBoundItem as ProblemItemViewModel;
+            if (selectedData == null || selectedData.OriginalItem == null) return;
 
+            ProblemItem p = selectedData.OriginalItem;
+
+            // 执行选中管线逻辑（记得加事务保护）
+            using (var docLock = doc.LockDocument())
             using (var tr = doc.Database.TransactionManager.StartTransaction())
             {
                 try
                 {
                     SelectByHandleCommands sbh = new SelectByHandleCommands();
                     sbh.SelectByHandle(p.PipeId);
-                    tr.Commit(); // 提交事务
+                    tr.Commit();
                 }
                 catch (Exception ex)
                 {
-                    //AcadApp.ShowAlertDialog($"选中管线失败：{ex.Message}");
-                    tr.Abort(); // 异常时回滚
+                    AcadApp.ShowAlertDialog($"选中管线失败：{ex.Message}");
+                    tr.Abort();
                 }
             }
+            
+            //if (!(row.Tag is ProblemItem p) || string.IsNullOrEmpty(p.PipeId)) return;
+
+
         }
 
         private void btnReversePolyline_Click(object sender, EventArgs e)
@@ -240,7 +288,8 @@ namespace process_pipeline.Forms
         //private static readonly palCheckArrow _instance = new palCheckArrow();
    
         // 封装CurrentProblems，禁止外部直接修改
-        public IReadOnlyList<ProblemItem> CurrentProblems => _currentProblems?.AsReadOnly() ?? new List<ProblemItem>().AsReadOnly();
+        public List<ProblemItem> CurrentProblems { get; private set; } = new List<ProblemItem>();
+        //public IReadOnlyList<ProblemItem> CurrentProblems => _currentProblems?.AsReadOnly() ?? new List<ProblemItem>().AsReadOnly();
 
         private palCheckArrow () {
             // 构造函数里不做复杂初始化
@@ -296,6 +345,20 @@ namespace process_pipeline.Forms
                 _paletteSet.Visible = false;
         }
 
+        // 新增：当外部反转成功时调用
+        public void MarkProblemFixed(ObjectId pipeId)
+        {
+            if (CurrentProblems == null) return;
+
+            var item = CurrentProblems.FirstOrDefault(p => p.PipeId == pipeId.Handle.ToString());
+            if (item != null)
+            {
+                //item.IsFixed = true;
+                CurrentProblems.Remove(item);  // 或者保留但标记 IsFixed
+                _currentControl?.UpdateProblems(CurrentProblems);  // 通知 UI 刷新
+            }
+        }
+
         public void Update()
         {
             if (_paletteSet == null || _paletteSet.IsDisposed || _currentControl == null || _currentControl.IsDisposed)
@@ -330,5 +393,14 @@ namespace process_pipeline.Forms
             // 清空数据
             _currentProblems = null;
         }
+    }
+
+    public class ProblemItemViewModel
+    {
+        public int NO { get; set; }
+        public string PipeId { get; set; }
+        public string Location { get; set; }
+        public string Description { get; set; }
+        public ProblemItem OriginalItem { get; set; } // 存储原始对象
     }
 }

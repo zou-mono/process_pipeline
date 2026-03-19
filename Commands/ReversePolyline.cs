@@ -87,7 +87,15 @@ namespace process_pipeline.Commands
                         Entity ent = tr.GetObject(selObj.ObjectId, OpenMode.ForWrite) as Entity;
                         if (ent == null) continue;
 
-                        if (Geometry.ReverseLineEntity(ent)) reversedCount++;
+                        if (Geometry.ReverseLineEntity(ent))
+                        {
+                            // 关键：通知 PaletteSet 刷新列表
+                            if (palCheckArrow.Instance.CurrentProblems != null)
+                            {
+                                palCheckArrow.Instance?.MarkProblemFixed(selObj.ObjectId);
+                                reversedCount++;
+                            }
+                        }
                     }
 
                     tr.Commit();
@@ -102,10 +110,6 @@ namespace process_pipeline.Commands
                 {
                     Ed.WriteMessage("\n选中的对象中没有可反转的 Polyline 或 Line。");
                 }
-
-                // 关键：通知 PaletteSet 刷新列表
-                if (palCheckArrow.Instance.CurrentProblems != null)
-                    palCheckArrow.Instance?.Update();
             }
      
         } 
