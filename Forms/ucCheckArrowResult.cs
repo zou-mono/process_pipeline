@@ -196,8 +196,8 @@ namespace process_pipeline.Forms
 
         private void dgvProblems_SelectionChanged(object sender, EventArgs e)
         {
-            doc = AcadApp.DocumentManager.MdiActiveDocument;
-            if (doc is null || doc.IsDisposed) return;
+            //doc = AcadApp.DocumentManager.MdiActiveDocument;
+            //if (doc is null || doc.IsDisposed) return;
 
             // 确保有选中的行
             if (dgvProblems.SelectedRows.Count == 0) return;
@@ -213,42 +213,31 @@ namespace process_pipeline.Forms
             if (selectedItems.Count == 0) return;
 
             // 执行选中管线逻辑（记得加事务保护）
-            using (var docLock = doc.LockDocument())
-            using (var tr = doc.Database.TransactionManager.StartTransaction())
+            //using (var docLock = doc.LockDocument())
+
+            if (selectedItems.Count == 1)
             {
-                try
-                {
-                    if (selectedItems.Count == 1)
-                    {
-                        ProblemItem op = selectedItems[0];
-                        SelectByHandleCommands sbh = new SelectByHandleCommands();
-                        sbh.SelectByHandle(op.PipeId);   // 你的跳转选中函数
-                    }
-                    else 
-                    { 
-                        // 多选：只选中实体，不跳转视图
-                        var objectIds = selectedItems.Select(p => p.PipeId).ToArray();
+                ProblemItem op = selectedItems[0];
+                SelectByHandleCommands sbh = new SelectByHandleCommands();
+                sbh.SelectByHandle(op.PipeId);   // 你的跳转选中函数
+            }
+            else 
+            { 
+                // 多选：只选中实体，不跳转视图
+                var objectIds = selectedItems.Select(p => p.PipeId).ToArray();
 
-                        // 使用 SetImpliedSelection 只选中实体（不跳转）
-                        doc.Editor.SetImpliedSelection(objectIds);
+                // 使用 SetImpliedSelection 只选中实体（不跳转）
+                doc.Editor.SetImpliedSelection(objectIds);
 
-                        // 可选：高亮所有选中的实体
-                        foreach (var oid in objectIds)
-                        {
-                            if (!oid.IsNull)
-                            {
-                                var ent = tr.GetObject(oid, OpenMode.ForRead) as Entity;
-                                ent?.Highlight();
-                            }
-                        }
-                    }
-                    tr.Commit();
-                }
-                catch (Exception ex)
-                {
-                    //AcadApp.ShowAlertDialog($"选中管线失败：{ex.Message}");
-                    tr.Abort();
-                }
+                // 可选：高亮所有选中的实体
+                //foreach (var oid in objectIds)
+                //{
+                //    if (!oid.IsNull)
+                //    {
+                //        var ent = tr.GetObject(oid, OpenMode.ForRead) as Entity;
+                //        ent?.Highlight();
+                //    }
+                //}
             }
         }
 
@@ -284,8 +273,15 @@ namespace process_pipeline.Forms
 
         public IReadOnlyList<ProblemItem> CurrentProblems => _currentProblems?.AsReadOnly() ?? new List<ProblemItem>().AsReadOnly();
 
-        private palCheckArrow () {
+        private palCheckArrow()
+        {
             // 构造函数里不做复杂初始化
+            AcadApp.DocumentManager.DocumentToBeDestroyed += OnDocumentToBeDestroyed;
+        }
+
+        private void OnDocumentToBeDestroyed(object sender, DocumentCollectionEventArgs e)
+        {
+            Dispose();
         }
 
         public void Show(List<ProblemItem> initialProblems)
@@ -325,7 +321,7 @@ namespace process_pipeline.Forms
 
             // 关键两行：强制抢焦点
             _paletteSet.Focus();
-            if (_currentControl != null && ! _currentControl.IsDisposed)
+            if (_currentControl != null && !_currentControl.IsDisposed)
             {
                 _currentControl.Focus();
             }
@@ -374,31 +370,42 @@ namespace process_pipeline.Forms
         // 实现IDisposable（核心：手动释放PaletteSet和控件）
         public void Dispose()
         {
-            // 释放控件
-            if (_currentControl != null && !_currentControl.IsDisposed)
+            try
             {
-                _currentControl.Dispose();
-            }
-            _currentControl = null;
+                // 释放控件
+                if (_currentControl != null && !_currentControl.IsDisposed)
+                {
+                    _currentControl.Dispose();
+                }
+                _currentControl = null;
 
-            // 释放PaletteSet（AutoCAD的PaletteSet支持Dispose）
-            if (_paletteSet != null && !_paletteSet.IsDisposed)
+                // 释放PaletteSet（AutoCAD的PaletteSet支持Dispose）
+                if (_paletteSet != null && !_paletteSet.IsDisposed)
+                {
+                    _paletteSet.Visible = false;
+                    _paletteSet.Close();
+                    _paletteSet.Dispose();
+                }
+                _paletteSet = null;
+
+                // 清空数据
+                _currentProblems = null;
+            }
+            catch (System.Exception ex)
             {
-                _paletteSet.Dispose();
+                //// 记录日志，避免崩溃
+                //Application.DocumentManager.MdiActiveDocument?.Editor.WriteMessage(
+                //    $"\n关闭 PaletteSet 失败：{ex.Message}");
             }
-            _paletteSet = null;
-
-            // 清空数据
-            _currentProblems = null;
         }
     }
 
-    public class ProblemItemViewModel
-    {
-        public int NO { get; set; }
-        public string PipeId { get; set; }
-        public string Location { get; set; }
-        public string Description { get; set; }
-        public ProblemItem OriginalItem { get; set; } // 存储原始对象
-    }
+        public class ProblemItemViewModel
+        {
+            public int NO { get; set; }
+            public string PipeId { get; set; }
+            public string Location { get; set; }
+            public string Description { get; set; }
+            public ProblemItem OriginalItem { get; set; } // 存储原始对象
+        }
 }
