@@ -14,6 +14,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using AcadApp = Autodesk.AutoCAD.ApplicationServices.Application;
+using static System.Windows.Forms.VisualStyles.VisualStyleElement;
 
 namespace process_pipeline.Forms
 {
@@ -31,16 +32,16 @@ namespace process_pipeline.Forms
         public ucCheckArrowResult(List<ProblemItem> problems)
         {
             InitializeComponent();
-            this._currentProblems = problems ?? new List<ProblemItem>();  // 防止 null
+            _currentProblems = problems ?? new List<ProblemItem>();  // 防止 null
 
             tblLayoutPanel.Dock = DockStyle.Fill;
-            toolbar.Dock = DockStyle.Fill;
+            toolbar.Dock = DockStyle.Top;
 
             // 第一行：工具条固定高度
             tblLayoutPanel.RowStyles[0].SizeType = SizeType.Absolute;  
             tblLayoutPanel.RowStyles[0].Height = 25;  // 工具条高度
 
-            // 第二行：ListView 占满剩余
+            // 第二行：DataGridView占满剩余
             tblLayoutPanel.RowStyles[1].SizeType = SizeType.Percent;  
             tblLayoutPanel.RowStyles[1].Height = 100F;  // 工具条高度
 
@@ -60,6 +61,13 @@ namespace process_pipeline.Forms
 
             // 订阅自己的 ProblemsChanged 事件（自动刷新 UI）
             ProblemsChanged += (s, e) => PopulateDataGridView();
+
+            Disposed += (s, e) =>
+            {
+                // 取消所有事件订阅，释放资源
+                ProblemsChanged = null;
+                //doc = null; // 释放Document引用
+            };
         }
 
         public void UpdateProblems(List<ProblemItem> newProblems)
@@ -185,11 +193,21 @@ namespace process_pipeline.Forms
             // 获取选中的第一行
             var row = dgvProblems.SelectedRows[0];
             
-            // 从 Tag 里面取出对象
-            if (row.Tag is ProblemItem p)
+            if (!(row.Tag is ProblemItem p) || string.IsNullOrEmpty(p.PipeId)) return;
+
+            using (var tr = doc.Database.TransactionManager.StartTransaction())
             {
-                SelectByHandleCommands sbh = new SelectByHandleCommands();
-                sbh.SelectByHandle(p.PipeId);
+                try
+                {
+                    SelectByHandleCommands sbh = new SelectByHandleCommands();
+                    sbh.SelectByHandle(p.PipeId);
+                    tr.Commit(); // 提交事务
+                }
+                catch (Exception ex)
+                {
+                    //AcadApp.ShowAlertDialog($"选中管线失败：{ex.Message}");
+                    tr.Abort(); // 异常时回滚
+                }
             }
         }
 
