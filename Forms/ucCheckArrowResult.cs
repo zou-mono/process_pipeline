@@ -19,13 +19,19 @@ namespace process_pipeline.Forms
 {
     public partial class ucCheckArrowResult : UserControl
     {
-        private List<ProblemItem> problems;
+        private List<ProblemItem> _currentProblems = new List<ProblemItem>();
         private Document doc;
+
+        // 公开属性（只读），外部只能读取，不能直接修改
+        public IReadOnlyList<ProblemItem> CurrentProblems => _currentProblems.AsReadOnly();
+
+        // 自定义事件：当 problems 变化时触发
+        public event EventHandler ProblemsChanged;
 
         public ucCheckArrowResult(List<ProblemItem> problems)
         {
             InitializeComponent();
-            this.problems = problems ?? new List<ProblemItem>();  // 防止 null
+            this._currentProblems = problems ?? new List<ProblemItem>();  // 防止 null
 
             tblLayoutPanel.Dock = DockStyle.Fill;
             toolbar.Dock = DockStyle.Fill;
@@ -51,13 +57,24 @@ namespace process_pipeline.Forms
 
             // 2. 填充数据
             PopulateDataGridView();
+
+            // 订阅自己的 ProblemsChanged 事件（自动刷新 UI）
+            ProblemsChanged += (s, e) => PopulateDataGridView();
         }
 
         public void UpdateProblems(List<ProblemItem> newProblems)
         {
-            problems = newProblems ?? new List<ProblemItem>();
+            _currentProblems = newProblems ?? new List<ProblemItem>();
             //SetupDataGridView();
-            PopulateDataGridView();
+            //PopulateDataGridView();
+            // 触发事件（通知所有订阅者，包括自己）
+            OnProblemsChanged(EventArgs.Empty);
+        }
+
+        // 保护方法：触发 ProblemsChanged 事件（标准事件模式）
+        protected virtual void OnProblemsChanged(EventArgs e)
+        {
+            ProblemsChanged?.Invoke(this, e);
         }
 
         private void SetupToolbar() {
@@ -122,7 +139,7 @@ namespace process_pipeline.Forms
             
             int index = 1; // 定义一个从 1 开始的序号计数器
 
-            foreach (var problem in problems)
+            foreach (var problem in _currentProblems)
             {
                 // 格式化位置
                 string posStr = problem.Location == null 
@@ -178,21 +195,36 @@ namespace process_pipeline.Forms
 
         private void btnReversePolyline_Click(object sender, EventArgs e)
         {
+            // 修复成功后，移除已修复的问题
+            _currentProblems.RemoveAll(p => p.IsFixed);  
 
+            // 关键：通过 UpdateProblems 更新（会自动触发 ProblemsChanged 事件）
+            UpdateProblems(_currentProblems);
         }
     }
 
-    public class palCheckArrow
+    public class palCheckArrow : IDisposable
     {
-        private static PaletteSet paletteSet = null;
+        private static PaletteSet _paletteSet = null;
         //private List<ProblemItem> problems = null; 
-        private ucCheckArrowResult currentControl;  // 保存控件引用
-        
-        // 静态单例字段（延迟创建）
-        private static readonly palCheckArrow _instance = new palCheckArrow();
-        public static palCheckArrow Instance => _instance;
+        private ucCheckArrowResult _currentControl;  // 保存控件引用
+        private List<ProblemItem> _currentProblems;
 
-        private palCheckArrow () : base () {
+        // 1. 固定GUID（替换你之前的随机GUID）
+        private readonly Guid _paletteGuid = new Guid("7e8d4f9a-5b7c-4890-8a7b-123456789abc"); // 随便生成一个，不要重复即可
+
+        // 2. 静态懒汉单例（避免AutoCAD启动时过早初始化）
+        private static readonly Lazy<palCheckArrow> _instance = new Lazy<palCheckArrow>(() => new palCheckArrow());
+        public static palCheckArrow Instance => _instance.Value;
+        //public static palCheckArrow Instance => _instance;
+
+        //// 静态单例字段（延迟创建）
+        //private static readonly palCheckArrow _instance = new palCheckArrow();
+   
+        // 封装CurrentProblems，禁止外部直接修改
+        public IReadOnlyList<ProblemItem> CurrentProblems => _currentProblems?.AsReadOnly() ?? new List<ProblemItem>().AsReadOnly();
+
+        private palCheckArrow () {
             // 构造函数里不做复杂初始化
         }
 
@@ -201,12 +233,11 @@ namespace process_pipeline.Forms
             var currentDoc = AcadApp.DocumentManager.MdiActiveDocument;
             if (currentDoc == null) return;
 
-            if (paletteSet == null || paletteSet.IsDisposed)
-            {
-                // 必须提供一个 Guid 作为 toolId（可以随便生成一个固定值）
-                Guid paletteGuid = Guid.NewGuid(); // 随便生成一个，不要重复即可
+            _currentProblems = problems ?? new List<ProblemItem>();
 
-                paletteSet = new PaletteSet("管线箭头检查", "PipeCheckPalette", paletteGuid)
+            if (_paletteSet == null || _paletteSet.IsDisposed)
+            {
+                _paletteSet = new PaletteSet("管线箭头检查", "PipeCheckPalette", _paletteGuid)
                 {
                     DockEnabled = DockSides.Left | DockSides.Right | DockSides.Top | DockSides.Bottom,
                     MinimumSize = new Size(600, 400),
@@ -214,44 +245,72 @@ namespace process_pipeline.Forms
                     Visible = true
                 };
 
-                currentControl = new ucCheckArrowResult(problems);
-                paletteSet.Add("检查结果", currentControl);
+                // 释放旧控件（如果有）
+                if (_currentControl != null && !_currentControl.IsDisposed)
+                {
+                    _currentControl.Dispose();
+                }
+
+                // 创建新控件并订阅其Disposed事件
+                _currentControl = new ucCheckArrowResult(problems);
+                _currentControl.Disposed += (s, e) => _currentControl = null;  // 控件释放后置空
+                _paletteSet.Add("检查结果", _currentControl);
             }
             else {
-                Update(problems);
+                Update();
             }
 
-            paletteSet.Size = new System.Drawing.Size(601, 751);  // 故意微调一次，强制布局
-            paletteSet.Visible = true;
-            paletteSet.Activate(0);
+            _paletteSet.Size = new System.Drawing.Size(601, 751);  // 故意微调一次，强制布局
+            _paletteSet.Visible = true;
+            _paletteSet.Activate(0);
 
             // 关键两行：强制抢焦点
-            paletteSet.Focus();
-            if (currentControl != null && !currentControl.IsDisposed)
+            _paletteSet.Focus();
+            if (_currentControl != null && ! _currentControl.IsDisposed)
             {
-                currentControl.Focus();
+                _currentControl.Focus();
             }
         }
 
         public void Hide()
         {
-            if (paletteSet != null && !paletteSet.IsDisposed)
-                paletteSet.Visible = false;
+            if (_paletteSet != null && !_paletteSet.IsDisposed)
+                _paletteSet.Visible = false;
         }
 
-        public void Update(List<ProblemItem> problems)
+        public void Update()
         {
-            if (paletteSet == null || paletteSet.IsDisposed || currentControl == null || currentControl.IsDisposed)
+            if (_paletteSet == null || _paletteSet.IsDisposed || _currentControl == null || _currentControl.IsDisposed)
             {
                 // 如果面板不存在或已销毁，直接调用 Show 重新创建
-                currentControl = new ucCheckArrowResult(problems);
-                Show(problems);
+                //currentControl = new ucCheckArrowResult(CurrentProblems);
+                Show(_currentProblems);
                 return;
             }
 
             // 直接更新已存在的控件
-            currentControl.UpdateProblems(problems);
+            _currentControl.UpdateProblems(_currentProblems);
         }
 
+        // 实现IDisposable（核心：手动释放PaletteSet和控件）
+        public void Dispose()
+        {
+            // 释放控件
+            if (_currentControl != null && !_currentControl.IsDisposed)
+            {
+                _currentControl.Dispose();
+            }
+            _currentControl = null;
+
+            // 释放PaletteSet（AutoCAD的PaletteSet支持Dispose）
+            if (_paletteSet != null && !_paletteSet.IsDisposed)
+            {
+                _paletteSet.Dispose();
+            }
+            _paletteSet = null;
+
+            // 清空数据
+            _currentProblems = null;
+        }
     }
 }

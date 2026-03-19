@@ -12,6 +12,7 @@ using Autodesk.AutoCAD.Geometry;
 using System.Security.Cryptography;
 using AcadApp = Autodesk.AutoCAD.ApplicationServices.Application;
 using process_pipeline.Utils;
+using process_pipeline.Forms;
 
 namespace process_pipeline.Commands
 {
@@ -66,11 +67,6 @@ namespace process_pipeline.Commands
                     }
 
                     ss = res.Value;
-                    //Ed.SetImpliedSelection(ss.GetObjectIds());
-
-                    //finally { 
-                    //    Ed.SelectionAdded -= onAdded;
-                    //}
                 }
 
                 if (ss.Count == 0)
@@ -106,6 +102,10 @@ namespace process_pipeline.Commands
                 {
                     Ed.WriteMessage("\n选中的对象中没有可反转的 Polyline 或 Line。");
                 }
+
+                // 关键：通知 PaletteSet 刷新列表
+                if (palCheckArrow.Instance.CurrentProblems != null)
+                    palCheckArrow.Instance?.Update();
             }
      
         } 
