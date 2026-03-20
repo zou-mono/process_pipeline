@@ -79,6 +79,7 @@ namespace process_pipeline.Commands
                 Ed.Regen();  // 强制刷新显示高亮
 
                 int reversedCount = 0;
+                var fixedIds = new List<ObjectId>();
 
                 using (Transaction tr = Db.TransactionManager.StartTransaction())
                 {
@@ -92,13 +93,17 @@ namespace process_pipeline.Commands
                             // 关键：通知 PaletteSet 刷新列表
                             if (palCheckArrow.Instance.CurrentProblems != null)
                             {
-                                palCheckArrow.Instance?.MarkProblemFixed(selObj.ObjectId);
+                                fixedIds.Add(selObj.ObjectId);
+                                //palCheckArrow.Instance?.MarkProblemFixed(selObj.ObjectId);
                                 reversedCount++;
                             }
                         }
                     }
 
                     tr.Commit();
+
+                    // Commit 成功后再更新列表（Undo 时列表不会提前删）
+                    palCheckArrow.Instance?.MarkProblemFixed(fixedIds);
                 }
 
                 if (reversedCount > 0)

@@ -92,7 +92,7 @@
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.Controls.Add(this.tblLayoutPanel);
             this.Name = "ucCheckArrowResult";
-            this.Size = new System.Drawing.Size(516, 338);
+            this.Size = new System.Drawing.Size(471, 338);
             this.Load += new System.EventHandler(this.ucCheckArrowResult_Load);
             ((System.ComponentModel.ISupportInitialize)(this.dgvProblems)).EndInit();
             this.tblLayoutPanel.ResumeLayout(false);

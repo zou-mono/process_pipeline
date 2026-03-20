@@ -192,6 +192,9 @@ namespace process_pipeline.Forms
         private void ucCheckArrowResult_Load(object sender, EventArgs e)
         {
             dgvProblems.ClearSelection();
+            //this.AutoScroll = true;               // UserControl 本身允许滚动（备用）
+            //dgvProblems.Dock = DockStyle.Fill;
+            //dgvProblems.ScrollBars = ScrollBars.Both;   // 务必明确设置
         }
 
         private void dgvProblems_SelectionChanged(object sender, EventArgs e)
@@ -233,6 +236,23 @@ namespace process_pipeline.Forms
             // 关键：通过 UpdateProblems 更新（会自动触发 ProblemsChanged 事件）
             UpdateProblems(_currentProblems);
         }
+
+        //protected override void OnVisibleChanged(EventArgs e)
+        //{
+        //    base.OnVisibleChanged(e);
+
+        //    if (this.Visible && dgvProblems != null)
+        //    {
+        //        // 使用 BeginInvoke 延迟到 UI 线程下一轮处理，确保大小已确定
+        //        this.BeginInvoke(new Action(() =>
+        //        {
+        //            dgvProblems.PerformLayout();   // 关键：强制重新计算布局和滚动条
+        //            dgvProblems.Refresh();         // 刷新绘制，确保滚动条可见
+        //            // 可选：如果需要自动调整列宽
+        //            // dataGridView1.AutoResizeColumns(DataGridViewAutoSizeColumnsMode.AllCells);
+        //        }));
+        //    }
+        //}
     }
 
     public class palCheckArrow : IDisposable
@@ -249,16 +269,14 @@ namespace process_pipeline.Forms
         private static readonly Lazy<palCheckArrow> _instance = new Lazy<palCheckArrow>(() => new palCheckArrow());
         public static palCheckArrow Instance => _instance.Value;
 
-        //// 静态单例字段（延迟创建）
-        //private static readonly palCheckArrow _instance = new palCheckArrow();
-
-        // 封装CurrentProblems，禁止外部直接修改
-        //public List<ProblemItem> CurrentProblems { get; private set; } = new List<ProblemItem>();
-
         public IReadOnlyList<ProblemItem> CurrentProblems => _currentProblems?.AsReadOnly() ?? new List<ProblemItem>().AsReadOnly();
 
+        private bool _needRefresh = false;
+        private EventHandler _idleHandler;
+
         private palCheckArrow()
-        {
+        {  
+             _currentProblems = new List<ProblemItem>();
             // 构造函数里不做复杂初始化
             AcadApp.DocumentManager.DocumentToBeDestroyed += OnDocumentToBeDestroyed;
         }
@@ -279,11 +297,12 @@ namespace process_pipeline.Forms
 
             if (_paletteSet == null || _paletteSet.IsDisposed)
             {
+                //Guid _paletteGuid = Guid.NewGuid();
                 _paletteSet = new PaletteSet("管线箭头检查", "PipeCheckPalette", _paletteGuid)
                 {
                     DockEnabled = DockSides.Left | DockSides.Right | DockSides.Top | DockSides.Bottom,
                     MinimumSize = new Size(600, 400),
-                    Size = new System.Drawing.Size(600, 750),           // 初始稍大
+                    Size = new System.Drawing.Size(600, 700),           // 初始稍大
                     Visible = true
                 };
 
@@ -299,9 +318,41 @@ namespace process_pipeline.Forms
                 _paletteSet.Add("检查结果", _currentControl);
             }
 
-            _paletteSet.Size = new System.Drawing.Size(601, 751);  // 故意微调一次，强制布局
+            //_paletteSet.Size = new System.Drawing.Size(601, 751);  // 故意微调一次，强制布局
             _paletteSet.Visible = true;
             _paletteSet.Activate(0);
+
+            // 如果还没订阅 Idle，就订阅一次（全局只订阅一次）
+            if (_idleHandler == null)
+            {
+                _idleHandler = (s, e) =>
+                {
+                    if (_needRefresh)
+                    {
+                        _needRefresh = false;
+                        AcadApp.Idle -= _idleHandler;  // 只执行一次就卸载
+
+                        if (_paletteSet != null && !_paletteSet.IsDisposed)
+                        {
+                            var originalSize = _paletteSet.Size;
+                            _paletteSet.Size = new Size(originalSize.Width + 1, originalSize.Height);
+                            _paletteSet.Size = originalSize;  // 恢复
+
+                            if (_currentControl != null && !_currentControl.IsDisposed)
+                            {
+                                _currentControl.PerformLayout();
+                                _currentControl.Refresh();
+                                // 或直接针对 DataGridView：
+                                // var dgv = _currentControl.Controls.OfType<DataGridView>().FirstOrDefault();
+                                // if (dgv != null) { dgv.PerformLayout(); dgv.Refresh(); }
+                            }
+                        }
+                    }
+                };
+                AcadApp.Idle += _idleHandler;
+            }
+
+            _needRefresh = true;  // 标记需要刷新，下次 Idle 时执行
 
             // 关键两行：强制抢焦点
             _paletteSet.Focus();
@@ -318,18 +369,38 @@ namespace process_pipeline.Forms
         }
 
         // 新增：当外部反转成功时调用
-        public void MarkProblemFixed(ObjectId pipeId)
-        {
-            if (pipeId.IsNull) return;
+        //public void MarkProblemFixed(ObjectId pipeId)
+        //{
+        //    if (pipeId.IsNull) return;
 
-            var item = _currentProblems.FirstOrDefault(p => p.PipeId == pipeId);
-            if (item != null)
+        //    var item = _currentProblems.FirstOrDefault(p => p.PipeId == pipeId);
+        //    if (item != null)
+        //    {
+        //        //item.IsFixed = true;
+        //        _currentProblems.Remove(item);  // 或者保留但标记 IsFixed
+        //        _currentControl?.UpdateProblems(_currentProblems);  // 通知 UI 刷新
+        //    }
+        //}
+        public void MarkProblemFixed(IEnumerable<ObjectId> _pipeIds)
+        {
+            ObjectId[] pipeIds = _pipeIds.ToArray();
+            if (pipeIds == null || pipeIds.Length == 0) return;
+
+            // 过滤掉无效 ID
+            var validIds = pipeIds.Where(id => !id.IsNull).ToHashSet();
+
+            if (validIds.Count == 0) return;
+
+            // 一次性移除所有匹配的项（用 HashSet 加速查找）
+            int removedCount = _currentProblems.RemoveAll(p => validIds.Contains(p.PipeId));
+
+            // 如果有移除，才刷新 UI
+            if (removedCount > 0)
             {
-                //item.IsFixed = true;
-                _currentProblems.Remove(item);  // 或者保留但标记 IsFixed
-                _currentControl?.UpdateProblems(_currentProblems);  // 通知 UI 刷新
+                _currentControl?.UpdateProblems(_currentProblems);
             }
         }
+
 
         public void Update(List<ProblemItem> newProblems)
         {
@@ -343,8 +414,8 @@ namespace process_pipeline.Forms
 
             //// 直接更新已存在的控件
             //_currentControl.UpdateProblems(_currentProblems);
-
-            _currentProblems.Clear();
+            _currentProblems = new List<ProblemItem>();
+            
             if (newProblems != null)
                 _currentProblems.AddRange(newProblems);
 
