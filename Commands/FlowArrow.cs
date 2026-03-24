@@ -15,39 +15,118 @@ using process_pipeline.Core;           // 命令特性（关键）
 using process_pipeline.Forms;
 using process_pipeline.Util;
 using process_pipeline.Utils;
+using AcadDb = Autodesk.AutoCAD.DatabaseServices;
 
 namespace process_pipeline.Commands
 {
     /// <summary>
     /// 管线相关命令（一个类封装所有管线业务命令）
     /// </summary>
-    public class FlowArrowCommands : CadBase  // 继承Core层的基础类，复用上下文
+    public class FlowArrowCommands : CadBase // 继承Core层的基础类，复用上下文
     {
+        [CommandMethod("MATCHARROW", CommandFlags.Modal | CommandFlags.NoUndoMarker)]
+        public void Execute()
+        {
+            var service = new FlowArrowService(Db, Ed);
+            
+            List<ProblemItem> problems = service.RunChecker();
+
+            if (problems == null || problems.Count == 0)
+            {
+                Doc.Editor.WriteMessage("\n检查通过，无问题。\n");
+            }
+
+            palCheckArrow.Instance.Show(problems);
+
+            //Ed.Regen();
+            //AcadApp.UpdateScreen();
+        }
+    }
+
+    public class FlowArrowService { 
         double maxBufferDistance = 50.0;   // 距离阈值
         double angleTolerance = 30.0;      // 角度偏差阈值（度），e.g., ±45°
         string auxLayerName = "核查辅助线";
 
-        [CommandMethod("MATCHARROW")]
-        public void Execute()
+        private readonly AcadDb.Database _db;
+        private readonly Editor _ed;
+        private readonly bool _useEditor = true; // true = 使用Editor 方法
+
+        public FlowArrowService(AcadDb.Database db, Editor ed, bool useEditor = false)
         {
-            // 1. 筛选箭头
+            _db = db;
+            _ed = ed;
+            _useEditor = useEditor;
+    }
+
+        public List<ProblemItem> RunChecker()
+        {
+            List<ObjectId> arrowIds;
+            List<ObjectId> pipeIds;
+            Dictionary<ObjectId, (Point3d, double)> arrowData;
+
+            if (_useEditor)
+                arrowData = SelectArrows();
+            else
+                arrowData = GetArrowsFromDatabase();
+
+            // 获取管线ID列表
+            if (_useEditor)
+                pipeIds = SelectPipes();
+            else
+                pipeIds = GetPipesFromDatabase();
+
+            //DbgLog.Write(_ed, $"\n找到箭头: {arrowData.Count} 个，管线: {pipeIds.Count} 条");
+
+            if (arrowData == null || pipeIds == null || arrowData.Count == 0 || pipeIds.Count == 0)
+                return new List<ProblemItem>();
+
+            return _RunChecker(pipeIds.ToArray(), arrowData);
+        }
+
+        // 筛选箭头
+        private Dictionary<ObjectId, (Point3d, double)> SelectArrows() { 
+            Dictionary<ObjectId, (Point3d, double)> arrowData = new Dictionary<ObjectId, (Point3d, double)>();
+
             TypedValue[] arrowFilter = new TypedValue[]
             {
                 new TypedValue((int)DxfCode.Start, "INSERT"),
                 new TypedValue((int)DxfCode.BlockName, "jt-fy")
             };
             SelectionFilter arrowSelFilter = new SelectionFilter(arrowFilter);
-            PromptSelectionResult arrowRes = Ed.SelectAll(arrowSelFilter);
+            PromptSelectionResult arrowRes = _ed.SelectAll(arrowSelFilter);
 
             if (arrowRes.Status != PromptStatus.OK)
             {
-                Ed.WriteMessage("\n没有找到箭头块！");
-                return;
+                //_ed.WriteMessage("\n没有找到箭头块！");
+                return null;
             }
 
-            SelectionSet arrowSS = arrowRes.Value;
+            ObjectId[] arrowIds = arrowRes.Value.GetObjectIds();
 
-            // 2. 筛选管线（正确使用 <AND> + 两个 <OR>）
+            // 3. 收集所有箭头的位置（ObjectId → Point3d）
+            //using (Transaction tr = _db.TransactionManager.StartTransaction())    
+            using (OpenCloseTransaction tr = _db.TransactionManager.StartOpenCloseTransaction())
+            {
+                foreach (ObjectId id in arrowIds)
+                {
+                    //BlockReference br = tr.GetObject(id, OpenMode.ForRead) as BlockReference;
+                    BlockReference br = tr.GetObject(id, OpenMode.ForRead) as BlockReference;
+                    if (br != null)
+                    {
+                        //double rotDeg = (br.Rotation * (180.0 / Math.PI) + 180.0) % 360.0;  //默认正西是起始，弧度转度，模360
+                        double rotDeg = Geometry.ArrowAngle(br);
+                        arrowData[id] = (br.Position, rotDeg);
+                    }
+                }
+                //tr.Abort();
+            }
+
+            return arrowData.Count > 0 ? arrowData : null;
+        }
+
+        // 筛选管道 （正确使用 <AND> + 两个 <OR>）
+        private List<ObjectId> SelectPipes() { 
             TypedValue[] pipeFilter = new TypedValue[]
             {
                 new TypedValue((int)DxfCode.Operator, "<AND"),
@@ -66,74 +145,109 @@ namespace process_pipeline.Commands
                 new TypedValue((int)DxfCode.Operator, "AND>")
             };
             SelectionFilter pipeSelFilter = new SelectionFilter(pipeFilter);
-            PromptSelectionResult pipeRes = Ed.SelectAll(pipeSelFilter);
+            PromptSelectionResult pipeRes = _ed.SelectAll(pipeSelFilter);
 
             if (pipeRes.Status != PromptStatus.OK)
             {
-                Ed.WriteMessage("\n没有找到符合条件的管线！");
-                return;
+                //_ed.WriteMessage("\n没有找到符合条件的管线！");
+                return null;
             }
 
-            SelectionSet pipeSS = pipeRes.Value;
-
-            // 3. 收集所有箭头的位置（ObjectId → Point3d）
-            Dictionary<ObjectId, (Point3d Position, double Rotation)> arrowData = new Dictionary<ObjectId, (Point3d, double)>();
-            using (Transaction tr = Db.TransactionManager.StartTransaction())
-            {
-                foreach (ObjectId id in arrowSS.GetObjectIds())
-                {
-                    //BlockReference br = tr.GetObject(id, OpenMode.ForRead) as BlockReference;
-                    BlockReference br = tr.GetObject(id, OpenMode.ForRead) as BlockReference;
-                    if (br != null)
-                    {
-                        //double rotDeg = (br.Rotation * (180.0 / Math.PI) + 180.0) % 360.0;  //默认正西是起始，弧度转度，模360
-                        double rotDeg = Geometry.ArrowAngle(br);
-                        arrowData[id] = (br.Position, rotDeg);
-                    }
-                }
-                tr.Commit();
-            }
-
-            Ed.WriteMessage($"\n找到箭头: {arrowData.Count} 个，管线: {pipeSS.Count} 条");
-
-            List<ProblemItem> problems = RunChecker(pipeSS, arrowData);
-
-            if (problems.Count == 0)
-            {
-                Doc.Editor.WriteMessage("\n检查通过，无问题。\n");
-                return;
-            }
-
-            palCheckArrow.Instance.Show(problems);
-
-            Ed.Regen();
-            AcadApp.UpdateScreen();
+            return pipeRes.Value.GetObjectIds().ToList();;
         }
 
-        public List<ProblemItem> RunChecker(SelectionSet pipeSS, Dictionary<ObjectId, (Point3d Position, double Rotation)> arrowData) { 
+        // ========== 数据库遍历方法（安全模式，无 Editor）==========
+        private Dictionary<ObjectId, (Point3d, double)> GetArrowsFromDatabase()
+        {
+            var arrowData = new Dictionary<ObjectId, (Point3d, double)>();
+            
+            //using (Transaction tr = _db.TransactionManager.StartTransaction())
+            using (OpenCloseTransaction tr = _db.TransactionManager.StartOpenCloseTransaction())
+            {
+                BlockTableRecord btr = (BlockTableRecord)tr.GetObject(_db.CurrentSpaceId, OpenMode.ForRead);
+                
+                foreach (ObjectId id in btr)
+                {
+                    if (id.ObjectClass.DxfName == "INSERT")
+                    {
+                        BlockReference br = tr.GetObject(id, OpenMode.ForRead) as BlockReference;
+                        if (br != null && br.Name == "jt-fy")
+                        {
+                            double rotDeg = Geometry.ArrowAngle(br);
+                            arrowData[id] = (br.Position, rotDeg);
+                        }
+                    }
+                }
+                
+                //tr.Abort();
+            }
+            
+            return arrowData.Count > 0 ? arrowData : null;
+        }
+
+        private List<ObjectId> GetPipesFromDatabase()
+        {
+            var pipeIds = new List<ObjectId>();
+            var targetLayers = new HashSet<string>
+            {
+                "3-污水管-2025新建", "3-污水管-规划扩建", "3-污水管-现状",
+                "3-污水压力管-规划新建", "3-污水压力管-现状"
+            };
+            
+            //using (Transaction tr = _db.TransactionManager.StartTransaction())
+            using (OpenCloseTransaction tr = _db.TransactionManager.StartOpenCloseTransaction())
+            {
+                BlockTableRecord btr = (BlockTableRecord)tr.GetObject(_db.CurrentSpaceId, OpenMode.ForRead);
+                
+                foreach (ObjectId id in btr)
+                {
+                    string dxfName = id.ObjectClass.DxfName;
+                    if (dxfName == "LINE" || dxfName == "LWPOLYLINE" || dxfName == "POLYLINE")
+                    {
+                        Entity ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
+                        if (ent != null && targetLayers.Contains(ent.Layer))
+                        {
+                            pipeIds.Add(id);
+                        }
+                    }
+                }
+                
+                //tr.Abort();
+            }
+            
+            if (pipeIds.Count == 0)
+            {
+                //_ed.WriteMessage("\n没有找到符合条件的管线！");
+                return null;
+            }
+            
+            return pipeIds;
+        }
+
+        private List<ProblemItem> _RunChecker(ObjectId[] pipeObjs, Dictionary<ObjectId, (Point3d Position, double Rotation)> arrowData) { 
             var problems = new List<ProblemItem>();
 
             // 清空辅助线图层
-            ClearLayerCommands cl = new ClearLayerCommands();
-            cl.ClearLayer(auxLayerName);
+            //ClearLayerCommands cl = new ClearLayerCommands();
+            //cl.ClearLayer(auxLayerName);
 
             // 确保图层存在
             Utils.Database database = new Utils.Database();
-            ObjectId auxlayerID = database.EnsureAuxLayer(auxLayerName);  // 辅助线图层ID
+            //ObjectId auxlayerID = database.EnsureAuxLayer(auxLayerName);  // 辅助线图层ID
 
             // 4. 关联处理（遍历管线，找最近匹配箭头）
             int associatedCount = 0;
-            using (Transaction tr = Db.TransactionManager.StartTransaction())
+            //using (Transaction tr = _db.TransactionManager.StartTransaction())
+            using (OpenCloseTransaction tr = _db.TransactionManager.StartOpenCloseTransaction())
             {
-                
-                foreach (ObjectId pipeId in pipeSS.GetObjectIds())
+                foreach (ObjectId pipeId in pipeObjs)
                 {
                     var obj = tr.GetObject(pipeId, OpenMode.ForRead);
                     string pipe_handle = obj.Handle.ToString(); // 如 "7B2A"
                     
-                    if (pipe_handle == "5453")
+                    if (pipe_handle == "5228")
                     {
-                        Ed.WriteMessage($"\n管线 {pipe_handle}正在调试");
+                        _ed.WriteMessage($"\n管线 {pipe_handle}正在调试");
                     }
 
                     if (pipeId.IsErased || !pipeId.IsValid) continue;
@@ -162,6 +276,7 @@ namespace process_pipeline.Commands
                             PipeId = pipeId,
                             Type = ProblemType.NoAdjacentItems,
                             Level = ProblemLevel.Error,
+                            IsFixed = false,
                             Location = Geometry.RepresentativePoint(pipe_ent),
                             Description = "无匹配箭头（管线附近无任何箭头）"
                         });
@@ -225,6 +340,7 @@ namespace process_pipeline.Commands
                             PipeId = pipeId,
                             Type = ProblemType.NoAdjacentItems,
                             Level = ProblemLevel.Error,
+                            IsFixed = false,
                             Location = Geometry.RepresentativePoint(pipe_ent),
                             Description = $"无匹配箭头（在管线{maxBufferDistance}米范围内没有找到符合方向的箭头）"
                         });
@@ -242,6 +358,7 @@ namespace process_pipeline.Commands
                                 PipeId = pipeId,
                                 Type = ProblemType.DirectionConflict,
                                 Level = ProblemLevel.Error,
+                                IsFixed = false,
                                 Location = Geometry.RepresentativePoint(pipe_ent),
                                 Description = $"与管线关联的多个箭头方向冲突（同向 {sameCount} 个，反向 {reverseCount} 个）"
                             });
@@ -254,18 +371,10 @@ namespace process_pipeline.Commands
                                         PipeId = pipeId,
                                         Type = ProblemType.DirectionConflict,
                                         Level = ProblemLevel.Warning,
+                                        IsFixed = false,
                                         Location = Geometry.RepresentativePoint(pipe_ent),
                                         Description = "管线和箭头方向不一致"
                                     });
-                                    //Geometry.ReverseLineEntity(pipe_ent);
-                                    //Ed.WriteMessage($"\n管线 {pipe_ent.Handle} 已自动反转方向（所有匹配箭头均为反向）\n");
-                                    //problems.Add(new ProblemItem
-                                    //{
-                                    //    PipeId = pipe_handle,
-                                    //    Type = ProblemType.OppositeDirection,
-                                    //    Location = Geometry.RepresentativePoint(ent),
-                                    //    Description = "管线和箭头方向不一致"
-                                    //});
                                 }
                             }          
                         }                        
@@ -304,23 +413,12 @@ namespace process_pipeline.Commands
                             //    Ed.WriteMessage($"\n添加辅助线：{arrowPt} → {closePoint}");
                             //}
                     //}
-
-
-
-                    //// 全部反向 → 自动反转管线
-                    //if (reverseCount == possibleMatches.Count && reverseCount > 0) {
-                    //    if (!ent.IsDisposed)
-                    //    {
-                    //        Geometry.ReverseLineEntity(ent);
-                    //        Ed.WriteMessage($"\n管线 {ent.Handle} 已自动反转方向（所有匹配箭头均为反向）\n");
-                    //    }
-                    //}
                 }
 
-                tr.Commit();
+                //tr.Abort();
             }
 
-            Ed.WriteMessage($"\n\n管线和箭头关联核查完成！共关联 {associatedCount} 条管线");
+            //_ed.WriteMessage($"\n\n管线和箭头关联核查完成！共关联 {associatedCount} 条管线");
 
             return problems;
         } 

@@ -21,6 +21,7 @@ namespace process_pipeline.Forms
     // 视图模型类
     public partial class ucCheckArrowResult : UserControl
     {
+        private bool _isUpdatingData = false;  // 全局锁，确定是不是要刷新DataGridView
         private List<ProblemItem> _currentProblems = new List<ProblemItem>();
         private Document doc;
         private SortableBindingList<ProblemItemViewModel> _sortableList;
@@ -171,22 +172,34 @@ namespace process_pipeline.Forms
 
         private void PopulateDataGridView()
         {
-            // 转换为绑定源
-            var bindableList = _currentProblems.Select((p, _ind) => new ProblemItemViewModel
+            _isUpdatingData = true; // 开启锁
+
+            try { 
+                // 转换为绑定源
+                var bindableList = _currentProblems
+                .Where(p => p.IsFixed == false) // 先筛选：只保留未修复的原始项
+                .Select((p, _ind) => new ProblemItemViewModel // 再生成ViewModel，_ind是筛选后的索引
+                {
+                    NO = _ind + 1, // 此时索引从0开始，+1后就是1、2、3...连续增长
+                    IsFixed = p.IsFixed,
+                    PipeId = p.PipeId.Handle.ToString(),
+                    Location = p.Location == null ? "未知" : $"({p.Location.X:F2}, {p.Location.Y:F2})",
+                    Description = p.Description,
+                    OriginalItem = p // 保留原始对象
+                })
+                .ToList();
+
+                _sortableList = new SortableBindingList<ProblemItemViewModel>(bindableList);
+                // 绑定数据源（避免手动Add）
+                dgvProblems.DataSource = _sortableList;
+
+                // 清除默认选中状态
+                dgvProblems.ClearSelection(); 
+            }
+            finally
             {
-                NO = _ind + 1,
-                PipeId = p.PipeId.Handle.ToString(),
-                Location = p.Location == null ? "未知" : $"({p.Location.X:F2}, {p.Location.Y:F2})",
-                Description = p.Description,
-                OriginalItem = p // 保存原始对象
-            }).ToList();
-
-            _sortableList = new SortableBindingList<ProblemItemViewModel>(bindableList);
-            // 绑定数据源（避免手动Add）
-            dgvProblems.DataSource = _sortableList;
-
-            // 清除默认选中状态
-            dgvProblems.ClearSelection(); 
+                _isUpdatingData = false; // 务必在 finally 中释放锁
+            }
         }
 
         private void ucCheckArrowResult_Load(object sender, EventArgs e)
@@ -199,6 +212,7 @@ namespace process_pipeline.Forms
 
         private void dgvProblems_SelectionChanged(object sender, EventArgs e)
         {
+            if (_isUpdatingData) return;  // 拦截非用户主动点击的触发
             //doc = AcadApp.DocumentManager.MdiActiveDocument;
             //if (doc is null || doc.IsDisposed) return;
 
@@ -211,10 +225,10 @@ namespace process_pipeline.Forms
                 .Select(row => row.DataBoundItem as ProblemItemViewModel)
                 .Where(vm => vm != null && vm.OriginalItem != null)
                 .Select(vm => vm.OriginalItem)
-                .ToList();      
+                .ToList();
 
             if (selectedItems.Count == 0) return;
-                
+
             var objectIds = selectedItems.Select(p => p.PipeId).ToArray();
             SelectByHandleCommands sbh = new SelectByHandleCommands();
 
@@ -222,37 +236,20 @@ namespace process_pipeline.Forms
             {
                 sbh.SelectByHandles(objectIds, false);   // 你的跳转选中函数
             }
-            else { 
+            else
+            {
                 sbh.SelectByHandles(objectIds);   // 你的跳转选中函数
             }
-            
         }
 
         private void btnReversePolyline_Click(object sender, EventArgs e)
         {
             // 修复成功后，移除已修复的问题
-            _currentProblems.RemoveAll(p => p.IsFixed);  
+            //_currentProblems.RemoveAll(p => p.IsFixed);  
 
             // 关键：通过 UpdateProblems 更新（会自动触发 ProblemsChanged 事件）
             UpdateProblems(_currentProblems);
         }
-
-        //protected override void OnVisibleChanged(EventArgs e)
-        //{
-        //    base.OnVisibleChanged(e);
-
-        //    if (this.Visible && dgvProblems != null)
-        //    {
-        //        // 使用 BeginInvoke 延迟到 UI 线程下一轮处理，确保大小已确定
-        //        this.BeginInvoke(new Action(() =>
-        //        {
-        //            dgvProblems.PerformLayout();   // 关键：强制重新计算布局和滚动条
-        //            dgvProblems.Refresh();         // 刷新绘制，确保滚动条可见
-        //            // 可选：如果需要自动调整列宽
-        //            // dataGridView1.AutoResizeColumns(DataGridViewAutoSizeColumnsMode.AllCells);
-        //        }));
-        //    }
-        //}
     }
 
     public class palCheckArrow : IDisposable
@@ -293,7 +290,7 @@ namespace process_pipeline.Forms
 
             //_currentProblems = initialProblems ?? new List<ProblemItem>();
 
-            Update(initialProblems);
+            //Update(initialProblems);
 
             if (_paletteSet == null || _paletteSet.IsDisposed)
             {
@@ -322,7 +319,7 @@ namespace process_pipeline.Forms
             _paletteSet.Visible = true;
             _paletteSet.Activate(0);
 
-            // 如果还没订阅 Idle，就订阅一次（全局只订阅一次）
+            //如果还没订阅 Idle，就订阅一次（全局只订阅一次）
             if (_idleHandler == null)
             {
                 _idleHandler = (s, e) =>
@@ -361,6 +358,10 @@ namespace process_pipeline.Forms
                 _currentControl.Focus();
             }
         }
+        public bool IsVisible
+        {
+            get => _paletteSet != null ? _paletteSet.Visible : false;
+        }
 
         public void Hide()
         {
@@ -381,7 +382,7 @@ namespace process_pipeline.Forms
         //        _currentControl?.UpdateProblems(_currentProblems);  // 通知 UI 刷新
         //    }
         //}
-        public void MarkProblemFixed(IEnumerable<ObjectId> _pipeIds)
+        public void MarkProblemFixed(IEnumerable<ObjectId> _pipeIds, bool _isFixed)
         {
             ObjectId[] pipeIds = _pipeIds.ToArray();
             if (pipeIds == null || pipeIds.Length == 0) return;
@@ -391,18 +392,43 @@ namespace process_pipeline.Forms
 
             if (validIds.Count == 0) return;
 
-            // 一次性移除所有匹配的项（用 HashSet 加速查找）
-            int removedCount = _currentProblems.RemoveAll(p => validIds.Contains(p.PipeId));
+            //// 一次性移除所有匹配的项（用 HashSet 加速查找）
+            //int removedCount = _currentProblems.RemoveAll(p => validIds.Contains(p.PipeId));
 
-            // 如果有移除，才刷新 UI
-            if (removedCount > 0)
+            HashSet<ObjectId> pipeIdSet = new HashSet<ObjectId>(pipeIds);
+
+            int fixedCount = 0;
+            foreach (var p in _currentProblems)
+            {
+                if (!p.IsFixed && pipeIdSet.Contains(p.PipeId))
+                {
+                    p.IsFixed = _isFixed;
+                    fixedCount++;
+                }
+            }
+
+            // 如果有修复的，才刷新 UI
+            if (fixedCount > 0)
             {
                 _currentControl?.UpdateProblems(_currentProblems);
             }
         }
 
+        public void RefreshProblems()
+        {
+            Document Doc = AcadApp.DocumentManager.MdiActiveDocument;
+            
+            var service = new FlowArrowService(Doc.Database, Doc.Editor);
+            List<ProblemItem> newProblems = service.RunChecker();  // 完整检查
 
-        public void Update(List<ProblemItem> newProblems)
+            if (newProblems != null)
+            {
+                // 只更新内存和表格 UI，不抢焦点，不 Regen
+                Update(newProblems);
+            }
+        }
+
+        public void Update(List<ProblemItem> _newProblems)
         {
             //if (_paletteSet == null || _paletteSet.IsDisposed || _currentControl == null || _currentControl.IsDisposed)
             //{
@@ -415,11 +441,31 @@ namespace process_pipeline.Forms
             //// 直接更新已存在的控件
             //_currentControl.UpdateProblems(_currentProblems);
             _currentProblems = new List<ProblemItem>();
-            
-            if (newProblems != null)
-                _currentProblems.AddRange(newProblems);
 
-            _currentControl?.UpdateProblems(_currentProblems);  // 通知UI刷新
+            if (_newProblems != null)
+            {
+                //List<ProblemItem> newProblems = _newProblems
+                //    .Where(p => p.IsFixed == false)
+                //    .ToList();
+                _currentProblems.AddRange(_newProblems);
+            }
+
+            if (_currentControl != null && !_currentControl.IsDisposed)
+            {
+                if (_currentControl.InvokeRequired)
+                {
+                    _currentControl.Invoke(new Action(() => 
+                    {
+                        _currentControl.UpdateProblems(_currentProblems);
+                    }));
+                }
+                else
+                {
+                    _currentControl.UpdateProblems(_currentProblems);
+                }
+            }
+
+            //_currentControl?.UpdateProblems(_currentProblems);  // 通知UI刷新
         }
 
         // 实现IDisposable（核心：手动释放PaletteSet和控件）
@@ -458,6 +504,7 @@ namespace process_pipeline.Forms
         public class ProblemItemViewModel
         {
             public int NO { get; set; }
+            public bool IsFixed { get; set; }
             public string PipeId { get; set; }
             public string Location { get; set; }
             public string Description { get; set; }

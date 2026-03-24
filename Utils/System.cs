@@ -1,5 +1,9 @@
-﻿using Autodesk.AutoCAD.EditorInput;
+﻿using Autodesk.AutoCAD.ApplicationServices;
+using Autodesk.AutoCAD.EditorInput;
+using Autodesk.AutoCAD.Runtime;
+using process_pipeline.Commands;
 using process_pipeline.Core;
+using process_pipeline.Forms;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -152,7 +156,7 @@ namespace process_pipeline.Utils
                 // 刷新列表
                 ResetItems();
             }
-            catch (Exception ex)
+            catch (System.Exception ex)
             {
                 // 捕获排序异常（比如属性类型不支持比较）
                 System.Diagnostics.Debug.WriteLine($"排序失败：{ex.Message}");
@@ -163,6 +167,120 @@ namespace process_pipeline.Utils
         public (PropertyDescriptor Prop, ListSortDirection Direction) GetCurrentSortState()
         {
             return (_sortProperty, _sortDirection);
+        }
+    }
+
+    public class GlobalEventManager : IExtensionApplication
+    {
+        private bool _idleSubscribed = false;
+        private bool _needRefresh = false;
+        public void Initialize()
+        {
+            // 1. 给当前已经打开的图纸挂上监听
+            foreach (Document doc in Application.DocumentManager)
+            {
+                doc.CommandEnded += Doc_CommandEnded;
+            }
+
+            // 2. 监听未来新建或打开的图纸
+            Application.DocumentManager.DocumentCreated += DocumentManager_DocumentCreated;
+        
+            // 3. 监听图纸关闭，用于释放资源
+            Application.DocumentManager.DocumentToBeDestroyed += DocumentManager_DocumentToBeDestroyed;
+        }
+
+        public void Terminate()
+        {
+            // 插件卸载或 CAD 关闭时，完美释放所有订阅
+            Application.DocumentManager.DocumentCreated -= DocumentManager_DocumentCreated;
+            Application.DocumentManager.DocumentToBeDestroyed -= DocumentManager_DocumentToBeDestroyed;
+
+            foreach (Document doc in Application.DocumentManager)
+            {
+                doc.CommandEnded -= Doc_CommandEnded;
+            }
+
+            if (_idleSubscribed)
+            {
+                Application.Idle -= OnIdleRefresh;
+            }
+        }
+
+        private void DocumentManager_DocumentCreated(object sender, DocumentCollectionEventArgs e)
+        {
+            if (e.Document != null)
+            {
+                e.Document.CommandEnded += Doc_CommandEnded;
+            }
+        }
+
+        private void DocumentManager_DocumentToBeDestroyed(object sender, DocumentCollectionEventArgs e)
+        {
+            if (e.Document != null)
+            {
+                e.Document.CommandEnded -= Doc_CommandEnded;
+            }
+        }
+
+        // 【核心】任何图纸的任何命令结束，都会进入这里
+        private void Doc_CommandEnded(object sender, CommandEventArgs e)
+        {
+            string cmdName = e.GlobalCommandName.ToUpper();
+        
+            // 捕捉撤销(U)和重做(REDO)的所有变体
+            if (cmdName == "U" || cmdName == "_U" || 
+                cmdName == "UNDO" || cmdName == "_UNDO" || 
+                cmdName == "REDO" || cmdName == "_REDO")
+            {
+                try
+                {
+                    // 走到这里，说明图纸已经撤销完毕
+                    // 触发你的窗体全局刷新逻辑！
+                    // palCheckArrow.Instance?.RefreshAll(); 
+                    // Undo 即将开始 → 可以备份当前 problems 状态，或标记需要重新检查
+                    // 但这里只能做简单处理（如延迟刷新）
+                    if (palCheckArrow.Instance.IsVisible) {
+                        //palCheckArrow.Instance.RefreshProblems();
+                        // 标记需要刷新，但不立即执行
+                        _needRefresh = true;
+                
+                        if (!_idleSubscribed)
+                        {
+                            Application.Idle += OnIdleRefresh;
+                            _idleSubscribed = true;
+                        }
+                    }
+                }
+                catch
+                {
+                    // 捕获异常，防止刷新 UI 失败导致 CAD 崩溃
+                }
+            }
+        }
+
+        private void OnIdleRefresh(object sender, EventArgs e)
+        {
+            Application.Idle -= OnIdleRefresh;
+            _idleSubscribed = false;
+        
+            if (!_needRefresh) return;
+            _needRefresh = false;
+        
+            try
+            {
+                var doc = Application.DocumentManager.MdiActiveDocument;
+                if (doc == null) return;
+            
+                // 现在在 Idle 状态下，应该更安全
+                var service = new FlowArrowService(doc.Database, doc.Editor, useEditor: false);
+                var problems = service.RunChecker();
+            
+                palCheckArrow.Instance.Update(problems);
+            }
+            catch (System.Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[OnIdleRefresh] 失败: {ex.Message}");
+            }
         }
     }
 }

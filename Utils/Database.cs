@@ -22,7 +22,6 @@ namespace process_pipeline.Utils
                 if (lt.Has(layerName))
                 {
                     return lt[layerName];
-                    //return (LayerTableRecord)tr.GetObject(lt[layerName], OpenMode.ForRead);
                 }
 
                 // 创建新图层
@@ -37,8 +36,6 @@ namespace process_pipeline.Utils
                 tr.AddNewlyCreatedDBObject(ltr, true);
 
                 tr.Commit();
-
-                //Doc.Editor.WriteMessage($"\n已创建图层“{layerName}”（用于辅助检查线）。\n");
 
                 return lt[layerName];
             }

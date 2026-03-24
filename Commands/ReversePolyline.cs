@@ -13,16 +13,17 @@ using System.Security.Cryptography;
 using AcadApp = Autodesk.AutoCAD.ApplicationServices.Application;
 using process_pipeline.Utils;
 using process_pipeline.Forms;
+using Autodesk.AutoCAD.ApplicationServices;
 
 namespace process_pipeline.Commands
 {
     public class ReversePolylineCommands : CadBase
     {
+        private List<ObjectId> _fixedIds = new List<ObjectId>();
+
         [CommandMethod("RevPL", CommandFlags.UsePickSet | CommandFlags.Redraw)]
         public void Execute()
         {   
-            // SELECTIONEFFECT=0, PRESELECTIONEFFECT=0，这样更醒目
-
             SelectionSet ss = null;
 
             using (new SysVarScope(new Dictionary<string, object>
@@ -53,7 +54,7 @@ namespace process_pipeline.Commands
                     // 没有预选，让用户选择
                     PromptSelectionOptions opts = new PromptSelectionOptions
                     {
-                        MessageForAdding = "\n选择要反转的 Polyline 或 Line（可多选）",
+                        MessageForAdding = "\n请选择要反转的线(直线/多段线/圆弧/样条曲线等, 可多选）",
                         MessageForRemoval = "\n移除对象（Shift+点选）",
                         RejectObjectsOnLockedLayers = true,
                         AllowDuplicates = false
@@ -76,38 +77,54 @@ namespace process_pipeline.Commands
                 }
 
                 Ed.SetImpliedSelection(ss.GetObjectIds());
-                Ed.Regen();  // 强制刷新显示高亮
+                //Ed.Regen();  // 强制刷新显示高亮
 
                 int reversedCount = 0;
-                var fixedIds = new List<ObjectId>();
 
                 using (Transaction tr = Db.TransactionManager.StartTransaction())
+                //using (OpenCloseTransaction tr = Db.TransactionManager.StartOpenCloseTransaction())
                 {
-                    foreach (SelectedObject selObj in ss)
+                    _fixedIds = new List<ObjectId>();
+
+                    try
                     {
-                        Entity ent = tr.GetObject(selObj.ObjectId, OpenMode.ForWrite) as Entity;
-                        if (ent == null) continue;
-
-                        if (Geometry.ReverseLineEntity(ent))
+                        foreach (SelectedObject selObj in ss)
                         {
-                            // 关键：通知 PaletteSet 刷新列表
-                            if (palCheckArrow.Instance.CurrentProblems != null)
-                            {
-                                fixedIds.Add(selObj.ObjectId);
-                                //palCheckArrow.Instance?.MarkProblemFixed(selObj.ObjectId);
-                                reversedCount++;
-                            }
+                            //Entity ent = tr.GetObject(selObj.ObjectId, OpenMode.ForWrite) as Entity;
+                            //if (ent == null) continue;
+
+                            Curve cv = (Curve)tr.GetObject(selObj.ObjectId, OpenMode.ForWrite);
+                            if (cv == null) continue;
+
+                            cv.ReverseCurve();   // 一行搞定
+                            _fixedIds.Add(selObj.ObjectId);
+                            reversedCount++;
+
+                            //if (Geometry.ReverseLineEntity(ent))
+                            //{
+                            //    // 关键：通知 PaletteSet 刷新列表
+                            //    if (palCheckArrow.Instance.CurrentProblems != null)
+                            //    {
+                            //        _fixedIds.Add(selObj.ObjectId);
+                            //        //palCheckArrow.Instance?.MarkProblemFixed(selObj.ObjectId);
+                            //        reversedCount++;
+                            //    }
+                            //}
                         }
+
+                        tr.Commit();
                     }
-
-                    tr.Commit();
-
-                    // Commit 成功后再更新列表（Undo 时列表不会提前删）
-                    palCheckArrow.Instance?.MarkProblemFixed(fixedIds);
+                    catch { 
+                        tr.Abort();
+                    }
                 }
 
                 if (reversedCount > 0)
                 {
+                    // Commit 成功后再更新列表（Undo 时列表不会提前删）
+                    if(palCheckArrow.Instance.IsVisible)
+                        palCheckArrow.Instance?.MarkProblemFixed(_fixedIds, true);
+
                     Ed.WriteMessage($"\n已成功反转 {reversedCount} 个对象。");
                     Doc.Editor.Regen();  // 刷新显示，确保反转立即可见
                 }
@@ -117,7 +134,7 @@ namespace process_pipeline.Commands
                 }
             }
      
-        } 
+        }
 
         // 筛选器：只允许 Polyline 和 Line
         private SelectionFilter GetReverseFilter()
@@ -126,8 +143,12 @@ namespace process_pipeline.Commands
             {
                 new TypedValue((int)DxfCode.Operator, "<OR"),
                     new TypedValue((int)DxfCode.Start, "LWPOLYLINE"),
-                    new TypedValue((int)DxfCode.Start, "POLYLINE"),
+                    new TypedValue((int)DxfCode.Start, "*POLYLINE"),
                     new TypedValue((int)DxfCode.Start, "LINE"),
+                    new TypedValue((int)DxfCode.Start, "ARC"),
+                    new TypedValue((int)DxfCode.Start, "ELLIPSE"),
+                    new TypedValue((int)DxfCode.Start, "CIRCLE"),
+                    new TypedValue((int)DxfCode.Start, "SPLINE"),
                     //new TypedValue((int)DxfCode.Start, "POLYLINE2D"),  // 旧式 2D Polyline
                 new TypedValue((int)DxfCode.Operator, "OR>")
             };
