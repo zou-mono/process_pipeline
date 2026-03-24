@@ -250,6 +250,14 @@ namespace process_pipeline.Forms
             // 关键：通过 UpdateProblems 更新（会自动触发 ProblemsChanged 事件）
             UpdateProblems(_currentProblems);
         }
+
+        private void btn_Refresh_Click(object sender, EventArgs e)
+        {
+            var service = new FlowArrowService(doc.Database, doc.Editor, useEditor: false);
+            var problems = service.RunChecker();
+            
+            palCheckArrow.Instance.Update(problems);
+        }
     }
 
     public class palCheckArrow : IDisposable
@@ -289,8 +297,7 @@ namespace process_pipeline.Forms
             if (currentDoc == null) return;
 
             //_currentProblems = initialProblems ?? new List<ProblemItem>();
-
-            //Update(initialProblems);
+            Update(initialProblems);
 
             if (_paletteSet == null || _paletteSet.IsDisposed)
             {
@@ -313,6 +320,14 @@ namespace process_pipeline.Forms
                 _currentControl = new ucCheckArrowResult(initialProblems);
                 _currentControl.Disposed += (s, e) => _currentControl = null;  // 控件释放后置空
                 _paletteSet.Add("检查结果", _currentControl);
+            }
+            else { 
+                // 【核心修复】：如果面板已经存在，必须调用控件的方法更新数据！
+                if (_currentControl != null && !_currentControl.IsDisposed)
+                {
+                    // 调用你写好的 UpdateProblems 方法来刷新 DataGridView
+                    _currentControl.UpdateProblems(initialProblems);
+                }
             }
 
             //_paletteSet.Size = new System.Drawing.Size(601, 751);  // 故意微调一次，强制布局
@@ -491,6 +506,8 @@ namespace process_pipeline.Forms
 
                 // 清空数据
                 _currentProblems = null;
+                _idleHandler = null;
+                _needRefresh = false;
             }
             catch (System.Exception ex)
             {

@@ -178,7 +178,7 @@ namespace process_pipeline.Utils
         {
             // 1. 给当前已经打开的图纸挂上监听
             foreach (Document doc in Application.DocumentManager)
-            {
+            { 
                 doc.CommandEnded += Doc_CommandEnded;
             }
 
@@ -226,11 +226,12 @@ namespace process_pipeline.Utils
         private void Doc_CommandEnded(object sender, CommandEventArgs e)
         {
             string cmdName = e.GlobalCommandName.ToUpper();
-        
+
             // 捕捉撤销(U)和重做(REDO)的所有变体
-            if (cmdName == "U" || cmdName == "_U" || 
-                cmdName == "UNDO" || cmdName == "_UNDO" || 
-                cmdName == "REDO" || cmdName == "_REDO")
+            if (cmdName == "U" || cmdName == "_U" ||
+                cmdName == "UNDO" || cmdName == "_UNDO" ||
+                cmdName == "REDO" || cmdName == "_REDO" ||
+                cmdName == "MREDO" || cmdName == "OOPS")
             {
                 try
                 {
@@ -266,11 +267,11 @@ namespace process_pipeline.Utils
             if (!_needRefresh) return;
             _needRefresh = false;
         
+            var doc = Application.DocumentManager.MdiActiveDocument;
+            if (doc == null) return;
+
             try
-            {
-                var doc = Application.DocumentManager.MdiActiveDocument;
-                if (doc == null) return;
-            
+            { 
                 // 现在在 Idle 状态下，应该更安全
                 var service = new FlowArrowService(doc.Database, doc.Editor, useEditor: false);
                 var problems = service.RunChecker();
@@ -279,7 +280,7 @@ namespace process_pipeline.Utils
             }
             catch (System.Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[OnIdleRefresh] 失败: {ex.Message}");
+                DbgLog.Write(doc.Editor, $"[OnIdleRefresh] 失败: {ex.Message}");
             }
         }
     }

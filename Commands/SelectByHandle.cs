@@ -16,7 +16,7 @@ namespace process_pipeline.Commands
 {
     public class SelectByHandleCommands : CadBase
     {
-        [CommandMethod("SelByHandle", CommandFlags.Modal)]
+        [CommandMethod("SelByHandle", CommandFlags.Modal | CommandFlags.NoUndoMarker)]
         public void Execute()
         {
             try

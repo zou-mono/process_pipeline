@@ -33,6 +33,7 @@
             this.tblLayoutPanel = new System.Windows.Forms.TableLayoutPanel();
             this.toolbar = new System.Windows.Forms.ToolStrip();
             this.btnReversePolyline = new System.Windows.Forms.ToolStripButton();
+            this.btn_Refresh = new System.Windows.Forms.ToolStripButton();
             ((System.ComponentModel.ISupportInitialize)(this.dgvProblems)).BeginInit();
             this.tblLayoutPanel.SuspendLayout();
             this.toolbar.SuspendLayout();
@@ -67,7 +68,8 @@
             // 
             this.toolbar.ImageScalingSize = new System.Drawing.Size(25, 25);
             this.toolbar.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
-            this.btnReversePolyline});
+            this.btnReversePolyline,
+            this.btn_Refresh});
             this.toolbar.Location = new System.Drawing.Point(0, 0);
             this.toolbar.Name = "toolbar";
             this.toolbar.RenderMode = System.Windows.Forms.ToolStripRenderMode.System;
@@ -85,6 +87,16 @@
             this.btnReversePolyline.Text = "反转管线绘制方向";
             this.btnReversePolyline.TextImageRelation = System.Windows.Forms.TextImageRelation.TextAboveImage;
             this.btnReversePolyline.Click += new System.EventHandler(this.btnReversePolyline_Click);
+            // 
+            // btn_Refresh
+            // 
+            this.btn_Refresh.DisplayStyle = System.Windows.Forms.ToolStripItemDisplayStyle.Image;
+            this.btn_Refresh.Image = ((System.Drawing.Image)(resources.GetObject("btn_Refresh.Image")));
+            this.btn_Refresh.ImageTransparentColor = System.Drawing.Color.Magenta;
+            this.btn_Refresh.Name = "btn_Refresh";
+            this.btn_Refresh.Size = new System.Drawing.Size(29, 29);
+            this.btn_Refresh.Text = "toolStripButton1";
+            this.btn_Refresh.Click += new System.EventHandler(this.btn_Refresh_Click);
             // 
             // ucCheckArrowResult
             // 
@@ -109,5 +121,6 @@
         private System.Windows.Forms.TableLayoutPanel tblLayoutPanel;
         private System.Windows.Forms.ToolStrip toolbar;
         private System.Windows.Forms.ToolStripButton btnReversePolyline;
+        private System.Windows.Forms.ToolStripButton btn_Refresh;
     }
 }

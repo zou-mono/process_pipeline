@@ -45,7 +45,7 @@ namespace process_pipeline.Utils
         public ObjectId ArrowId { get; set; }  // 匹配箭头 ID (可选)
         public string Description { get; set; }  // "无匹配箭头" 或 "方向不一致 (差值 XX°)"
         public Point3d Location { get; set; }  // 管线起点或最近点
-        public bool IsFixed { get; set; }
+        public bool IsFixed { get; set; } = true;
     }
 
     public enum ProblemType {
