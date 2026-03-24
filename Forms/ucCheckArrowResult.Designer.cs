@@ -47,7 +47,7 @@
             this.dgvProblems.RowTemplate.Height = 23;
             this.dgvProblems.Size = new System.Drawing.Size(194, 71);
             this.dgvProblems.TabIndex = 0;
-            this.dgvProblems.SelectionChanged += new System.EventHandler(this.dgvProblems_SelectionChanged);
+            //this.dgvProblems.SelectionChanged += new System.EventHandler(this.dgvProblems_SelectionChanged);
             // 
             // tblLayoutPanel
             // 

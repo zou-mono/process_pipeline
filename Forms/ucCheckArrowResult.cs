@@ -168,57 +168,69 @@ namespace process_pipeline.Forms
             {
                 col.SortMode = DataGridViewColumnSortMode.Automatic;  // 默认就是，但显式设置更保险
             }
+
+            // 增加这个事件订阅：每次数据源绑定彻底完成后，强行清空选中状态
+            dgvProblems.DataBindingComplete += (s, e) =>
+            {
+                // 必须同时清空 CurrentCell 和 Selection
+                dgvProblems.CurrentCell = null; 
+                dgvProblems.ClearSelection();
+            };
+
+           // 2. 【核心修改】：订阅鼠标点击事件
+           dgvProblems.CellMouseClick += DgvProblems_CellMouseClick;
+
+           // 3. 【强烈建议】：订阅键盘事件（如果用户习惯用键盘上下键切换查看管线，这个很有用）
+           dgvProblems.KeyUp += DgvProblems_KeyUp;
         }
 
         private void PopulateDataGridView()
         {
-            _isUpdatingData = true; // 开启锁
-
-            try { 
-                // 转换为绑定源
-                var bindableList = _currentProblems
-                .Where(p => p.IsFixed == false) // 先筛选：只保留未修复的原始项
-                .Select((p, _ind) => new ProblemItemViewModel // 再生成ViewModel，_ind是筛选后的索引
-                {
-                    NO = _ind + 1, // 此时索引从0开始，+1后就是1、2、3...连续增长
-                    IsFixed = p.IsFixed,
-                    PipeId = p.PipeId.Handle.ToString(),
-                    Location = p.Location == null ? "未知" : $"({p.Location.X:F2}, {p.Location.Y:F2})",
-                    Description = p.Description,
-                    OriginalItem = p // 保留原始对象
-                })
-                .ToList();
-
-                _sortableList = new SortableBindingList<ProblemItemViewModel>(bindableList);
-                // 绑定数据源（避免手动Add）
-                dgvProblems.DataSource = _sortableList;
-
-                // 清除默认选中状态
-                dgvProblems.ClearSelection(); 
-            }
-            finally
+            // 转换为绑定源
+            var bindableList = _currentProblems
+            .Where(p => p.IsFixed == false) // 先筛选：只保留未修复的原始项
+            .Select((p, _ind) => new ProblemItemViewModel // 再生成ViewModel，_ind是筛选后的索引
             {
-                _isUpdatingData = false; // 务必在 finally 中释放锁
+                NO = _ind + 1, // 此时索引从0开始，+1后就是1、2、3...连续增长
+                IsFixed = p.IsFixed,
+                PipeId = p.PipeId.Handle.ToString(),
+                Location = p.Location == null ? "未知" : $"({p.Location.X:F2}, {p.Location.Y:F2})",
+                Description = p.Description,
+                OriginalItem = p // 保留原始对象
+            })
+            .ToList();
+
+            _sortableList = new SortableBindingList<ProblemItemViewModel>(bindableList);
+            // 绑定数据源（避免手动Add）
+            dgvProblems.DataSource = _sortableList;
+
+            // 清除默认选中状态
+            dgvProblems.ClearSelection(); 
+        }
+
+        private void DgvProblems_CellMouseClick(object sender, DataGridViewCellMouseEventArgs e)
+        {
+            // e.RowIndex == -1 表示点击的是表头（排序操作），直接忽略！
+            if (e.RowIndex < 0) return;
+
+            ExecuteCadSelection();
+        }
+
+        // 支持键盘上下键切换（可选，但体验更好）
+        private void DgvProblems_KeyUp(object sender, KeyEventArgs e)
+        {
+            if (e.KeyCode == Keys.Up || e.KeyCode == Keys.Down)
+            {
+                ExecuteCadSelection();
             }
         }
 
-        private void ucCheckArrowResult_Load(object sender, EventArgs e)
+        // 将原先 SelectionChanged 里的 CAD 跳转逻辑提炼成独立方法
+        private void ExecuteCadSelection()
         {
-            dgvProblems.ClearSelection();
-            //this.AutoScroll = true;               // UserControl 本身允许滚动（备用）
-            //dgvProblems.Dock = DockStyle.Fill;
-            //dgvProblems.ScrollBars = ScrollBars.Both;   // 务必明确设置
-        }
-
-        private void dgvProblems_SelectionChanged(object sender, EventArgs e)
-        {
-            if (_isUpdatingData) return;  // 拦截非用户主动点击的触发
-            //doc = AcadApp.DocumentManager.MdiActiveDocument;
-            //if (doc is null || doc.IsDisposed) return;
-
             // 确保有选中的行
             if (dgvProblems.SelectedRows.Count == 0) return;
- 
+
             // 获取所有选中的 ProblemItem
             var selectedItems = dgvProblems.SelectedRows
                 .Cast<DataGridViewRow>()
@@ -241,6 +253,53 @@ namespace process_pipeline.Forms
                 sbh.SelectByHandles(objectIds);   // 你的跳转选中函数
             }
         }
+
+        private void ucCheckArrowResult_Load(object sender, EventArgs e)
+        {
+            dgvProblems.ClearSelection();
+            //this.AutoScroll = true;               // UserControl 本身允许滚动（备用）
+            //dgvProblems.Dock = DockStyle.Fill;
+            //dgvProblems.ScrollBars = ScrollBars.Both;   // 务必明确设置
+        }
+
+        // 拦截 1：数据绑定或重绘完成时，强行清空选中
+        private void DgvProblems_DataBindingComplete(object sender, DataGridViewBindingCompleteEventArgs e)
+        {
+            dgvProblems.CurrentCell = null;
+            dgvProblems.ClearSelection();
+        }
+
+        //private void dgvProblems_SelectionChanged(object sender, EventArgs e)
+        //{
+        //    if (_isUpdatingData) return;  // 拦截非用户主动点击的触发
+        //    //doc = AcadApp.DocumentManager.MdiActiveDocument;
+        //    //if (doc is null || doc.IsDisposed) return;
+
+        //    // 确保有选中的行
+        //    if (dgvProblems.SelectedRows.Count == 0) return;
+ 
+        //    // 获取所有选中的 ProblemItem
+        //    var selectedItems = dgvProblems.SelectedRows
+        //        .Cast<DataGridViewRow>()
+        //        .Select(row => row.DataBoundItem as ProblemItemViewModel)
+        //        .Where(vm => vm != null && vm.OriginalItem != null)
+        //        .Select(vm => vm.OriginalItem)
+        //        .ToList();
+
+        //    if (selectedItems.Count == 0) return;
+
+        //    var objectIds = selectedItems.Select(p => p.PipeId).ToArray();
+        //    SelectByHandleCommands sbh = new SelectByHandleCommands();
+
+        //    if (objectIds.Count() > 500)
+        //    {
+        //        sbh.SelectByHandles(objectIds, false);   // 你的跳转选中函数
+        //    }
+        //    else
+        //    {
+        //        sbh.SelectByHandles(objectIds);   // 你的跳转选中函数
+        //    }
+        //}
 
         private void btnReversePolyline_Click(object sender, EventArgs e)
         {
