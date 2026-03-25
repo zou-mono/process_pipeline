@@ -102,6 +102,7 @@
     </Compile>
     <Compile Include="Utils\Database.cs" />
     <Compile Include="Utils\Geometry.cs" />
+    <Compile Include="Utils\GraphicManager.cs" />
     <Compile Include="Utils\System.cs" />
     <Compile Include="Utils\Types.cs" />
   </ItemGroup>

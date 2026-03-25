@@ -15,6 +15,7 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using AcadApp = Autodesk.AutoCAD.ApplicationServices.Application;
 using static System.Windows.Forms.VisualStyles.VisualStyleElement;
+using Autodesk.AutoCAD.Geometry;
 
 namespace process_pipeline.Forms
 {
@@ -70,6 +71,7 @@ namespace process_pipeline.Forms
                 // 取消所有事件订阅，释放资源
                 ProblemsChanged = null;
                 //doc = null; // 释放Document引用
+                GraphicManager.ClearAuxiliaryGraphics(); // 控件销毁时，务必擦除屏幕上的临时线
             };
         }
 
@@ -244,13 +246,20 @@ namespace process_pipeline.Forms
             var objectIds = selectedItems.Select(p => p.PipeId).ToArray();
             SelectByHandleCommands sbh = new SelectByHandleCommands();
 
-            if (objectIds.Count() > 500)
+            if (objectIds.Count() > 500)  // 太多了就不计算整体Extent
             {
                 sbh.SelectByHandles(objectIds, false);   // 你的跳转选中函数
             }
             else
             {
                 sbh.SelectByHandles(objectIds);   // 你的跳转选中函数
+            }
+
+            if (selectedItems.Count == 1) {
+                if (selectedItems[0].Type == ProblemType.OneToMany) { 
+                    List<MatchItem> PossibleMatches = selectedItems[0].PossibleMatches;
+                    GraphicManager.DrawAuxiliaryLines(PossibleMatches);
+                }
             }
         }
 

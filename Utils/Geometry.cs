@@ -1,15 +1,16 @@
 ﻿using Autodesk.AutoCAD.ApplicationServices;
+using System.Data.OleDb;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Geometry;
-using process_pipeline.Utils;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
-namespace process_pipeline.Util
+namespace process_pipeline.Utils
 {
     public static class Geometry
     {
@@ -22,7 +23,7 @@ namespace process_pipeline.Util
                 start = line.StartPoint;
                 end = line.EndPoint;
             }
-            else if (ent is Polyline pl)
+            else if (ent is Autodesk.AutoCAD.DatabaseServices.Polyline pl)
             {
                 start = pl.GetPoint3dAt(0);
                 end = pl.GetPoint3dAt(pl.NumberOfVertices - 1);
@@ -67,7 +68,7 @@ namespace process_pipeline.Util
                 bestClosestPoint = new LineSegment3d(line.StartPoint, line.EndPoint).GetClosestPointTo(arrowPoint).Point;
                 minDist = arrowPoint.DistanceTo(bestClosestPoint);
             }
-            else if (ent is Polyline pl)
+            else if (ent is Autodesk.AutoCAD.DatabaseServices.Polyline pl)
             {
                 // 先用整条 Polyline 快速得到最近点和参数值
                 //Curve3d curve3d = pl.GetGeCurve();
@@ -135,7 +136,7 @@ namespace process_pipeline.Util
                 Point3d closest = seg.GetClosestPointTo(point).Point;
                 minDist = point.DistanceTo(closest);
             }
-            else if (ent is Polyline pl)
+            else if (ent is Autodesk.AutoCAD.DatabaseServices.Polyline pl)
             {
                 for (int i = 0; i < pl.NumberOfVertices - 1; i++)
                 {
@@ -282,54 +283,6 @@ namespace process_pipeline.Util
 
                 tr.Abort();
                 return false;
-
-                // 可选：调试日志
-                // Editor ed = Application.DocumentManager.MdiActiveDocument.Editor;
-                // ed.WriteMessage($"\n实体 {ent.Handle} 已反转方向（直接修改顶点）");
-
-
-                //if (entity is Line line)
-                //{
-                //    // Line：交换起点和终点
-                //    Point3d temp = line.StartPoint;
-                //    line.StartPoint = line.EndPoint;
-                //    line.EndPoint = temp;
-                //    tr.Commit();
-                //    return true;
-                //}
-                //else if (entity is Polyline pl)  // LWPOLYLINE
-                //{
-                //    if (pl.NumberOfVertices < 2) return false;
-
-                //    bool wasClosed = pl.Closed;
-
-                //    // 收集反序的 2D 顶点（2014 只支持 Point2d）
-                //    var points2d = new Point2dCollection();
-                //    var bulges = new DoubleCollection();
-
-                //    for (int i = pl.NumberOfVertices - 1; i >= 0; i--)
-                //    {
-                //        Point3d p3d = pl.GetPoint3dAt(i);
-                //        points2d.Add(new Point2d(p3d.X, p3d.Y));
-
-                //        // 2014 无 GetBulge，强制设为 0（你的管线基本无弧段）
-                //        bulges.Add(0.0);
-                //    }
-
-                //    // 清空并重新添加
-                //    pl.Reset(true, points2d.Count);
-                //    for (int i = 0; i < points2d.Count - 1; i++)
-                //    {
-                //        pl.AddVertexAt(i, points2d[i], bulges[i], 0, 0);
-                //    }
-
-                //    pl.Closed = wasClosed;
-                //    tr.Commit();
-                //    return true;
-                //}
-
-                //tr.Abort();
-                //return false;
             }
         }
     }

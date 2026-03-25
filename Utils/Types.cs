@@ -12,6 +12,7 @@ namespace process_pipeline.Utils
     {
         // 字段/属性和原元组一一对应
         public ObjectId Id { get; set; }
+        public Point3d Position {get; set;}
         public double Dist { get; set; }
         public Point3d closePoint { get; set; }
         public double SegAngle { get; set; }
@@ -19,9 +20,10 @@ namespace process_pipeline.Utils
         public bool IsReverse { get; set; }
 
         // 可选：构造函数（简化初始化）
-        public MatchItem(ObjectId id, double dist, Point3d closePoint, double segAngle, double arrowRot, bool isReverse)
+        public MatchItem(ObjectId id, Point3d position, double dist, Point3d closePoint, double segAngle, double arrowRot, bool isReverse)
         {
             Id = id;
+            Position = position;
             Dist = dist;
             this.closePoint = closePoint;
             SegAngle = segAngle;
@@ -46,6 +48,7 @@ namespace process_pipeline.Utils
         public string Description { get; set; }  // "无匹配箭头" 或 "方向不一致 (差值 XX°)"
         public Point3d Location { get; set; }  // 管线起点或最近点
         public bool IsFixed { get; set; } = true;
+        public List<MatchItem> PossibleMatches { get; set; }
     }
 
     public enum ProblemType {
