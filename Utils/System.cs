@@ -274,7 +274,7 @@ namespace process_pipeline.Utils
             { 
                 // 现在在 Idle 状态下，应该更安全
                 var service = new FlowArrowService(doc.Database, doc.Editor, useEditor: false);
-                var problems = service.RunChecker();
+                List<ProblemItem> problems = service.RunChecker();
             
                 palCheckArrow.Instance.Update(problems);
             }

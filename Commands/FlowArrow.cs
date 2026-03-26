@@ -23,126 +23,68 @@ namespace process_pipeline.Commands
     /// <summary>
     /// 管线相关命令（一个类封装所有管线业务命令）
     /// </summary>
-    public class FlowArrowCommands : CadBase // 继承Core层的基础类，复用上下文
+    public class FlowArrowCommands : CadCommandBase // 继承Core层的基础类，复用上下文
     {
-        // 引入 Windows 底层 API，用于启用/禁用窗口
-        [DllImport("user32.dll")]
-        private static extern bool EnableWindow(IntPtr hWnd, bool bEnable);
-        [DllImport("user32.dll")]
-        private static extern short GetAsyncKeyState(int vKey);
-
-        private const int VK_ESCAPE = 0x1B; // ESC 键的虚拟键码
-
         [CommandMethod("MATCHARROW", CommandFlags.Modal | CommandFlags.NoUndoMarker)]
-        public void Execute()
+        public override void Execute()
         {
-            // 1. 获取 CAD 主窗口的句柄
-            IntPtr cadHandle = AcadApp.MainWindow.Handle;
+            if (Doc == null) return;
 
-            // 【核心防御】：通过 Windows API 强行禁用 CAD 主窗口
-            // 此时用户点击 CAD 任何地方（包括 Ribbon 面板、命令行）都不会有反应
-            EnableWindow(cadHandle, false);
-
-            // 2. 调用 AutoCAD 2019 原生进度条（显示在右下角状态栏）
-            ProgressMeter pm = new ProgressMeter();
-            pm.Start("正在进行管线与箭头匹配计算，请不要操作 CAD...");
-
-            // 创建取消令牌源
-            CancellationTokenSource cts = new CancellationTokenSource();
-
-            try
+            var targetLayers = new HashSet<string>
             {
-                int currentProgress = 0;
+                "3-污水管-2025新建", "3-污水管-规划扩建", "3-污水管-现状",
+                "3-污水压力管-规划新建", "3-污水压力管-现状"
+            };
 
-                var service = new FlowArrowService(Db, Ed);
-            
-                // 执行核心逻辑，并通过委托（回调函数）解耦进度更新
-                List<ProblemItem> problems = service.RunChecker(
-                    // 回调 1：设置进度条总数
-                    total => pm.SetLimit(total), 
-                    
-                    // 回调 2：每处理一个对象触发一次
-                    () => 
-                    {
-                        pm.MeterProgress(); // 进度条前进一步
-                        currentProgress++;
-
-                        //System.Threading.Thread.Sleep(100); 
-                        
-                        // 检测物理键盘的 ESC 键是否被按下
-                        if ((GetAsyncKeyState(VK_ESCAPE) & 0x8000) != 0)
-                        {
-                            cts.Cancel(); // 发出取消信号
-                        }
-
-                        // 【喘息机制】：每处理 50 个对象，让系统处理一下 UI 消息
-                        if (currentProgress % 10 == 0)
-                        {
-                            System.Windows.Forms.Application.DoEvents();
-                        }
-                    },
-                    cts.Token // 将取消令牌传入 Service
-                );
-
-                //List<ProblemItem> problems = service.RunChecker();
-
-                //if (problems == null || problems.Count == 0)
-                //{
-                //    Doc.Editor.WriteMessage("\n检查通过，无问题。\n");
-                //}
-                // 判断是正常完成还是被用户取消
-                if (cts.IsCancellationRequested)
-                {
-                    Doc.Editor.WriteMessage("\n*** 操作已由用户中途取消 ***\n");
-                }
-                else if (problems.Count == 0)
-                {
-                    Doc.Editor.WriteMessage("\n检查通过，无问题。\n");
-                }
-                else if (problems.Count > 0) 
-                { 
-                    palCheckArrow.Instance.Show(problems);
-                }
-
-                            }
-            catch (System.Exception ex)
+            // 1. 直接 new 服务，填参数
+            var service = new FlowArrowService(Doc.Database, Doc.Editor, true)
             {
-                Doc.Editor.WriteMessage($"\n匹配过程发生错误: {ex.Message}");
-            }
-            finally
-            {
-                // 4. 【务必兜底】：无论成功还是报错，必须在 finally 中解锁和清理
-                pm.Stop();
-                pm.Dispose();
+                MaxBufferDistance = 50.0,
+                TargetBlockName = "jt-fy",
+                AngleTolerance = 30.0,
+                TargetLayers = targetLayers
+            };
 
-                // 恢复 CAD 窗口响应
-                EnableWindow(cadHandle, true);
-                AcadApp.MainWindow.Focus();
-            }
-            //Ed.Regen();
-            //AcadApp.UpdateScreen();
+            // 2. 启动引擎！
+            service.Run("管线与箭头匹配分析");
         }
     }
 
-    public class FlowArrowService
+    public class FlowArrowService : CadBase<List<ProblemItem>>
     {
-        double maxBufferDistance = 50.0;   // 距离阈值
-        double angleTolerance = 30.0;      // 角度偏差阈值（度），e.g., ±45°
-        string auxLayerName = "核查辅助线";
+            // 业务配置项
+        public double MaxBufferDistance { get; set; } = 50.0;
+        public double AngleTolerance { get; set; } = 30.0;
+        public string TargetBlockName { get; set; } = "jt-fy";
+        public HashSet<string> TargetLayers { get; set; } = new HashSet<string>
+        {
+            "3-污水管-2025新建", "3-污水管-规划扩建", "3-污水管-现状",
+            "3-污水压力管-规划新建", "3-污水压力管-现状"
+        };
+
+        //double maxBufferDistance = 50.0;   // 距离阈值
+        //double angleTolerance = 30.0;      // 角度偏差阈值（度），e.g., ±45°
+        //string auxLayerName = "核查辅助线";
 
         private readonly AcadDb.Database _db;
         private readonly Editor _ed;
         private readonly bool _useEditor = true; // true = 使用Editor 方法
 
-        public FlowArrowService(AcadDb.Database db, Editor ed, bool useEditor = false)
+        private ProgressContext _context;
+
+        public FlowArrowService(AcadDb.Database db, Editor ed, bool useEditor = false) : base(db, ed)
         {
-            _db = db;
-            _ed = ed;
             _useEditor = useEditor;
+            _ed = ed;
+            _db = db;
+        }
+
+        public List<ProblemItem> RunChecker() {
+            return Execute(null);
         }
 
         // 增加两个 Action 委托作为参数，默认值为 null，保证向下兼容
-        public List<ProblemItem> RunChecker(Action<int> onSetTotal = null, Action onStep = null, CancellationToken token = default)
+        protected override List<ProblemItem> Execute(ProgressContext context)
         {
             List<ObjectId> arrowIds;
             List<ObjectId> pipeIds;
@@ -164,7 +106,7 @@ namespace process_pipeline.Commands
             if (arrowData == null || pipeIds == null || arrowData.Count == 0 || pipeIds.Count == 0)
                 return new List<ProblemItem>();
 
-            return _RunChecker(pipeIds.ToArray(), arrowData, onSetTotal, onStep, token);
+            return _RunChecker(pipeIds.ToArray(), arrowData, context);
         }
 
         // 筛选箭头
@@ -273,11 +215,6 @@ namespace process_pipeline.Commands
         private List<ObjectId> GetPipesFromDatabase()
         {
             var pipeIds = new List<ObjectId>();
-            var targetLayers = new HashSet<string>
-            {
-                "3-污水管-2025新建", "3-污水管-规划扩建", "3-污水管-现状",
-                "3-污水压力管-规划新建", "3-污水压力管-现状"
-            };
 
             //using (Transaction tr = _db.TransactionManager.StartTransaction())
             using (OpenCloseTransaction tr = _db.TransactionManager.StartOpenCloseTransaction())
@@ -290,7 +227,7 @@ namespace process_pipeline.Commands
                     if (dxfName == "LINE" || dxfName == "LWPOLYLINE" || dxfName == "POLYLINE")
                     {
                         Entity ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
-                        if (ent != null && targetLayers.Contains(ent.Layer))
+                        if (ent != null && TargetLayers.Contains(ent.Layer))
                         {
                             pipeIds.Add(id);
                         }
@@ -311,7 +248,7 @@ namespace process_pipeline.Commands
 
         private List<ProblemItem> _RunChecker(ObjectId[] pipeObjs, 
             Dictionary<ObjectId, (Point3d Position, double Rotation)> arrowData,
-            Action<int> onSetTotal, Action onStep, CancellationToken token)
+            ProgressContext context)
         {
             var problems = new List<ProblemItem>();
 
@@ -328,28 +265,27 @@ namespace process_pipeline.Commands
             //using (Transaction tr = _db.TransactionManager.StartTransaction())
             
             // 触发回调 1：告诉外部总共有多少条管线需要处理
-            onSetTotal?.Invoke(pipeObjs.Length);
+            context?.SetTotal(pipeObjs.Length);
 
-            using (OpenCloseTransaction tr = _db.TransactionManager.StartOpenCloseTransaction())
+            using (OpenCloseTransaction tr = Db.TransactionManager.StartOpenCloseTransaction())
             {
                 foreach (ObjectId pipeId in pipeObjs)
                 {
                     var obj = tr.GetObject(pipeId, OpenMode.ForRead);
                     string pipe_handle = obj.Handle.ToString(); // 如 "7B2A"
 
-                    // 【核心响应】：检查是否收到了取消请求
-                    if (token.IsCancellationRequested)
-                    {
-                        // 收到取消信号，直接跳出循环，返回已经收集到的 problems
-                        break; 
-                    }
-
                     // 触发回调 2：告诉外部当前处理完了一个，进度条可以动了
-                    onStep?.Invoke();
+                    context?.Step();
 
                     if (pipe_handle == "5107")
                     {
                         DbgLog.Write(_ed, $"\n管线 {pipe_handle}正在调试");
+                    }
+
+                    // 检查是否被用户按 ESC 取消（仅在有 UI 时生效）
+                    if (context != null && context.Token.IsCancellationRequested)
+                    {
+                        break; 
                     }
 
                     if (pipeId.IsErased || !pipeId.IsValid) continue;
@@ -366,8 +302,8 @@ namespace process_pipeline.Commands
                     foreach (var kv in arrowData)
                     {
                         Point3d p = kv.Value.Position;
-                        if (p.X >= min.X - maxBufferDistance && p.X <= max.X + maxBufferDistance &&
-                            p.Y >= min.Y - maxBufferDistance && p.Y <= max.Y + maxBufferDistance)
+                        if (p.X >= min.X - MaxBufferDistance && p.X <= max.X + MaxBufferDistance &&
+                            p.Y >= min.Y - MaxBufferDistance && p.Y <= max.Y + MaxBufferDistance)
                         {
                             candidates.Add(kv.Key);
                         }
@@ -418,13 +354,13 @@ namespace process_pipeline.Commands
                         //double dist = Geometry.GetMinDistanceToPipe(ent, ap);
 
                         //if (dist > maxBufferDistance || dist >= minDist) continue;
-                        if (dist > maxBufferDistance) continue;
+                        if (dist > MaxBufferDistance) continue;
 
                         double diff = Math.Abs(arrowRealAngle - pipeSegAngle);
                         diff = Math.Min(diff, 360 - diff);
 
-                        bool isNearSame = diff <= angleTolerance;   // 方向一致
-                        bool isNearReverse = Math.Abs(diff - 180) <= angleTolerance;  // 方向相反
+                        bool isNearSame = diff <= AngleTolerance;   // 方向一致
+                        bool isNearReverse = Math.Abs(diff - 180) <= AngleTolerance;  // 方向相反
 
                         // 如果既不接近同向也不接近反向 → 忽略，不算匹配箭头，也不放入 problem
                         if (!isNearSame && !isNearReverse) continue;
@@ -449,7 +385,7 @@ namespace process_pipeline.Commands
                             Level = ProblemLevel.Error,
                             IsFixed = false,
                             Location = Geometry.RepresentativePoint(pipe_ent),
-                            Description = $"无匹配箭头（在管线{maxBufferDistance}米范围内没有找到符合方向的箭头）"
+                            Description = $"无匹配箭头（在管线{MaxBufferDistance}米范围内没有找到符合方向的箭头）"
                         });
                         //return problems;
                     }
@@ -499,7 +435,7 @@ namespace process_pipeline.Commands
                         }
                         else if (reverseCount == possibleMatches.Count && reverseCount > 0)
                         {
-                            if (closestArrow != null && minDist <= maxBufferDistance)
+                            if (closestArrow != null && minDist <= MaxBufferDistance)
                             {
                                 if (closestArrow.IsReverse)
                                 {
@@ -521,6 +457,17 @@ namespace process_pipeline.Commands
 
                 return problems;
             }
+        }
+
+        protected override void OnSuccess(List<ProblemItem> result)
+        {
+            if (result == null || result.Count == 0)
+            {
+                Ed.WriteMessage("\n检查通过，无问题。\n");
+                return;
+            }
+            // 弹窗展示
+            palCheckArrow.Instance.Show(result);
         }
     }
 }

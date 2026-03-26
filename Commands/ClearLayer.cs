@@ -1,5 +1,4 @@
-﻿using Autodesk.AutoCAD.DatabaseServices;
-using Autodesk.AutoCAD.EditorInput;
+﻿
 using Autodesk.AutoCAD.Runtime;
 using process_pipeline.Core;
 using System;
@@ -7,13 +6,31 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using AcadDb = Autodesk.AutoCAD.DatabaseServices;
+using AcadApp = Autodesk.AutoCAD.ApplicationServices.Application;
+using Autodesk.AutoCAD.EditorInput;
+using Autodesk.AutoCAD.DatabaseServices;
 
 namespace process_pipeline.Commands
 {
-    public class ClearLayerCommands : CadBase 
-    {   
+    public class ClearLayerCommands : CadCommandBase
+    {
         [CommandMethod("ClearLayer", CommandFlags.Session | CommandFlags.Redraw)]
-        public void Execute() {
+        public override void Execute()
+        {
+            var service = new ClearLayerService(Doc.Database, Doc.Editor);
+            service.Run("清空图层所有图形要素");
+        }
+    }
+
+    public class ClearLayerService : CadBase
+    {   
+        public ClearLayerService(AcadDb.Database db, Editor ed) : base(db, ed)
+        {
+
+        }
+
+        protected override void ExecuteVoid(ProgressContext context) {
             // 提示用户输入图层名称（支持通配符）
             PromptStringOptions pso = new PromptStringOptions("\n输入要清空的图层名称：")
             {

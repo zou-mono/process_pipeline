@@ -13,17 +13,30 @@ using AcadApp = Autodesk.AutoCAD.ApplicationServices.Application;
 using process_pipeline.Utils;
 using process_pipeline.Forms;
 using Autodesk.AutoCAD.ApplicationServices;
+using AcadDb = Autodesk.AutoCAD.DatabaseServices;
 
 namespace process_pipeline.Commands
 {
-    public class ReversePolylineCommands : CadBase
+    public class ReversePolylineCommands : CadCommandBase
+    {
+        [CommandMethod("RevPL", CommandFlags.UsePickSet | CommandFlags.Redraw)]
+        public override void Execute()
+        {
+            var service = new ReversePolylineService(Doc.Database, Doc.Editor);
+            service.Run("反转多段线");
+        }
+    }
+
+    public class ReversePolylineService : CadBase
     {
         private List<ObjectId> _fixedIds = new List<ObjectId>();
+        public ReversePolylineService(AcadDb.Database db, Editor ed) : base(db, ed)
+        {
 
-        [CommandMethod("RevPL", CommandFlags.UsePickSet | CommandFlags.Redraw)]
-        public void Execute()
-        {   
-            SelectionSet ss = null;
+        }
+
+        protected override void ExecuteVoid(ProgressContext context) { 
+                    SelectionSet ss;
 
             using (new SysVarScope(new Dictionary<string, object>
             {
@@ -98,17 +111,6 @@ namespace process_pipeline.Commands
                             cv.ReverseCurve();   // 一行搞定
                             _fixedIds.Add(selObj.ObjectId);
                             reversedCount++;
-
-                            //if (Geometry.ReverseLineEntity(ent))
-                            //{
-                            //    // 关键：通知 PaletteSet 刷新列表
-                            //    if (palCheckArrow.Instance.CurrentProblems != null)
-                            //    {
-                            //        _fixedIds.Add(selObj.ObjectId);
-                            //        //palCheckArrow.Instance?.MarkProblemFixed(selObj.ObjectId);
-                            //        reversedCount++;
-                            //    }
-                            //}
                         }
 
                         tr.Commit();
@@ -132,7 +134,6 @@ namespace process_pipeline.Commands
                     Ed.WriteMessage("\n选中的对象中没有可反转的 Polyline 或 Line。");
                 }
             }
-     
         }
 
         // 筛选器：只允许 Polyline 和 Line

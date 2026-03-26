@@ -244,7 +244,7 @@ namespace process_pipeline.Forms
             if (selectedItems.Count == 0) return;
 
             var objectIds = selectedItems.Select(p => p.PipeId).ToArray();
-            SelectByHandleCommands sbh = new SelectByHandleCommands();
+            SelectByHandleService sbh = new SelectByHandleService(doc.Database, doc.Editor);
 
             if (objectIds.Count() > 500)  // 太多了就不计算整体Extent
             {

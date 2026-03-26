@@ -80,7 +80,7 @@
     <Compile Include="Commands\ReversePolyline.cs" />
     <Compile Include="Commands\SelectByHandle.cs" />
     <Compile Include="Core\CadBase.cs" />
-    <Compile Include="Core\CadTransaction.cs" />
+    <Compile Include="Core\ICadCommand.cs" />
     <Compile Include="Forms\frmCheckArrow.cs">
       <SubType>Form</SubType>
     </Compile>

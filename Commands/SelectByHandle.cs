@@ -14,10 +14,24 @@ using System.Threading.Tasks;
 
 namespace process_pipeline.Commands
 {
-    public class SelectByHandleCommands : CadBase
+    public class SelectByHandleCommands : CadCommandBase
     {
         [CommandMethod("SelByHandle", CommandFlags.Modal | CommandFlags.NoUndoMarker)]
-        public void Execute()
+        public override void Execute()
+        {
+            var service = new SelectByHandleService(Doc.Database, Doc.Editor);
+            service.Run("根据句柄值选择实体");
+        }
+    }
+
+    public class SelectByHandleService : CadBase
+    {
+        public SelectByHandleService(Autodesk.AutoCAD.DatabaseServices.Database db, Editor ed) : base(db, ed)
+        {
+
+        }
+
+        protected override void ExecuteVoid(ProgressContext context)
         {
             try
             {

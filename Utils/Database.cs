@@ -7,10 +7,15 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using AcadDb = Autodesk.AutoCAD.DatabaseServices;
+using AcadApp = Autodesk.AutoCAD.ApplicationServices.Application;
 
 namespace process_pipeline.Utils
 {
-    public class Database : CadBase { 
+    public class Database {
+        Document Doc = AcadApp.DocumentManager.MdiActiveDocument;
+        AcadDb.Database Db = AcadApp.DocumentManager.MdiActiveDocument.Database;
+
         public ObjectId EnsureAuxLayer(string layerName)
         {
             using (Transaction tr = Db.TransactionManager.StartTransaction())
