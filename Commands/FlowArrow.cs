@@ -5,6 +5,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using System.Threading; // 引入 CancellationToken
 using Autodesk.AutoCAD.ApplicationServices; // CAD应用程序核心
 using AcadApp = Autodesk.AutoCAD.ApplicationServices.Application;
 using Autodesk.AutoCAD.DatabaseServices;   // CAD数据库操作
@@ -15,6 +16,7 @@ using process_pipeline.Core;           // 命令特性（关键）
 using process_pipeline.Forms;
 using process_pipeline.Utils;
 using AcadDb = Autodesk.AutoCAD.DatabaseServices;
+using System.Runtime.InteropServices; // 必须引入这个命名空间
 
 namespace process_pipeline.Commands
 {
@@ -23,20 +25,100 @@ namespace process_pipeline.Commands
     /// </summary>
     public class FlowArrowCommands : CadBase // 继承Core层的基础类，复用上下文
     {
+        // 引入 Windows 底层 API，用于启用/禁用窗口
+        [DllImport("user32.dll")]
+        private static extern bool EnableWindow(IntPtr hWnd, bool bEnable);
+        [DllImport("user32.dll")]
+        private static extern short GetAsyncKeyState(int vKey);
+
+        private const int VK_ESCAPE = 0x1B; // ESC 键的虚拟键码
+
         [CommandMethod("MATCHARROW", CommandFlags.Modal | CommandFlags.NoUndoMarker)]
         public void Execute()
         {
-            var service = new FlowArrowService(Db, Ed);
-            
-            List<ProblemItem> problems = service.RunChecker();
+            // 1. 获取 CAD 主窗口的句柄
+            IntPtr cadHandle = AcadApp.MainWindow.Handle;
 
-            if (problems == null || problems.Count == 0)
+            // 【核心防御】：通过 Windows API 强行禁用 CAD 主窗口
+            // 此时用户点击 CAD 任何地方（包括 Ribbon 面板、命令行）都不会有反应
+            EnableWindow(cadHandle, false);
+
+            // 2. 调用 AutoCAD 2019 原生进度条（显示在右下角状态栏）
+            ProgressMeter pm = new ProgressMeter();
+            pm.Start("正在进行管线与箭头匹配计算，请不要操作 CAD...");
+
+            // 创建取消令牌源
+            CancellationTokenSource cts = new CancellationTokenSource();
+
+            try
             {
-                Doc.Editor.WriteMessage("\n检查通过，无问题。\n");
+                int currentProgress = 0;
+
+                var service = new FlowArrowService(Db, Ed);
+            
+                // 执行核心逻辑，并通过委托（回调函数）解耦进度更新
+                List<ProblemItem> problems = service.RunChecker(
+                    // 回调 1：设置进度条总数
+                    total => pm.SetLimit(total), 
+                    
+                    // 回调 2：每处理一个对象触发一次
+                    () => 
+                    {
+                        pm.MeterProgress(); // 进度条前进一步
+                        currentProgress++;
+
+                        //System.Threading.Thread.Sleep(100); 
+                        
+                        // 检测物理键盘的 ESC 键是否被按下
+                        if ((GetAsyncKeyState(VK_ESCAPE) & 0x8000) != 0)
+                        {
+                            cts.Cancel(); // 发出取消信号
+                        }
+
+                        // 【喘息机制】：每处理 50 个对象，让系统处理一下 UI 消息
+                        if (currentProgress % 10 == 0)
+                        {
+                            System.Windows.Forms.Application.DoEvents();
+                        }
+                    },
+                    cts.Token // 将取消令牌传入 Service
+                );
+
+                //List<ProblemItem> problems = service.RunChecker();
+
+                //if (problems == null || problems.Count == 0)
+                //{
+                //    Doc.Editor.WriteMessage("\n检查通过，无问题。\n");
+                //}
+                // 判断是正常完成还是被用户取消
+                if (cts.IsCancellationRequested)
+                {
+                    Doc.Editor.WriteMessage("\n*** 操作已由用户中途取消 ***\n");
+                }
+                else if (problems.Count == 0)
+                {
+                    Doc.Editor.WriteMessage("\n检查通过，无问题。\n");
+                }
+                else if (problems.Count > 0) 
+                { 
+                    palCheckArrow.Instance.Show(problems);
+                }
+
+                            }
+            catch (System.Exception ex)
+            {
+                Doc.Editor.WriteMessage($"\n匹配过程发生错误: {ex.Message}");
             }
+            finally
+            {
+                // 4. 【务必兜底】：无论成功还是报错，必须在 finally 中解锁和清理
+                pm.Stop();
+                pm.Dispose();
 
-            palCheckArrow.Instance.Show(problems);
-
+                // 恢复 CAD 窗口响应
+                EnableWindow(cadHandle, true);
+                AcadApp.MainWindow.Focus();
+            }
             //Ed.Regen();
             //AcadApp.UpdateScreen();
         }
@@ -59,7 +141,8 @@ namespace process_pipeline.Commands
             _useEditor = useEditor;
         }
 
-        public List<ProblemItem> RunChecker()
+        // 增加两个 Action 委托作为参数，默认值为 null，保证向下兼容
+        public List<ProblemItem> RunChecker(Action<int> onSetTotal = null, Action onStep = null, CancellationToken token = default)
         {
             List<ObjectId> arrowIds;
             List<ObjectId> pipeIds;
@@ -81,7 +164,7 @@ namespace process_pipeline.Commands
             if (arrowData == null || pipeIds == null || arrowData.Count == 0 || pipeIds.Count == 0)
                 return new List<ProblemItem>();
 
-            return _RunChecker(pipeIds.ToArray(), arrowData);
+            return _RunChecker(pipeIds.ToArray(), arrowData, onSetTotal, onStep, token);
         }
 
         // 筛选箭头
@@ -226,7 +309,9 @@ namespace process_pipeline.Commands
             return pipeIds;
         }
 
-        private List<ProblemItem> _RunChecker(ObjectId[] pipeObjs, Dictionary<ObjectId, (Point3d Position, double Rotation)> arrowData)
+        private List<ProblemItem> _RunChecker(ObjectId[] pipeObjs, 
+            Dictionary<ObjectId, (Point3d Position, double Rotation)> arrowData,
+            Action<int> onSetTotal, Action onStep, CancellationToken token)
         {
             var problems = new List<ProblemItem>();
 
@@ -241,12 +326,26 @@ namespace process_pipeline.Commands
             // 4. 关联处理（遍历管线，找最近匹配箭头）
             int associatedCount = 0;
             //using (Transaction tr = _db.TransactionManager.StartTransaction())
+            
+            // 触发回调 1：告诉外部总共有多少条管线需要处理
+            onSetTotal?.Invoke(pipeObjs.Length);
+
             using (OpenCloseTransaction tr = _db.TransactionManager.StartOpenCloseTransaction())
             {
                 foreach (ObjectId pipeId in pipeObjs)
                 {
                     var obj = tr.GetObject(pipeId, OpenMode.ForRead);
                     string pipe_handle = obj.Handle.ToString(); // 如 "7B2A"
+
+                    // 【核心响应】：检查是否收到了取消请求
+                    if (token.IsCancellationRequested)
+                    {
+                        // 收到取消信号，直接跳出循环，返回已经收集到的 problems
+                        break; 
+                    }
+
+                    // 触发回调 2：告诉外部当前处理完了一个，进度条可以动了
+                    onStep?.Invoke();
 
                     if (pipe_handle == "5107")
                     {
