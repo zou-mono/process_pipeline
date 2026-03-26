@@ -25,12 +25,17 @@ namespace process_pipeline.Core
             _cts = cts;
         }
 
-        public void SetTotal(int total) => _pm.SetLimit(total);
+        public void SetTotal(int total) { 
+            _pm.SetLimit(total);
+            System.Windows.Forms.Application.DoEvents();
+        } 
 
         public void Step()
         {
             _pm.MeterProgress();
             _currentProgress++;
+
+            Thread.Sleep(100);
 
             // 统一在这里检测 ESC 键
             if ((WINAPI.GetAsyncKeyState(WINAPI.VK_ESCAPE) & 0x8000) != 0)
@@ -38,8 +43,10 @@ namespace process_pipeline.Core
                 _cts.Cancel();
             }
 
+            _cts.Token.ThrowIfCancellationRequested();
+
             // 统一的 UI 喘息机制
-            if (_currentProgress % 50 == 0)
+            if (_currentProgress % 10 == 0)
             {
                 System.Windows.Forms.Application.DoEvents();
             }
@@ -85,7 +92,7 @@ namespace process_pipeline.Core
             Ed.WriteMessage($"\n[管线处理工具] {message}");
         }
 
-        internal void Run(string taskName)
+        internal void Run(string taskName, bool bSuccessResult = true)
         {
             this.taskName = taskName;
 
@@ -96,6 +103,9 @@ namespace process_pipeline.Core
 
             ProgressMeter pm = new ProgressMeter();
             pm.Start($"{taskName}，按 [ESC] 键可中途取消...");
+
+            // 逼迫 CAD 立刻重绘界面，把进度条显示出来！
+            System.Windows.Forms.Application.DoEvents();
 
             CancellationTokenSource cts = new CancellationTokenSource();
             ProgressContext context = new ProgressContext(pm, cts);
@@ -112,9 +122,15 @@ namespace process_pipeline.Core
                 }
                 else
                 {
-                    // 3. 成功后，将结果交给子类处理（比如弹窗、写文件等）
-                    OnSuccess(result);
+                    if (result != null && bSuccessResult)
+                        // 3. 成功后，将结果交给子类处理（比如弹窗、写文件等）
+                        OnSuccess(result);
                 }
+            }
+            catch (OperationCanceledException) 
+            {
+                // 【新增这个 catch】专门接住 Step() 抛出的取消异常
+                Ed.WriteMessage("\n*** 操作已由用户中途取消 ***\n");
             }
             catch (System.Exception ex)
             {

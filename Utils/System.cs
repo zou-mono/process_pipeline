@@ -270,17 +270,19 @@ namespace process_pipeline.Utils
             var doc = Application.DocumentManager.MdiActiveDocument;
             if (doc == null) return;
 
-            try
-            { 
-                // 现在在 Idle 状态下，应该更安全
-                var service = new FlowArrowService(doc.Database, doc.Editor, useEditor: false);
-                List<ProblemItem> problems = service.RunChecker();
+            using (DocumentLock docLock = doc.LockDocument()) { 
+                try
+                { 
+                    // 现在在 Idle 状态下，应该更安全
+                    var service = new FlowArrowService(doc.Database, doc.Editor, useEditor: false);
+                    List<ProblemItem> problems = service.RunChecker();
             
-                palCheckArrow.Instance.Update(problems);
-            }
-            catch (System.Exception ex)
-            {
-                DbgLog.Write(doc.Editor, $"[OnIdleRefresh] 失败: {ex.Message}");
+                    palCheckArrow.Instance.Update(problems);
+                }
+                catch (System.Exception ex)
+                {
+                    DbgLog.Write(doc.Editor, $"[OnIdleRefresh] 失败: {ex.Message}");
+                }
             }
         }
     }

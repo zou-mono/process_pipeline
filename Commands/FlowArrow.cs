@@ -282,11 +282,11 @@ namespace process_pipeline.Commands
                         DbgLog.Write(_ed, $"\n管线 {pipe_handle}正在调试");
                     }
 
-                    // 检查是否被用户按 ESC 取消（仅在有 UI 时生效）
-                    if (context != null && context.Token.IsCancellationRequested)
-                    {
-                        break; 
-                    }
+                    //// 检查是否被用户按 ESC 取消（仅在有 UI 时生效）
+                    //if (context != null && context.Token.IsCancellationRequested)
+                    //{
+                    //    break; 
+                    //}
 
                     if (pipeId.IsErased || !pipeId.IsValid) continue;
 
