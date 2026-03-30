@@ -270,20 +270,35 @@ namespace process_pipeline.Utils
             var doc = Application.DocumentManager.MdiActiveDocument;
             if (doc == null) return;
 
-            using (DocumentLock docLock = doc.LockDocument()) { 
-                try
-                { 
-                    // 现在在 Idle 状态下，应该更安全
-                    var service = new FlowArrowService(doc.Database, doc.Editor, useEditor: false);
-                    List<ProblemItem> problems = service.RunChecker();
-            
-                    palCheckArrow.Instance.Update(problems);
-                }
-                catch (System.Exception ex)
-                {
-                    DbgLog.Write(doc.Editor, $"[OnIdleRefresh] 失败: {ex.Message}");
-                }
-            }
+            //using (DocumentLock docLock = doc.LockDocument(
+            //    DocumentLockMode.ProtectedAutoWrite, 
+            //    "AutoMatchArrow", 
+            //    "自动匹配箭头", 
+            //    false)) 
+            //{ 
+            //    var service = new FlowArrowService(doc.Database, doc.Editor, useEditor: false);
+            //    List<ProblemItem> problems = service.RunChecker();
+            //    palCheckArrow.Instance.Update(problems);
+            //}
+
+            var service = new FlowArrowService(doc.Database, doc.Editor, useEditor: false);
+            service.Run("\"管线与箭头匹配分析\"", true);
+
+            //using (DocumentLock docLock = doc.LockDocument()) { 
+            //    try
+            //    { 
+            //        // 现在在 Idle 状态下，应该更安全
+            //        var service = new FlowArrowService(doc.Database, doc.Editor, useEditor: false);
+            //        service.Run("\"管线与箭头匹配分析\"", true);
+            //        //List<ProblemItem> problems = service.RunChecker();
+
+            //        //palCheckArrow.Instance.Update(problems);
+            //    }
+            //    catch (System.Exception ex)
+            //    {
+            //        DbgLog.Write(doc.Editor, $"[OnIdleRefresh] 失败: {ex.Message}");
+            //    }
+            //}
         }
     }
 }

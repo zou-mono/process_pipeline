@@ -22,7 +22,6 @@ namespace process_pipeline.Forms
     // 视图模型类
     public partial class ucCheckArrowResult : UserControl
     {
-        private bool _isUpdatingData = false;  // 全局锁，确定是不是要刷新DataGridView
         private List<ProblemItem> _currentProblems = new List<ProblemItem>();
         private Document doc;
         private SortableBindingList<ProblemItemViewModel> _sortableList;
@@ -580,8 +579,8 @@ namespace process_pipeline.Forms
             catch (System.Exception ex)
             {
                 //// 记录日志，避免崩溃
-                //Application.DocumentManager.MdiActiveDocument?.Editor.WriteMessage(
-                //    $"\n关闭 PaletteSet 失败：{ex.Message}");
+                AcadApp.DocumentManager.MdiActiveDocument?.Editor.WriteMessage(
+                    $"\n关闭 PaletteSet 失败：{ex.Message}");
             }
         }
     }

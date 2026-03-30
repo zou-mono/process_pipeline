@@ -35,8 +35,6 @@ namespace process_pipeline.Core
             _pm.MeterProgress();
             _currentProgress++;
 
-            Thread.Sleep(100);
-
             // 统一在这里检测 ESC 键
             if ((WINAPI.GetAsyncKeyState(WINAPI.VK_ESCAPE) & 0x8000) != 0)
             {
@@ -92,7 +90,7 @@ namespace process_pipeline.Core
             Ed.WriteMessage($"\n[管线处理工具] {message}");
         }
 
-        internal void Run(string taskName, bool bSuccessResult = true)
+        internal void Run(string taskName, bool bOnlyUpdate = true)
         {
             this.taskName = taskName;
 
@@ -122,9 +120,9 @@ namespace process_pipeline.Core
                 }
                 else
                 {
-                    if (result != null && bSuccessResult)
+                    if (result != null)
                         // 3. 成功后，将结果交给子类处理（比如弹窗、写文件等）
-                        OnSuccess(result);
+                        OnSuccess(result, bOnlyUpdate);
                 }
             }
             catch (OperationCanceledException) 
@@ -156,7 +154,7 @@ namespace process_pipeline.Core
         /// <summary>
         /// 【可选重写】任务成功完成后的回调（用于展示结果）
         /// </summary>
-        protected virtual void OnSuccess(TResult result) { }
+        protected virtual void OnSuccess(TResult result, bool bOnlyUpdate) { }
     }
 
     /// <summary>
@@ -179,7 +177,7 @@ namespace process_pipeline.Core
         protected abstract void ExecuteVoid(ProgressContext context);
 
         // 封死带返回值的 OnSuccess，暴露无返回值的 OnSuccessVoid 给子类
-        protected sealed override void OnSuccess(object result)
+        protected sealed override void OnSuccess(object result, bool bUpdate)
         {
             OnSuccessVoid();
         }

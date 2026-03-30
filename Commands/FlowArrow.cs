@@ -16,7 +16,8 @@ using process_pipeline.Core;           // 命令特性（关键）
 using process_pipeline.Forms;
 using process_pipeline.Utils;
 using AcadDb = Autodesk.AutoCAD.DatabaseServices;
-using System.Runtime.InteropServices; // 必须引入这个命名空间
+using System.Runtime.InteropServices;
+using Autodesk.AutoCAD.GraphicsSystem; // 必须引入这个命名空间
 
 namespace process_pipeline.Commands
 {
@@ -46,7 +47,7 @@ namespace process_pipeline.Commands
             };
 
             // 2. 启动引擎！
-            service.Run("管线与箭头匹配分析");
+            service.Run("管线与箭头匹配分析", false);
         }
     }
 
@@ -86,7 +87,6 @@ namespace process_pipeline.Commands
         // 增加两个 Action 委托作为参数，默认值为 null，保证向下兼容
         protected override List<ProblemItem> Execute(ProgressContext context)
         {
-            List<ObjectId> arrowIds;
             List<ObjectId> pipeIds;
             Dictionary<ObjectId, (Point3d, double)> arrowData;
 
@@ -261,7 +261,6 @@ namespace process_pipeline.Commands
             //ObjectId auxlayerID = database.EnsureAuxLayer(auxLayerName);  // 辅助线图层ID
 
             // 4. 关联处理（遍历管线，找最近匹配箭头）
-            int associatedCount = 0;
             //using (Transaction tr = _db.TransactionManager.StartTransaction())
             
             // 触发回调 1：告诉外部总共有多少条管线需要处理
@@ -277,16 +276,18 @@ namespace process_pipeline.Commands
                     // 触发回调 2：告诉外部当前处理完了一个，进度条可以动了
                     context?.Step();
 
+                    Thread.Sleep(20);
+
                     if (pipe_handle == "5107")
                     {
                         DbgLog.Write(_ed, $"\n管线 {pipe_handle}正在调试");
                     }
 
-                    //// 检查是否被用户按 ESC 取消（仅在有 UI 时生效）
-                    //if (context != null && context.Token.IsCancellationRequested)
-                    //{
-                    //    break; 
-                    //}
+                    // 检查是否被用户按 ESC 取消（仅在有 UI 时生效）
+                    if (context != null && context.Token.IsCancellationRequested)
+                    {
+                        break; 
+                    }
 
                     if (pipeId.IsErased || !pipeId.IsValid) continue;
 
@@ -459,15 +460,22 @@ namespace process_pipeline.Commands
             }
         }
 
-        protected override void OnSuccess(List<ProblemItem> result)
+        protected override void OnSuccess(List<ProblemItem> result, bool bOnlyUpdate = false)
         {
             if (result == null || result.Count == 0)
             {
                 Ed.WriteMessage("\n检查通过，无问题。\n");
                 return;
             }
-            // 弹窗展示
-            palCheckArrow.Instance.Show(result);
+
+            if (bOnlyUpdate)
+            {
+                palCheckArrow.Instance.Update(result);
+            }
+            else { 
+                // 弹窗展示
+                palCheckArrow.Instance.Show(result);    
+            }
         }
     }
 }
