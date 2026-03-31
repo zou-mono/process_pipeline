@@ -39,7 +39,7 @@ namespace process_pipeline.Commands
             //};
 
             // 1. 直接 new 服务，填参数
-            var service = new FlowArrowService(Doc.Database, Doc.Editor, true)
+            var service = new FlowArrowService(Doc.Database, Doc.Editor, false)
             {
                 MaxBufferDistance = 50.0,
                 ArrowLayerName = CadConfig.ArrowLayers,
@@ -87,16 +87,16 @@ namespace process_pipeline.Commands
             List<ObjectId> pipeIds;
             Dictionary<ObjectId, (DBObject, Point3d, double)> arrowData;
 
-            if (_useEditor)
-                arrowData = SelectArrows();
-            else
-                arrowData = GetArrowsFromDatabase();
+            //if (_useEditor)
+            //    arrowData = SelectArrows();
+            //else
+            arrowData = GetArrowsFromDatabase();
 
             // 获取管线ID列表
-            if (_useEditor)
-                pipeIds = SelectPipes();
-            else
-                pipeIds = GetPipesFromDatabase();
+            //if (_useEditor)
+            //    pipeIds = SelectPipes();
+            //else
+            pipeIds = GetPipesFromDatabase();
 
             //DbgLog.Write(_ed, $"\n找到箭头: {arrowData.Count} 个，管线: {pipeIds.Count} 条");
 
@@ -216,9 +216,10 @@ namespace process_pipeline.Commands
                         //string _handle = id.Handle.ToString();
 
                         DBObject obj = tr.GetObject(id, OpenMode.ForRead);
-
+                        Entity ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
                         BlockReference br = tr.GetObject(id, OpenMode.ForRead) as BlockReference;
-                        if (br != null && CadConfig.ArrowLayers.Contains(br.Name))
+
+                        if (ent != null && CadConfig.ArrowLayers.Contains(ent.Layer))
                         {
                             double rotDeg = Geometry.ArrowAngle(br);
                             arrowData[id] = (obj, br.Position, rotDeg);

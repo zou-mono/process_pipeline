@@ -23,7 +23,7 @@ namespace process_pipeline.Commands
         public override void Execute()
         {
             var service = new ReversePolylineService(Doc.Database, Doc.Editor);
-            service.Run("反转多段线");
+            service.Run(Properties.Settings.Default.taskRevPL);
         }
     }
 
@@ -92,30 +92,32 @@ namespace process_pipeline.Commands
 
                 int reversedCount = 0;
 
-                using (Transaction tr = Db.TransactionManager.StartTransaction())
-                //using (OpenCloseTransaction tr = Db.TransactionManager.StartOpenCloseTransaction())
-                {
-                    _fixedIds = new List<ObjectId>();
-
-                    try
+                using (DocumentLock docLock = Doc.LockDocument()) { 
+                    using (Transaction tr = Db.TransactionManager.StartTransaction())
                     {
-                        foreach (SelectedObject selObj in ss)
+                        //_fixedIds = new List<ObjectId>();
+
+                        try
                         {
-                            //Entity ent = tr.GetObject(selObj.ObjectId, OpenMode.ForWrite) as Entity;
-                            //if (ent == null) continue;
+                            foreach (SelectedObject selObj in ss)
+                            {
+                                //Entity ent = tr.GetObject(selObj.ObjectId, OpenMode.ForWrite) as Entity;
+                                //if (ent == null) continue;
 
-                            Curve cv = (Curve)tr.GetObject(selObj.ObjectId, OpenMode.ForWrite);
-                            if (cv == null) continue;
+                                Curve cv = tr.GetObject(selObj.ObjectId, OpenMode.ForWrite) as Curve;
+                                if (cv == null) continue;
 
-                            cv.ReverseCurve();   // 一行搞定
-                            _fixedIds.Add(selObj.ObjectId);
-                            reversedCount++;
+                                cv.ReverseCurve();   // 一行搞定
+                                //_fixedIds.Add(selObj.ObjectId);
+                                reversedCount++;
+                            }
+
+                            tr.Commit();
                         }
-
-                        tr.Commit();
-                    }
-                    catch { 
-                        tr.Abort();
+                        catch (System.Exception ex){ 
+                            tr.Abort();
+                            Application.ShowAlertDialog(ex.Message);
+                        }
                     }
                 }
 

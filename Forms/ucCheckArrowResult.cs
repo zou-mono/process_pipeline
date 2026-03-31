@@ -311,12 +311,19 @@ namespace process_pipeline.Forms
 
         private void btnReversePolyline_Click(object sender, EventArgs e)
         {
+            ReversePolylineCommands rpc = new ReversePolylineCommands();
+            rpc.Execute();
+
+            PaletteRefreshManager.TriggerPaletteRefreshIfNeeded();
+
+            //var service = new ReversePolylineService(doc.Database, doc.Editor);
+            //service.Run(Properties.Settings.Default.taskRevPL);
+
             // 修复成功后，移除已修复的问题
             //_currentProblems.RemoveAll(p => p.IsFixed);  
 
             // 关键：通过 UpdateProblems 更新（会自动触发 ProblemsChanged 事件）
             //UpdateProblems(_currentProblems);
-
         }
 
         private void btn_Refresh_Click(object sender, EventArgs e)

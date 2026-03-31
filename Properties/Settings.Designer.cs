@@ -34,5 +34,17 @@ namespace process_pipeline.Properties {
                 this["taskFlowArrow"] = value;
             }
         }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("反转多段线")]
+        public string taskRevPL {
+            get {
+                return ((string)(this["taskRevPL"]));
+            }
+            set {
+                this["taskRevPL"] = value;
+            }
+        }
     }
 }

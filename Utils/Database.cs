@@ -57,7 +57,7 @@ namespace process_pipeline.Utils
     {
         // 【核心升级】用来存储发生变化的特定对象的 ID
         // 使用 HashSet 是因为它能自动去重（同一个对象被修改多次，只记录一次）
-        private HashSet<ObjectId> _changedObjectIds = new HashSet<ObjectId>();
+        private static HashSet<ObjectId> _changedObjectIds = new HashSet<ObjectId>();
         private AcadDb.Database _currentDb;
 
         // 当你的 PaletteSet 打开时，调用这个方法开始监听
@@ -84,6 +84,17 @@ namespace process_pipeline.Utils
                 _currentDb.ObjectErased -= Db_ObjectErased;
             }
             doc.CommandEnded -= Doc_CommandEnded;
+        }
+
+        // 提取出来的公共方法
+        public static void TriggerPaletteRefreshIfNeeded()
+        {
+            if (_changedObjectIds.Count > 0)
+            {
+                // 【关键技巧】：先减后加，防止多次点击导致重复订阅 Idle 事件
+                Application.Idle -= SafeRefreshPalette_Idle; 
+                Application.Idle += SafeRefreshPalette_Idle;
+            }
         }
 
         // 数据库对象发生变化时的回调（极速执行）
@@ -168,7 +179,7 @@ namespace process_pipeline.Utils
             }
         }
 
-        private void SafeRefreshPalette_Idle(object sender, EventArgs e)
+        private static void SafeRefreshPalette_Idle(object sender, EventArgs e)
         {
             Application.Idle -= SafeRefreshPalette_Idle;
         
@@ -184,7 +195,7 @@ namespace process_pipeline.Utils
             RefreshMyDataGridView(doc, idsToProcess);
         }
 
-        private void RefreshMyDataGridView(Document doc, List<ObjectId> idsToProcess)
+        private static void RefreshMyDataGridView(Document doc, List<ObjectId> idsToProcess)
         {
             // 你的具体刷新代码...
             if (palCheckArrow.Instance.IsVisible) { 

@@ -5,5 +5,8 @@
     <Setting Name="taskFlowArrow" Type="System.String" Scope="User">
       <Value Profile="(Default)">管线与箭头匹配分析</Value>
     </Setting>
+    <Setting Name="taskRevPL" Type="System.String" Scope="User">
+      <Value Profile="(Default)">反转多段线</Value>
+    </Setting>
   </Settings>
 </SettingsFile>
