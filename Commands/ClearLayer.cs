@@ -94,5 +94,10 @@ namespace process_pipeline.Commands
                 tr.Commit();
             }
         }
+
+        protected override void ExecuteVoid(ProgressContext context, List<ObjectId> objectIds)
+        {
+            throw new NotImplementedException();
+        }
     }
 }

@@ -1,0 +1,9 @@
+﻿<?xml version='1.0' encoding='utf-8'?>
+<SettingsFile xmlns="http://schemas.microsoft.com/VisualStudio/2004/01/settings" CurrentProfile="(Default)" GeneratedClassNamespace="process_pipeline.Properties" GeneratedClassName="Settings">
+  <Profiles />
+  <Settings>
+    <Setting Name="taskFlowArrow" Type="System.String" Scope="User">
+      <Value Profile="(Default)">管线与箭头匹配分析</Value>
+    </Setting>
+  </Settings>
+</SettingsFile>

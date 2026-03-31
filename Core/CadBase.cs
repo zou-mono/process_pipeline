@@ -8,6 +8,9 @@ using System.Threading;
 using AcadApp = Autodesk.AutoCAD.ApplicationServices.Application;
 using process_pipeline.Utils;
 using System.Collections.Generic;
+using System.IO;
+using System.Reflection;
+using Autodesk.AutoCAD.DatabaseServices;
 
 namespace process_pipeline.Core
 {
@@ -90,7 +93,7 @@ namespace process_pipeline.Core
             Ed.WriteMessage($"\n[管线处理工具] {message}");
         }
 
-        internal void Run(string taskName, bool bOnlyUpdate = true)
+        internal void Run(string taskName, bool bOnlyUpdate = true, List<ObjectId> objectIds = null)
         {
             this.taskName = taskName;
 
@@ -110,8 +113,16 @@ namespace process_pipeline.Core
 
             try
             {
+                TResult result;
                 // 1. 执行核心逻辑，拿到泛型结果
-                TResult result = Execute(context);
+                if (objectIds != null)
+                {
+                    result = Execute(context, objectIds);
+                }
+                else 
+                { 
+                    result = Execute(context);
+                }
                 
                 // 2. 统一处理取消
                 if (context.Token.IsCancellationRequested)
@@ -151,6 +162,8 @@ namespace process_pipeline.Core
         /// </summary>
         protected abstract TResult Execute(ProgressContext context);
 
+        protected abstract TResult Execute(ProgressContext context, List<ObjectId> objectIds);
+
         /// <summary>
         /// 【可选重写】任务成功完成后的回调（用于展示结果）
         /// </summary>
@@ -171,13 +184,21 @@ namespace process_pipeline.Core
             return null; 
         }
 
+        protected sealed override object Execute(ProgressContext context, List<ObjectId> objectIds)
+        {
+            ExecuteVoid(context, objectIds);
+            return null; 
+        }
+
         /// <summary>
         /// 【必须实现】无返回值的核心业务逻辑,留给子类去实现这个无返回值的方法
         /// </summary>
         protected abstract void ExecuteVoid(ProgressContext context);
 
+        protected abstract void ExecuteVoid(ProgressContext context, List<ObjectId> objectIds);
+
         // 封死带返回值的 OnSuccess，暴露无返回值的 OnSuccessVoid 给子类
-        protected sealed override void OnSuccess(object result, bool bUpdate)
+        protected sealed override void OnSuccess(object result, bool bOnlyUpdate)
         {
             OnSuccessVoid();
         }
@@ -188,6 +209,234 @@ namespace process_pipeline.Core
         protected virtual void OnSuccessVoid() 
         {
             Ed.WriteMessage("\n操作执行完毕。\n");
+        }
+    }
+
+    public static class CadConfig
+    {
+        // 分别存储管线和箭头图层
+        public static HashSet<string> PipeLayers { get; private set; }
+        public static HashSet<string> ArrowLayers { get; private set; }
+    
+        // 合并集合：专供 PaletteRefreshManager 极速判断使用（只要是这俩里面的都拦截）
+        //public static HashSet<string> AllTargetLayers { get; private set; }
+
+        // 【新增】全局参数，并赋予默认值（防止配置文件里没写或者写错了）
+        public static double MaxBufferDistance { get; private set; } = 50.0; 
+        public static double AngleTolerance { get; private set; } = 30.0;
+
+        private static readonly string[] DefaultPipeLayers = new string[]
+        {
+            "3-污水管-2025新建",
+            "3-污水管-规划扩建",
+            "3-污水管-现状",
+            "3-污水压力管-规划新建",
+            "3-污水压力管-现状"
+        };
+
+        private static readonly string[] DefaultArrowLayers = new string[]
+        {
+            "3-标注-流向",
+            "污水-流向"
+        };
+
+        // 静态构造函数：在类第一次被使用时自动加载
+        static CadConfig()
+        {
+            PipeLayers = new HashSet<string>();
+            ArrowLayers = new HashSet<string>();
+            //AllTargetLayers = new HashSet<string>();
+        
+            LoadConfigFromFile();
+        }
+
+        private static void LoadConfigFromFile()
+        {
+            // 状态追踪：记录是否找到了正确的节标签
+            bool foundPipeSection = false;
+            bool foundArrowSection = false;
+            bool fileExisted = false; // 记录文件原本是否存在
+            bool readError = false;   // 记录读取过程中是否发生异常
+
+            try
+            {
+                string dllFolder = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+                string configFilePath = Path.Combine(dllFolder, "Config.ini");
+
+                if (File.Exists(configFilePath))
+                {
+                    fileExisted = true; // 标记文件存在    
+
+                    string[] lines = File.ReadAllLines(configFilePath);
+                    string currentSection = "";
+
+                    foreach (string rawLine in lines)
+                    {
+                        string line = rawLine.Trim();
+                    
+                        // 忽略空行和注释
+                        if (string.IsNullOrEmpty(line) || line.StartsWith("//")) continue;
+
+                        // 严格匹配我们预期的节标题
+                        if (line == "[Settings]") { currentSection = line; continue; }
+                        if (line == "[PipeLayers]") { currentSection = line; foundPipeSection = true; continue; }
+                        if (line == "[ArrowLayers]") { currentSection = line; foundArrowSection = true; continue; }
+
+                        // 如果用户写了类似 [P1ipeLayers] 的错误标签，将其视为未知节，后续行会被忽略
+                        if (line.StartsWith("[") && line.EndsWith("]"))
+                        {
+                            currentSection = "Unknown"; 
+                            continue;
+                        }
+
+                        //// 判断是否是节标题，例如 [PipeLayers]
+                        //if (line.StartsWith("[") && line.EndsWith("]"))
+                        //{
+                        //    currentSection = line;
+                        //    continue;
+                        //}
+
+                        // 【新增】解析 [Settings] 节下的 Key=Value
+                        if (currentSection == "[Settings]")
+                        {
+                            // 按照等号分割，最多分两部分
+                            string[] parts = line.Split(new char[] { '=' }, 2);
+                            if (parts.Length == 2)
+                            {
+                                string key = parts[0].Trim();
+                                string value = parts[1].Trim();
+
+                                // 尝试转换为 double，如果转换成功则赋值
+                                if (key == "MaxBufferDistance" && double.TryParse(value, out double maxDist))
+                                {
+                                    MaxBufferDistance = maxDist;
+                                }
+                                else if (key == "AngleTolerance" && double.TryParse(value, out double angleTol))
+                                {
+                                    AngleTolerance = angleTol;
+                                }
+                            }
+                        }
+
+                        // 根据当前所在的节，将图层名加入不同的集合
+                        if (currentSection == "[PipeLayers]")
+                        {
+                            PipeLayers.Add(line);
+                            //AllTargetLayers.Add(line);
+                        }
+                        else if (currentSection == "[ArrowLayers]")
+                        {
+                            ArrowLayers.Add(line);
+                            //AllTargetLayers.Add(line);
+                        }
+                    }
+                }
+                else
+                {
+                    // 文件不存在时，生成模板文件
+                    CreateDefaultConfigFile(configFilePath);
+                
+                    // 重新调用自己，读取刚刚生成的文件
+                    LoadConfigFromFile();
+                }
+            }
+            catch
+            {
+                // 容错：如果读取失败，确保集合不为 null，避免引发空引用异常
+                readError = true; // 捕获到读取异常（如文件被其他程序占用）
+            }
+
+            // ==========================================
+            // 自愈机制与弹窗警告逻辑
+            // ==========================================
+            bool needWarning = false; // 是否需要弹出警告
+
+            // 如果没找到 [PipeLayers] 标签（被改错了），或者标签下没有任何图层
+            if (!foundPipeSection || PipeLayers.Count == 0)
+            {
+                needWarning = true;
+                foreach (string layer in DefaultPipeLayers)
+                {
+                    PipeLayers.Add(layer);
+                    //AllTargetLayers.Add(layer);
+                }
+            }
+
+            // 如果没找到 [ArrowLayers] 标签，或者标签下没有任何图层
+            if (!foundArrowSection || ArrowLayers.Count == 0)
+            {
+                needWarning = true;
+                foreach (string layer in DefaultArrowLayers)
+                {
+                    ArrowLayers.Add(layer);
+                    //AllTargetLayers.Add(layer);
+                }
+            }
+
+            // 只有当“文件原本存在” 且 “标签丢失/内容为空/读取报错” 时，才弹窗警告！
+            if (fileExisted && (needWarning || readError))
+            {
+                try
+                {
+                    // 使用 CAD 原生的弹窗，确保模态显示在 CAD 窗口上
+                    Application.ShowAlertDialog(
+                        "【图层配置警告】\n\n" +
+                        "Config.ini 配置文件没有正确读取，只能加载默认配置。\n\n" +
+                        "可能的原因：\n" +
+                        "1. 丢失了 [PipeLayers] 或 [ArrowLayers] 标签\n" +
+                        "2. 标签拼写错误\n" +
+                        "3. 标签下方没有填写任何图层名\n\n" +
+                        "请检查插件目录下的 Config.ini 文件并重新加载。"
+                    );
+                }
+                catch
+                {
+                    // 忽略弹窗本身可能引发的异常（极少数情况下，如果 CAD 尚未完全初始化完毕时调用可能会报错）
+                }
+            }
+        }
+
+        private static void CreateDefaultConfigFile(string filePath)
+        {
+            List<string> content = new List<string>
+            {
+                "// CAD 插件全局配置文件",
+                "// 注意：Settings 节使用 等号(=) 赋值，图层节每行填写一个图层名",
+                "",
+                "[Settings]",
+                $"MaxBufferDistance={MaxBufferDistance}",
+                $"AngleTolerance={AngleTolerance}",
+                "",
+                "[PipeLayers]"
+            };
+        
+            content.AddRange(DefaultPipeLayers);
+        
+            content.Add("");
+            content.Add("[ArrowLayers]");
+            content.AddRange(DefaultArrowLayers);
+
+            File.WriteAllLines(filePath, content);
+        }
+
+        // 如果用户在不关 CAD 的情况下修改了 txt，可以调用这个方法重新读取
+        public static void Reload()
+        {
+            PipeLayers.Clear();
+            ArrowLayers.Clear();
+
+            // 恢复默认参数，防止读取失败时保留了旧的错误值
+            MaxBufferDistance = 50.0;
+            AngleTolerance = 30.0;
+            //AllTargetLayers.Clear();
+            LoadConfigFromFile();
+        }
+
+        public static void EnsureLoaded()
+        {
+            // 这是一个空方法。
+            // 但是，当外部调用这个方法时，C# 机制会强制先执行 static CadConfig() 静态构造函数。
+            // 从而立刻触发 LoadConfigFromFile() 的读取和检查逻辑。
         }
     }
 }

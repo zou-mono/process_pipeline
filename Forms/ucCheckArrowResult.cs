@@ -22,20 +22,20 @@ namespace process_pipeline.Forms
     // 视图模型类
     public partial class ucCheckArrowResult : UserControl
     {
-        private List<ProblemItem> _currentProblems = new List<ProblemItem>();
+        private Dictionary<ObjectId, ProblemItem> _currentProblems = new Dictionary<ObjectId, ProblemItem>();
         private Document doc;
         private SortableBindingList<ProblemItemViewModel> _sortableList;
 
         // 公开属性（只读），外部只能读取，不能直接修改
-        public IReadOnlyList<ProblemItem> CurrentProblems => _currentProblems.AsReadOnly();
+        public IReadOnlyDictionary<ObjectId, ProblemItem> CurrentProblems => _currentProblems;
 
         // 自定义事件：当 problems 变化时触发
         public event EventHandler ProblemsChanged;
 
-        public ucCheckArrowResult(List<ProblemItem> problems)
+        public ucCheckArrowResult(Dictionary<ObjectId, ProblemItem> problems)
         {
             InitializeComponent();
-            _currentProblems = problems ?? new List<ProblemItem>();  // 防止 null
+            _currentProblems = problems ?? new Dictionary<ObjectId, ProblemItem>();  // 防止 null
 
             tblLayoutPanel.Dock = DockStyle.Fill;
             toolbar.Dock = DockStyle.Top;
@@ -74,9 +74,9 @@ namespace process_pipeline.Forms
             };
         }
 
-        public void UpdateProblems(List<ProblemItem> newProblems)
+        public void UpdateProblems(Dictionary<ObjectId, ProblemItem> newProblems)
         {
-            _currentProblems = newProblems ?? new List<ProblemItem>();
+            _currentProblems = newProblems ?? new Dictionary<ObjectId, ProblemItem>();
             //SetupDataGridView();
             //PopulateDataGridView();
             // 触发事件（通知所有订阅者，包括自己）
@@ -189,15 +189,15 @@ namespace process_pipeline.Forms
         {
             // 转换为绑定源
             var bindableList = _currentProblems
-            .Where(p => p.IsFixed == false) // 先筛选：只保留未修复的原始项
+            .Where(p => p.Value.IsFixed == false) // 先筛选：只保留未修复的原始项
             .Select((p, _ind) => new ProblemItemViewModel // 再生成ViewModel，_ind是筛选后的索引
             {
                 NO = _ind + 1, // 此时索引从0开始，+1后就是1、2、3...连续增长
-                IsFixed = p.IsFixed,
-                PipeId = p.PipeId.Handle.ToString(),
-                Location = p.Location == null ? "未知" : $"({p.Location.X:F2}, {p.Location.Y:F2})",
-                Description = p.Description,
-                OriginalItem = p // 保留原始对象
+                IsFixed = p.Value.IsFixed,
+                PipeId = p.Value.PipeId.Handle.ToString(),
+                Location = p.Value.Location == null ? "未知" : $"({p.Value.Location.X:F2}, {p.Value.Location.Y:F2})",
+                Description = p.Value.Description,
+                OriginalItem = p.Value // 保留原始对象
             })
             .ToList();
 
@@ -332,7 +332,13 @@ namespace process_pipeline.Forms
         private static PaletteSet _paletteSet = null;
         //private List<ProblemItem> problems = null; 
         private ucCheckArrowResult _currentControl;  // 保存控件引用
-        private List<ProblemItem> _currentProblems = new List<ProblemItem>();
+
+        // 内部可写字典
+        private Dictionary<ObjectId, ProblemItem> _currentProblems = new Dictionary<ObjectId, ProblemItem>();
+        // 外部只读字典
+        public IReadOnlyDictionary<ObjectId, ProblemItem> CurrentProblems => _currentProblems;
+
+        private PaletteRefreshManager _refreshManager; 
 
         // 1. 固定GUID（替换你之前的随机GUID）
         private readonly Guid _paletteGuid = new Guid("7e8d4f9a-5b7c-4890-8a7b-123456789abc"); // 随便生成一个，不要重复即可
@@ -341,16 +347,18 @@ namespace process_pipeline.Forms
         private static readonly Lazy<palCheckArrow> _instance = new Lazy<palCheckArrow>(() => new palCheckArrow());
         public static palCheckArrow Instance => _instance.Value;
 
-        public IReadOnlyList<ProblemItem> CurrentProblems => _currentProblems?.AsReadOnly() ?? new List<ProblemItem>().AsReadOnly();
+        //public IReadOnlyDictionary<ObjectId, ProblemItem> CurrentProblems => 
+        //    _currentProblems?.AsReadOnly() ?? new Dictionary<ObjectId, ProblemItem>().AsReadOnly();
 
         private bool _needRefresh = false;
         private EventHandler _idleHandler;
 
         private palCheckArrow()
         {  
-             _currentProblems = new List<ProblemItem>();
+             _currentProblems = new Dictionary<ObjectId, ProblemItem>();
             // 构造函数里不做复杂初始化
             AcadApp.DocumentManager.DocumentToBeDestroyed += OnDocumentToBeDestroyed;
+            _refreshManager = new PaletteRefreshManager();
         }
 
         private void OnDocumentToBeDestroyed(object sender, DocumentCollectionEventArgs e)
@@ -358,7 +366,7 @@ namespace process_pipeline.Forms
             Dispose();
         }
 
-        public void Show(List<ProblemItem> initialProblems)
+        public void Show(Dictionary<ObjectId, ProblemItem> initialProblems)
         {
             var currentDoc = AcadApp.DocumentManager.MdiActiveDocument;
             if (currentDoc == null) return;
@@ -387,6 +395,8 @@ namespace process_pipeline.Forms
                 _currentControl = new ucCheckArrowResult(initialProblems);
                 _currentControl.Disposed += (s, e) => _currentControl = null;  // 控件释放后置空
                 _paletteSet.Add("检查结果", _currentControl);
+
+                _refreshManager.StartListening(currentDoc);
             }
             else { 
                 // 【核心修复】：如果面板已经存在，必须调用控件的方法更新数据！
@@ -464,27 +474,27 @@ namespace process_pipeline.Forms
         //        _currentControl?.UpdateProblems(_currentProblems);  // 通知 UI 刷新
         //    }
         //}
-        public void MarkProblemFixed(IEnumerable<ObjectId> _pipeIds, bool _isFixed)
+        public void MarkProblemFixed(HashSet<ObjectId> _pipeIds, bool _isFixed)
         {
-            ObjectId[] pipeIds = _pipeIds.ToArray();
-            if (pipeIds == null || pipeIds.Length == 0) return;
+            //ObjectId[] pipeIds = _pipeIds.ToArray();
+            if (_pipeIds == null || _pipeIds.Count == 0) return;
 
             // 过滤掉无效 ID
-            var validIds = pipeIds.Where(id => !id.IsNull).ToHashSet();
+            var validIds = _pipeIds.Where(id => !id.IsNull).ToHashSet();
 
             if (validIds.Count == 0) return;
 
             //// 一次性移除所有匹配的项（用 HashSet 加速查找）
             //int removedCount = _currentProblems.RemoveAll(p => validIds.Contains(p.PipeId));
 
-            HashSet<ObjectId> pipeIdSet = new HashSet<ObjectId>(pipeIds);
+            //HashSet<ObjectId> pipeIdSet = new HashSet<ObjectId>(pipeIds);
 
             int fixedCount = 0;
             foreach (var p in _currentProblems)
             {
-                if (!p.IsFixed && pipeIdSet.Contains(p.PipeId))
+                if (!p.Value.IsFixed && validIds.Contains(p.Value.PipeId))
                 {
-                    p.IsFixed = _isFixed;
+                    p.Value.IsFixed = _isFixed;
                     fixedCount++;
                 }
             }
@@ -501,7 +511,7 @@ namespace process_pipeline.Forms
             Document Doc = AcadApp.DocumentManager.MdiActiveDocument;
             
             var service = new FlowArrowService(Doc.Database, Doc.Editor);
-            List<ProblemItem> newProblems = service.RunChecker();  // 完整检查
+            Dictionary<ObjectId, ProblemItem> newProblems = service.RunChecker();  // 完整检查
 
             if (newProblems != null)
             {
@@ -510,7 +520,7 @@ namespace process_pipeline.Forms
             }
         }
 
-        public void Update(List<ProblemItem> _newProblems)
+        public void Update(Dictionary<ObjectId, ProblemItem> _newProblems)
         {
             //if (_paletteSet == null || _paletteSet.IsDisposed || _currentControl == null || _currentControl.IsDisposed)
             //{
@@ -522,14 +532,16 @@ namespace process_pipeline.Forms
 
             //// 直接更新已存在的控件
             //_currentControl.UpdateProblems(_currentProblems);
-            _currentProblems = new List<ProblemItem>();
+            _currentProblems = new Dictionary<ObjectId, ProblemItem>();
 
             if (_newProblems != null)
             {
-                //List<ProblemItem> newProblems = _newProblems
-                //    .Where(p => p.IsFixed == false)
-                //    .ToList();
-                _currentProblems.AddRange(_newProblems);
+                foreach (var _item in _newProblems)
+                {
+                    // 按 PipeId 作为键添加
+                    _currentProblems[_item.Key] = _item.Value; 
+                } 
+                //_currentProblems.AddRange(_newProblems);
             }
 
             if (_currentControl != null && !_currentControl.IsDisposed)
@@ -575,6 +587,9 @@ namespace process_pipeline.Forms
                 _currentProblems = null;
                 _idleHandler = null;
                 _needRefresh = false;
+
+                var currentDoc = AcadApp.DocumentManager.MdiActiveDocument;
+                _refreshManager.StopListening(currentDoc);
             }
             catch (System.Exception ex)
             {

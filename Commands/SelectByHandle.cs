@@ -26,10 +26,9 @@ namespace process_pipeline.Commands
 
     public class SelectByHandleService : CadBase
     {
-        public SelectByHandleService(Autodesk.AutoCAD.DatabaseServices.Database db, Editor ed) : base(db, ed)
-        {
+        public SelectByHandleService(Autodesk.AutoCAD.DatabaseServices.Database db, Editor ed) : base(db, ed) { }
 
-        }
+        protected override void ExecuteVoid(ProgressContext context, List<ObjectId> objectids) { }
 
         protected override void ExecuteVoid(ProgressContext context)
         {
