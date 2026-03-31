@@ -171,40 +171,40 @@ namespace process_pipeline.Utils
         }
     }
 
-    //public class PluginStartup : IExtensionApplication
-    //{
-    //    /// <summary>
-    //    /// 插件加载时自动执行 (NETLOAD 或 CAD 启动时)
-    //    /// </summary>
-    //    public void Initialize()
-    //    {
-    //        try
-    //        {
-    //            // 1. 强制唤醒配置类，立刻读取 Config.ini 并检查错误
-    //            CadConfig.EnsureLoaded();
+    public class PluginStartup : IExtensionApplication
+    {
+        /// <summary>
+        /// 插件加载时自动执行 (NETLOAD 或 CAD 启动时)
+        /// </summary>
+        public void Initialize()
+        {
+            try
+            {
+                // 1. 强制唤醒配置类，立刻读取 Config.ini 并检查错误
+                CadConfig.EnsureLoaded();
 
-    //            //    // 2. （可选）在 CAD 命令行打印一条加载成功的提示
-    //            //    Document doc = Application.DocumentManager.MdiActiveDocument;
-    //            //    if (doc != null)
-    //            //    {
-    //            //        doc.Editor.WriteMessage("\n>>> 管道绘制插件已成功加载！配置文件检查完毕。\n");
-    //            //    }
-    //        }
-    //        catch
-    //        {
-    //            // 防止初始化过程中的意外错误导致整个插件加载失败
-    //        }
-    //    }
+                //    // 2. （可选）在 CAD 命令行打印一条加载成功的提示
+                //    Document doc = Application.DocumentManager.MdiActiveDocument;
+                //    if (doc != null)
+                //    {
+                //        doc.Editor.WriteMessage("\n>>> 管道绘制插件已成功加载！配置文件检查完毕。\n");
+                //    }
+            }
+            catch
+            {
+                // 防止初始化过程中的意外错误导致整个插件加载失败
+            }
+        }
 
-    //    /// <summary>
-    //    /// 插件卸载或 CAD 关闭时自动执行
-    //    /// </summary>
-    //    public void Terminate()
-    //    {
-    //        // 这里可以写一些清理资源的逻辑，比如关闭数据库连接、停止监听等
-    //        // 如果没有，空着就行
-    //    }
-    //}
+        /// <summary>
+        /// 插件卸载或 CAD 关闭时自动执行
+        /// </summary>
+        public void Terminate()
+        {
+            // 这里可以写一些清理资源的逻辑，比如关闭数据库连接、停止监听等
+            // 如果没有，空着就行
+        }
+    }
 
     //public class GlobalEventManager : IExtensionApplication
     //{
@@ -220,7 +220,7 @@ namespace process_pipeline.Utils
 
     //        // 2. 监听未来新建或打开的图纸
     //        Application.DocumentManager.DocumentCreated += DocumentManager_DocumentCreated;
-        
+
     //        // 3. 监听图纸关闭，用于释放资源
     //        Application.DocumentManager.DocumentToBeDestroyed += DocumentManager_DocumentToBeDestroyed;
     //    }
@@ -280,7 +280,7 @@ namespace process_pipeline.Utils
     //        //            //palCheckArrow.Instance.RefreshProblems();
     //        //            // 标记需要刷新，但不立即执行
     //        //            _needRefresh = true;
-                
+
     //        //            if (!_idleSubscribed)
     //        //            {
     //        //                Application.Idle += OnIdleRefresh;
@@ -299,10 +299,10 @@ namespace process_pipeline.Utils
     //    {
     //        Application.Idle -= OnIdleRefresh;
     //        _idleSubscribed = false;
-        
+
     //        if (!_needRefresh) return;
     //        _needRefresh = false;
-        
+
     //        var doc = Application.DocumentManager.MdiActiveDocument;
     //        if (doc == null) return;
 
