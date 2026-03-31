@@ -315,15 +315,19 @@ namespace process_pipeline.Forms
             //_currentProblems.RemoveAll(p => p.IsFixed);  
 
             // 关键：通过 UpdateProblems 更新（会自动触发 ProblemsChanged 事件）
-            UpdateProblems(_currentProblems);
+            //UpdateProblems(_currentProblems);
+
         }
 
         private void btn_Refresh_Click(object sender, EventArgs e)
         {
             var service = new FlowArrowService(doc.Database, doc.Editor, useEditor: false);
-            var problems = service.RunChecker();
+            service.Run(Properties.Settings.Default.taskFlowArrow, true);
+
+            //var service = new FlowArrowService(doc.Database, doc.Editor, useEditor: false);
+            //var problems = service.RunChecker();
             
-            palCheckArrow.Instance.Update(problems);
+            //palCheckArrow.Instance.Update(problems);
         }
     }
 

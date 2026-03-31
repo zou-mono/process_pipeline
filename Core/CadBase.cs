@@ -258,11 +258,11 @@ namespace process_pipeline.Core
             bool fileExisted = false; // 记录文件原本是否存在
             bool readError = false;   // 记录读取过程中是否发生异常
 
+            string dllFolder = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+            string configFilePath = Path.Combine(dllFolder, "Config.ini");
+
             try
             {
-                string dllFolder = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
-                string configFilePath = Path.Combine(dllFolder, "Config.ini");
-
                 if (File.Exists(configFilePath))
                 {
                     fileExisted = true; // 标记文件存在    
@@ -288,13 +288,6 @@ namespace process_pipeline.Core
                             currentSection = "Unknown"; 
                             continue;
                         }
-
-                        //// 判断是否是节标题，例如 [PipeLayers]
-                        //if (line.StartsWith("[") && line.EndsWith("]"))
-                        //{
-                        //    currentSection = line;
-                        //    continue;
-                        //}
 
                         // 【新增】解析 [Settings] 节下的 Key=Value
                         if (currentSection == "[Settings]")
@@ -373,20 +366,35 @@ namespace process_pipeline.Core
                 }
             }
 
+            // ==========================================
+            // 核心：发现错误 -> 备份原文件 -> 覆盖生成新模板 -> 弹窗提示
+            // ==========================================
+
             // 只有当“文件原本存在” 且 “标签丢失/内容为空/读取报错” 时，才弹窗警告！
             if (fileExisted && (needWarning || readError))
             {
                 try
                 {
+                    // 1. 生成备份文件名 (例如: Config_error_bak.ini)
+                    string backupFilePath = Path.Combine(dllFolder, "Config_error_bak.ini");
+
+                    // 2. 备份损坏的文件 (允许覆盖旧的备份)
+                    if (File.Exists(configFilePath))
+                    {
+                        File.Copy(configFilePath, backupFilePath, true);
+                    }
+
+                    // 3. 重新生成标准的模板文件，覆盖掉损坏的 Config.ini
+                    CreateDefaultConfigFile(configFilePath);
+
                     // 使用 CAD 原生的弹窗，确保模态显示在 CAD 窗口上
                     Application.ShowAlertDialog(
-                        "【图层配置警告】\n\n" +
-                        "Config.ini 配置文件没有正确读取，只能加载默认配置。\n\n" +
-                        "可能的原因：\n" +
-                        "1. 丢失了 [PipeLayers] 或 [ArrowLayers] 标签\n" +
-                        "2. 标签拼写错误\n" +
-                        "3. 标签下方没有填写任何图层名\n\n" +
-                        "请检查插件目录下的 Config.ini 文件并重新加载。"
+                        "【图层配置错误自动修复】\n\n" +
+                        "检测到您的 Config.ini 配置文件格式错误或缺少必要标签。\n" +
+                        "为了保证插件正常运行，系统已自动为您重置为标准默认配置。\n\n" +
+                        "💡 您原来的配置文件已安全备份为：\n" +
+                        "Config_error_bak.ini\n\n" +
+                        "请打开新的 Config.ini 参考标准格式，并将您的自定义参数重新填入。"
                     );
                 }
                 catch
