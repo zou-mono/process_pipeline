@@ -84,6 +84,7 @@ namespace process_pipeline.Utils
                 _currentDb.ObjectErased -= Db_ObjectErased;
             }
             doc.CommandEnded -= Doc_CommandEnded;
+            _changedObjectIds = null;
         }
 
         // 提取出来的公共方法
@@ -115,6 +116,8 @@ namespace process_pipeline.Utils
         {
             if (obj == null) return;
 
+            _changedObjectIds = _changedObjectIds ?? new HashSet<ObjectId>();
+
             // 将 DBObject 安全转换为 Entity（所有有图层的图形对象都是 Entity）
             Entity ent = obj as Entity;
             if (ent == null) return; 
@@ -132,10 +135,22 @@ namespace process_pipeline.Utils
                     }
                     else if (CadConfig.ArrowLayers.Contains(ent.Layer) && (ent is BlockReference)) 
                     {
+                        if (FlowArrowService.ArrowToPipes.TryGetValue(obj.ObjectId, out HashSet<ObjectId> affectedPipes)) { 
+                            foreach (ObjectId pipeId in affectedPipes) {
+                                _changedObjectIds.Add(pipeId);
+                            }
+                        }
+
                         Extents3d ext = ent.GeometricExtents;
                         Point3d min = ext.MinPoint;
                         Point3d max = ext.MaxPoint;
                         double MaxBufferDistance = CadConfig.MaxBufferDistance * 1.5;
+
+                        // 1. 计算扩大后的搜索包围盒（2D 平面计算即可）
+                        double minX = ext.MinPoint.X - MaxBufferDistance;
+                        double minY = ext.MinPoint.Y - MaxBufferDistance;
+                        double maxX = ext.MaxPoint.X + MaxBufferDistance;
+                        double maxY = ext.MaxPoint.Y + MaxBufferDistance;
 
                         Point3d p = Geometry.RepresentativePoint(ent);   // 箭头的中心点
 
@@ -143,20 +158,25 @@ namespace process_pipeline.Utils
                         {
                             BlockTableRecord btr = (BlockTableRecord)tr.GetObject(_currentDb.CurrentSpaceId, OpenMode.ForRead);
 
-                            foreach (ObjectId id in btr)
+                            foreach (ObjectId oid in btr)
                             {
-                                string dxfName = id.ObjectClass.DxfName;
+                                string dxfName = oid.ObjectClass.DxfName;
                                 if (dxfName == "LINE" || dxfName == "LWPOLYLINE" || dxfName == "POLYLINE")
                                 {
-                                    Entity _ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
+                                    Entity _ent = tr.GetObject(oid, OpenMode.ForRead) as Entity;
                                     if (_ent != null && CadConfig.PipeLayers.Contains(_ent.Layer))
                                     {
-                                        // AABB 过滤候选管道
-                                        if (p.X >= min.X - MaxBufferDistance && p.X <= max.X + MaxBufferDistance &&
-                                            p.Y >= min.Y - MaxBufferDistance && p.Y <= max.Y + MaxBufferDistance)
+                                        Extents3d pipeExt = _ent.GeometricExtents; 
+
+                                        // 内存级别的包围盒相交测试 (AABB 碰撞检测)
+                                        // 如果管线的包围盒在搜索框之外，则跳过
+                                        if (pipeExt.MaxPoint.X < minX || pipeExt.MinPoint.X > maxX ||
+                                            pipeExt.MaxPoint.Y < minY || pipeExt.MinPoint.Y > maxY)
                                         {
-                                            _changedObjectIds.Add(obj.ObjectId);
+                                            continue;
                                         }
+
+                                        _changedObjectIds.Add(_ent.Id);
                                     }
                                 }
                             }

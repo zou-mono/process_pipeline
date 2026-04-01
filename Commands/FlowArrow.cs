@@ -70,6 +70,12 @@ namespace process_pipeline.Commands
 
         private ProgressContext _context;
 
+        // 箭头 -> 管线集合 (用途：当箭头移动时，极速查出哪些管线受影响)
+        public static Dictionary<ObjectId, HashSet<ObjectId>> ArrowToPipes = new Dictionary<ObjectId, HashSet<ObjectId>>();
+
+        // 管线 -> 箭头集合 (用途：当管线重新核查时，知道它原来绑了哪些箭头，方便解绑)
+        public static Dictionary<ObjectId, HashSet<ObjectId>> PipeToArrows = new Dictionary<ObjectId, HashSet<ObjectId>>();
+
         public FlowArrowService(AcadDb.Database db, Editor ed, bool useEditor = false) : base(db, ed)
         {
             _useEditor = useEditor;
@@ -273,7 +279,7 @@ namespace process_pipeline.Commands
         {
             //var problems = new List<ProblemItem>();
             Dictionary<ObjectId, ProblemItem> problems = palCheckArrow.Instance.CurrentProblems
-                .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+                .ToDictionary(kvp => kvp.Key, kvp => kvp.Value) ?? new Dictionary<ObjectId, ProblemItem>();
 
             // 清空辅助线图层
             //ClearLayerCommands cl = new ClearLayerCommands();
@@ -308,7 +314,7 @@ namespace process_pipeline.Commands
 
                     if (pipeId.IsErased || !pipeId.IsValid) continue;
 
-                    if (pipe_handle == "5107")
+                    if (pipe_handle == "5223")
                     {
                         DbgLog.Write(_ed, $"\n管线 {pipe_handle}正在调试");
                     }
@@ -412,6 +418,10 @@ namespace process_pipeline.Commands
                 }
             }
 
+            // 更新箭头和管线匹配关系
+            List<ObjectId> matchedArrowIds = possibleMatches.Select(item => item.Id).ToList();
+            UpdatePipeRelation(pipeId, matchedArrowIds); 
+
             // 如果没有一个可能匹配的箭头
             if (possibleMatches.Count == 0)
             {
@@ -495,6 +505,52 @@ namespace process_pipeline.Commands
                         problems[pipeId].IsFixed = true;
                     }
                 }
+            }
+        }
+
+        public static void UpdatePipeRelation(ObjectId pipeId, IEnumerable<ObjectId> matchedArrowIds)
+        {
+            HashSet<ObjectId> newArrows = new HashSet<ObjectId>(matchedArrowIds);
+
+            // 1. 获取这根管线【上一次】匹配的箭头
+            if (PipeToArrows.TryGetValue(pipeId, out HashSet<ObjectId> oldArrows))
+            {
+                // 找出被解绑的箭头 (原来有，现在没有了)
+                foreach (ObjectId oldArrowId in oldArrows)
+                {
+                    if (!newArrows.Contains(oldArrowId))
+                    {
+                        // 从箭头的反向映射中，把这根管线踢出去
+                        if (ArrowToPipes.ContainsKey(oldArrowId))
+                        {
+                            ArrowToPipes[oldArrowId].Remove(pipeId);
+                            // 如果箭头底下没有管线了，可以顺手清理掉这个 Key
+                            if (ArrowToPipes[oldArrowId].Count == 0)
+                                ArrowToPipes.Remove(oldArrowId);
+                        }
+                    }
+                }
+            }
+
+            // 2. 建立新的反向映射 (箭头 -> 管线)
+            foreach (ObjectId newArrowId in newArrows)
+            {
+                if (!ArrowToPipes.ContainsKey(newArrowId))
+                {
+                    ArrowToPipes[newArrowId] = new HashSet<ObjectId>();
+                }
+                ArrowToPipes[newArrowId].Add(pipeId);
+            }
+
+            // 3. 更新正向映射 (管线 -> 箭头)
+            if (newArrows.Count > 0)
+            {
+                PipeToArrows[pipeId] = newArrows;
+            }
+            else
+            {
+                // 如果这根管线现在一个箭头都匹配不上了，直接从表里删掉
+                PipeToArrows.Remove(pipeId);
             }
         }
 

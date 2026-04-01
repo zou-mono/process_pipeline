@@ -68,7 +68,7 @@ namespace process_pipeline.Utils
                 bestClosestPoint = new LineSegment3d(line.StartPoint, line.EndPoint).GetClosestPointTo(arrowPoint).Point;
                 minDist = arrowPoint.DistanceTo(bestClosestPoint);
             }
-            else if (ent is Autodesk.AutoCAD.DatabaseServices.Polyline pl)
+            else if (ent is Polyline pl)
             {
                 // 先用整条 Polyline 快速得到最近点和参数值
                 //Curve3d curve3d = pl.GetGeCurve();
