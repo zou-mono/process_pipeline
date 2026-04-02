@@ -112,7 +112,7 @@ namespace process_pipeline.Core
             ProgressContext context = new ProgressContext(pm, cts);
 
             try
-            {
+            {                
                 TResult result;
                 // 1. 执行核心逻辑，拿到泛型结果
                 if (objectIds != null)

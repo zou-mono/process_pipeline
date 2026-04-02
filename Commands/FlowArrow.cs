@@ -112,6 +112,7 @@ namespace process_pipeline.Commands
             return _RunChecker(pipeIds.ToArray(), arrowData, context);
         }
 
+        // 只对局部的pipeIds进行重新检查
         protected override Dictionary<ObjectId, ProblemItem> Execute(ProgressContext context, List<ObjectId> pipeIds)
         { 
             Dictionary<ObjectId, (DBObject, Point3d, double)> arrowData = GetArrowsFromDatabase();
@@ -228,7 +229,7 @@ namespace process_pipeline.Commands
                         if (ent != null && CadConfig.ArrowLayers.Contains(ent.Layer))
                         {
                             double rotDeg = Geometry.ArrowAngle(br);
-                            arrowData[id] = (obj, br.Position, rotDeg);
+                            arrowData[id] = (obj, br.Position, rotDeg);  //这里要小心DBObject会在跨事务时被清理掉
                         }
                     }
                 }
@@ -303,7 +304,7 @@ namespace process_pipeline.Commands
                     string pipe_handle = obj.Handle.ToString(); // 如 "7B2A"
             
                     // 触发回调 2：告诉外部当前处理完了一个，进度条可以动了
-                    Thread.Sleep(20);
+                    //Thread.Sleep(20);  // 测试进度条
                     context?.Step();
 
                     // 检查是否被用户按 ESC 取消（仅在有 UI 时生效）
@@ -314,7 +315,7 @@ namespace process_pipeline.Commands
 
                     if (pipeId.IsErased || !pipeId.IsValid) continue;
 
-                    if (pipe_handle == "5223")
+                    if (pipe_handle == "5784")
                     {
                         DbgLog.Write(_ed, $"\n管线 {pipe_handle}正在调试");
                     }
@@ -330,23 +331,26 @@ namespace process_pipeline.Commands
             }
         }
 
-        public void Checker(Dictionary<ObjectId, ProblemItem> problems, ObjectId pipeId, Entity pipe_ent, 
+        private void Checker(Dictionary<ObjectId, ProblemItem> problems, ObjectId pipeId, Entity pipe_ent, 
             Dictionary<ObjectId, (DBObject, Point3d Position, double Rotation)> arrowData) 
         { 
             //string pipe_handle = obj.Handle.ToString(); // 如 "7B2A"
 
-            Extents3d ext = pipe_ent.GeometricExtents;
-            Point3d min = ext.MinPoint;
-            Point3d max = ext.MaxPoint;
+            //Extents3d ext = pipe_ent.GeometricExtents;
+            //Point3d min = ext.MinPoint;
+            //Point3d max = ext.MaxPoint;
 
             // AABB 过滤候选箭头
             List<ObjectId> candidates = new List<ObjectId>();
             foreach (var kv in arrowData)
             {
-                Point3d p = kv.Value.Position;
-                if (p.X >= min.X - MaxBufferDistance && p.X <= max.X + MaxBufferDistance &&
-                    p.Y >= min.Y - MaxBufferDistance && p.Y <= max.Y + MaxBufferDistance)
+                if (kv.Value.Item1.Handle.ToString() == "5241")
                 {
+                    DbgLog.Write(_ed, $"\n箭头 {kv.Value.Item1.Handle.ToString()}正在调试");
+                }
+
+                if (Geometry.IsIntersection2D(kv.Value.Position, pipe_ent, MaxBufferDistance))
+                { 
                     candidates.Add(kv.Key);
                 }
             }
@@ -478,6 +482,12 @@ namespace process_pipeline.Commands
                             PossibleMatches = possibleMatches,
                             Description = $"与管线关联的多个箭头方向冲突（同向 {sameCount} 个，反向 {reverseCount} 个）"
                         };
+                    }
+                    else { 
+                        if (problems.ContainsKey(pipeId)) 
+                        { 
+                            problems[pipeId].IsFixed = true;
+                        }
                     }
                 }
                 else if (reverseCount == possibleMatches.Count && reverseCount > 0)

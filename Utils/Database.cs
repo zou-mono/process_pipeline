@@ -141,18 +141,18 @@ namespace process_pipeline.Utils
                             }
                         }
 
-                        Extents3d ext = ent.GeometricExtents;
-                        Point3d min = ext.MinPoint;
-                        Point3d max = ext.MaxPoint;
+                        //Extents3d ext = ent.GeometricExtents;
+                        //Point3d min = ext.MinPoint;
+                        //Point3d max = ext.MaxPoint;
                         double MaxBufferDistance = CadConfig.MaxBufferDistance * 1.5;
 
-                        // 1. 计算扩大后的搜索包围盒（2D 平面计算即可）
-                        double minX = ext.MinPoint.X - MaxBufferDistance;
-                        double minY = ext.MinPoint.Y - MaxBufferDistance;
-                        double maxX = ext.MaxPoint.X + MaxBufferDistance;
-                        double maxY = ext.MaxPoint.Y + MaxBufferDistance;
+                        //// 1. 计算扩大后的搜索包围盒（2D 平面计算即可）
+                        //double minX = ext.MinPoint.X - MaxBufferDistance;
+                        //double minY = ext.MinPoint.Y - MaxBufferDistance;
+                        //double maxX = ext.MaxPoint.X + MaxBufferDistance;
+                        //double maxY = ext.MaxPoint.Y + MaxBufferDistance;
 
-                        Point3d p = Geometry.RepresentativePoint(ent);   // 箭头的中心点
+                        //Point3d p = Geometry.RepresentativePoint(ent);   // 箭头的中心点
 
                         using (OpenCloseTransaction tr = _currentDb.TransactionManager.StartOpenCloseTransaction())
                         {
@@ -166,17 +166,13 @@ namespace process_pipeline.Utils
                                     Entity _ent = tr.GetObject(oid, OpenMode.ForRead) as Entity;
                                     if (_ent != null && CadConfig.PipeLayers.Contains(_ent.Layer))
                                     {
-                                        Extents3d pipeExt = _ent.GeometricExtents; 
+                                        //Extents3d pipeExt = _ent.GeometricExtents;
 
                                         // 内存级别的包围盒相交测试 (AABB 碰撞检测)
                                         // 如果管线的包围盒在搜索框之外，则跳过
-                                        if (pipeExt.MaxPoint.X < minX || pipeExt.MinPoint.X > maxX ||
-                                            pipeExt.MaxPoint.Y < minY || pipeExt.MinPoint.Y > maxY)
-                                        {
-                                            continue;
+                                        if (Geometry.IsIntersection2D(ent, _ent, MaxBufferDistance)) { 
+                                            _changedObjectIds.Add(_ent.Id);
                                         }
-
-                                        _changedObjectIds.Add(_ent.Id);
                                     }
                                 }
                             }
@@ -212,16 +208,7 @@ namespace process_pipeline.Utils
 
             // 在这里执行你耗时的 List<ProblemItem> 重新计算
             // 并更新 DataGridView
-            RefreshMyDataGridView(doc, idsToProcess);
-        }
-
-        private static void RefreshMyDataGridView(Document doc, List<ObjectId> idsToProcess)
-        {
-            // 你的具体刷新代码...
-            if (palCheckArrow.Instance.IsVisible) { 
-                var service = new FlowArrowService(doc.Database, doc.Editor, useEditor: false);
-                service.Run(Properties.Settings.Default.taskFlowArrow, true, idsToProcess);
-            }
+            ucCheckArrowResult.RefreshDataGridView(doc, idsToProcess);
         }
     }
 }

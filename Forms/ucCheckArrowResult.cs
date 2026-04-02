@@ -254,8 +254,11 @@ namespace process_pipeline.Forms
                 sbh.SelectByHandles(objectIds);   // 你的跳转选中函数
             }
 
-            if (selectedItems.Count == 1) {
-                if (selectedItems[0].Type == ProblemType.OneToMany) { 
+            GraphicManager.ClearAuxiliaryGraphics();
+            if (selectedItems.Count == 1)
+            {
+                if (selectedItems[0].Type == ProblemType.OneToMany)
+                {
                     List<MatchItem> PossibleMatches = selectedItems[0].PossibleMatches;
                     GraphicManager.DrawAuxiliaryLines(PossibleMatches);
                 }
@@ -335,6 +338,26 @@ namespace process_pipeline.Forms
             //var problems = service.RunChecker();
             
             //palCheckArrow.Instance.Update(problems);
+        }
+
+        public static void RefreshDataGridView(Document doc, List<ObjectId> idsToProcess)
+        {
+            // 你的具体刷新代码...
+            //GraphicManager.ClearAuxiliaryGraphics();
+            if (palCheckArrow.Instance.IsVisible) { 
+                var service = new FlowArrowService(doc.Database, doc.Editor, useEditor: false);
+                service.Run(Properties.Settings.Default.taskFlowArrow, true, idsToProcess);
+
+                foreach (ObjectId oid in idsToProcess) {
+                    if (palCheckArrow.Instance.CurrentProblems.ContainsKey(oid)) 
+                    { 
+                        ProblemItem _problem = palCheckArrow.Instance.CurrentProblems[oid];
+                        if (_problem.Type == ProblemType.OneToMany && !_problem.IsFixed) {
+                            GraphicManager.DrawAuxiliaryLines(_problem.PossibleMatches);
+                        }
+                    }
+                }
+            }
         }
     }
 

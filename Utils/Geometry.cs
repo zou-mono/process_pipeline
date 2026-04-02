@@ -192,6 +192,78 @@ namespace process_pipeline.Utils
         }
 
         /// <summary>
+        /// 判断两个实体的包围盒是否相交（支持设置容差外扩）
+        /// 纯 2D (X, Y) 平面计算，忽略 Z 轴高程差异
+        /// </summary>
+        /// <param name="ext1">第一个包围盒（例如：箭头的包围盒）</param>
+        /// <param name="ext2">第二个包围盒（例如：管线的包围盒）</param>
+        /// <param name="tolerance">容差（将 ext1 向外扩张的距离，默认为 0）</param>
+        /// <returns>如果相交或包含，返回 true；否则返回 false</returns>
+        public static bool IsIntersection2D(Entity ent1, Entity ent2, double tolerance = 0.0)
+        {
+            Extents3d ext1 = ent1.GeometricExtents;
+            Extents3d ext2 = ent2.GeometricExtents;
+
+            // 1. 计算 ext1（箭头）外扩后的边界
+            double minX1 = ext1.MinPoint.X - tolerance;
+            double minY1 = ext1.MinPoint.Y - tolerance;
+            double maxX1 = ext1.MaxPoint.X + tolerance;
+            double maxY1 = ext1.MaxPoint.Y + tolerance;
+
+            // 2. 获取 ext2（管线）的边界
+            double minX2 = ext2.MinPoint.X;
+            double minY2 = ext2.MinPoint.Y;
+            double maxX2 = ext2.MaxPoint.X;
+            double maxY2 = ext2.MaxPoint.Y;
+
+            // 3. 经典的 AABB 碰撞检测算法 (分离轴定理的简化版)
+            // 如果 ext1 的右边界 < ext2 的左边界，说明 ext1 在 ext2 左侧，不可能相交
+            // 如果 ext1 的左边界 > ext2 的右边界，说明 ext1 在 ext2 右侧，不可能相交
+            // 同理判断上下边界。
+            // 只有当这四个“不相交”的条件都不满足时，它们才是相交（或包含）的。
+        
+            bool isOutside = (maxX1 < minX2) || // 1在2左边
+                             (minX1 > maxX2) || // 1在2右边
+                             (maxY1 < minY2) || // 1在2下边
+                             (minY1 > maxY2);   // 1在2上边
+
+            return !isOutside; // 如果没有在外面，那就是相交或包含
+        }
+
+        /// <summary>
+        /// 普适方法 2：点 vs 包围盒 (方法重载)
+        /// 判断一个点是否与目标包围盒（外扩容差后）相交/包含
+        /// </summary>
+        /// <param name="pt">目标点（比如箭头的插入点、管线的端点等）</param>
+        /// <param name="ext">目标包围盒（比如管线的包围盒）</param>
+        /// <param name="tolerance">搜索半径/容差</param>
+        public static bool IsIntersection2D(Point3d pt, Entity ent, double tolerance = 0.0)
+        {
+            try
+            {
+                // 1. 获取实体的包围盒（加上 try-catch 防止特殊实体报错）
+                Extents3d ext = ent.GeometricExtents;
+
+                // 2. 按照你的思路：直接把实体的包围盒向外扩张 tolerance
+                double minX = ext.MinPoint.X - tolerance;
+                double minY = ext.MinPoint.Y - tolerance;
+                double maxX = ext.MaxPoint.X + tolerance;
+                double maxY = ext.MaxPoint.Y + tolerance;
+
+                // 3. 直接判断点 pt 的 X 和 Y 是否落在这个扩张后的矩形范围内
+                bool isInside = (pt.X >= minX && pt.X <= maxX) &&
+                                (pt.Y >= minY && pt.Y <= maxY);
+
+                return isInside;
+            }
+            catch
+            {
+                // 如果实体没有有效的包围盒（获取 GeometricExtents 失败），直接认为不相交
+                return false;
+            }
+        }
+
+        /// <summary>
         /// 反转直线或多段线（支持 Line、Polyline、LWPolyline）
         /// </summary>
         /// <param name="entity">要反转的实体（必须是 Line 或 Polyline 派生类）</param>
