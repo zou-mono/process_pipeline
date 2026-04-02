@@ -101,12 +101,18 @@ namespace process_pipeline.Utils
         // 数据库对象发生变化时的回调（极速执行）
         private void Db_ObjectChanged(object sender, ObjectEventArgs e)
         {
+            ArrowCacheManager.UpdateArrow(e.DBObject);
             RecordIfTargetObject(e.DBObject);
         }
 
         // 2. 处理 删除 和 撤销删除 (ObjectErasedEventArgs)
         private void Db_ObjectErased(object sender, ObjectErasedEventArgs e)
         {
+            if (e.Erased)
+            {
+                // 直接通知缓存管理器移除，解耦完美！
+                ArrowCacheManager.RemoveArrow(e.DBObject.Id);
+            }
             // 提示：e.Erased 为 true 表示对象被删除，为 false 表示对象被 UNDO 恢复
             RecordIfTargetObject(e.DBObject);
         }

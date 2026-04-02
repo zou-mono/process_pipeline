@@ -76,6 +76,9 @@ namespace process_pipeline.Commands
         // 管线 -> 箭头集合 (用途：当管线重新核查时，知道它原来绑了哪些箭头，方便解绑)
         public static Dictionary<ObjectId, HashSet<ObjectId>> PipeToArrows = new Dictionary<ObjectId, HashSet<ObjectId>>();
 
+        // 全局箭头缓存（null 表示还未初始化）
+        public static Dictionary<ObjectId, ArrowCacheInfo> ArrowsCache = null;
+
         public FlowArrowService(AcadDb.Database db, Editor ed, bool useEditor = false) : base(db, ed)
         {
             _useEditor = useEditor;
@@ -91,12 +94,14 @@ namespace process_pipeline.Commands
         protected override Dictionary<ObjectId, ProblemItem> Execute(ProgressContext context)
         {
             List<ObjectId> pipeIds;
-            Dictionary<ObjectId, (Point3d, double)> arrowData;
+            Dictionary<ObjectId, ArrowCacheInfo> arrowData;
+
+            arrowData = ArrowCacheManager.GetOrBuildCache(_db);
 
             //if (_useEditor)
             //    arrowData = SelectArrows();
             //else
-            arrowData = GetArrowsFromDatabase();
+            //arrowData = GetArrowsFromDatabase();
 
             // 获取管线ID列表
             //if (_useEditor)
@@ -115,7 +120,8 @@ namespace process_pipeline.Commands
         // 只对局部的pipeIds进行重新检查
         protected override Dictionary<ObjectId, ProblemItem> Execute(ProgressContext context, List<ObjectId> pipeIds)
         { 
-            Dictionary<ObjectId, (Point3d, double)> arrowData = GetArrowsFromDatabase();
+            //Dictionary<ObjectId, ArrowCacheInfo> arrowData = GetArrowsFromDatabase();
+            Dictionary<ObjectId, ArrowCacheInfo> arrowData = ArrowCacheManager.GetOrBuildCache(_db);
 
             if (arrowData == null || pipeIds == null || arrowData.Count == 0 || pipeIds.Count == 0)
                 return new Dictionary<ObjectId, ProblemItem>();
@@ -207,38 +213,44 @@ namespace process_pipeline.Commands
         }
 
         // ========== 数据库遍历方法（安全模式，无 Editor）==========
-        private Dictionary<ObjectId, (Point3d, double)> GetArrowsFromDatabase()
-        {
-            var arrowData = new Dictionary<ObjectId, (Point3d, double)>();
+        //private Dictionary<ObjectId, ArrowCacheInfo> GetArrowsFromDatabase()
+        //{
+        //    // 如果缓存已经存在，直接返回（O(1) 极速响应！）
+        //    if (ArrowsCache != null)
+        //    {
+        //        return ArrowsCache;
+        //    }
 
-            //using (Transaction tr = _db.TransactionManager.StartTransaction())
-            using (OpenCloseTransaction tr = _db.TransactionManager.StartOpenCloseTransaction())
-            {
-                BlockTableRecord btr = (BlockTableRecord)tr.GetObject(_db.CurrentSpaceId, OpenMode.ForRead);
+        //    ArrowsCache = new Dictionary<ObjectId, ArrowCacheInfo>();
 
-                foreach (ObjectId id in btr)
-                {
-                    if (id.ObjectClass.DxfName == "INSERT")
-                    {
-                        //string _handle = id.Handle.ToString();
+        //    //using (Transaction tr = _db.TransactionManager.StartTransaction())
+        //    using (OpenCloseTransaction tr = _db.TransactionManager.StartOpenCloseTransaction())
+        //    {
+        //        BlockTableRecord btr = (BlockTableRecord)tr.GetObject(_db.CurrentSpaceId, OpenMode.ForRead);
 
-                        DBObject obj = tr.GetObject(id, OpenMode.ForRead);
-                        Entity ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
-                        BlockReference br = tr.GetObject(id, OpenMode.ForRead) as BlockReference;
+        //        foreach (ObjectId id in btr)
+        //        {
+        //            if (id.ObjectClass.DxfName == "INSERT")
+        //            {
+        //                //string _handle = id.Handle.ToString();
 
-                        if (ent != null && CadConfig.ArrowLayers.Contains(ent.Layer))
-                        {
-                            double rotDeg = Geometry.ArrowAngle(br);
-                            arrowData[id] = (br.Position, rotDeg);  //这里要小心DBObject会在跨事务时被清理掉
-                        }
-                    }
-                }
+        //                DBObject obj = tr.GetObject(id, OpenMode.ForRead);
+        //                Entity ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
+        //                BlockReference br = tr.GetObject(id, OpenMode.ForRead) as BlockReference;
 
-                //tr.Abort();
-            }
+        //                if (ent != null && CadConfig.ArrowLayers.Contains(ent.Layer))
+        //                {
+        //                    double rotDeg = Geometry.ArrowAngle(br);
+        //                    ArrowsCache[id] = new ArrowCacheInfo { Position = br.Position, Rotation = rotDeg };  
+        //                }
+        //            }
+        //        }
 
-            return arrowData.Count > 0 ? arrowData : null;
-        }
+        //        //tr.Abort();
+        //    }
+
+        //    return arrowData.Count > 0 ? arrowData : null;
+        //}
 
         private List<ObjectId> GetPipesFromDatabase()
         {
@@ -275,8 +287,7 @@ namespace process_pipeline.Commands
         }
 
         private Dictionary<ObjectId, ProblemItem> _RunChecker(ObjectId[] pipeObjs, 
-            Dictionary<ObjectId, (Point3d Position, double Rotation)> arrowData,
-            ProgressContext context)
+            Dictionary<ObjectId, ArrowCacheInfo> arrowData, ProgressContext context)
         {
             //var problems = new List<ProblemItem>();
             Dictionary<ObjectId, ProblemItem> problems = palCheckArrow.Instance.CurrentProblems
@@ -332,7 +343,7 @@ namespace process_pipeline.Commands
         }
 
         private void Checker(Dictionary<ObjectId, ProblemItem> problems, ObjectId pipeId, Entity pipe_ent, 
-            Dictionary<ObjectId, (Point3d Position, double Rotation)> arrowData) 
+            Dictionary<ObjectId, ArrowCacheInfo> arrowData) 
         { 
             //string pipe_handle = obj.Handle.ToString(); // 如 "7B2A"
 
@@ -373,10 +384,10 @@ namespace process_pipeline.Commands
             //double pipeDir = 0.0;
             double pipeSegAngle = double.MaxValue;
             double dist = double.MaxValue;
-            double arrowRealAngle = double.MaxValue;
+            //double arrowRealAngle = double.MaxValue;
             //double angleDiff = double.MaxValue;
             //double realDiff = double.MaxValue;
-            Point3d ap;
+            //Point3d ap;
             Point3d closePoint;
             //DBObject aobj;
 
@@ -391,7 +402,9 @@ namespace process_pipeline.Commands
             foreach (ObjectId aid in candidates)
             {
                 //pipeDir = Geometry.GetPipeDirection(ent);  // 获取管线局部方向（度）
-                (ap, arrowRealAngle) = arrowData[aid];
+                //(ap, arrowRealAngle)= arrowData[aid]
+                double arrowRealAngle = arrowData[aid].Rotation;
+                Point3d ap = arrowData[aid].Position;
 
                 //obj = tr.GetObject(aid, OpenMode.ForRead);
                 //string arrow_handle = obj.Handle.ToString(); // 如 "7B2A"
@@ -580,6 +593,94 @@ namespace process_pipeline.Commands
                 // 弹窗展示
                 palCheckArrow.Instance.Show(result);    
             }
+        }
+    }
+
+    /// <summary>
+    /// 全局箭头缓存管理器（完全解耦）
+    /// </summary>
+    public static class ArrowCacheManager
+    {
+        // 1. 【核心】使用 readonly 立即初始化，永远不会为 null，杜绝 NullReferenceException
+        private static readonly Dictionary<ObjectId, ArrowCacheInfo> _arrowCache = new Dictionary<ObjectId, ArrowCacheInfo>();
+        
+        // 2. 标记是否已经进行过全量加载
+        private static bool _isInitialized = false;
+
+        /// <summary>
+        /// 获取缓存（如果是第一次，则进行全量扫描）
+        /// 供 FlowArrowService 的 Execute 方法调用
+        /// </summary>
+        public static Dictionary<ObjectId, ArrowCacheInfo> GetOrBuildCache(AcadDb.Database db)
+        {
+            if (_isInitialized) return _arrowCache;
+
+            // 第一次调用：全量扫描数据库
+            using (Transaction tr = db.TransactionManager.StartOpenCloseTransaction())
+            {
+                BlockTableRecord btr = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForRead);
+                foreach (ObjectId id in btr)
+                {
+                    if (id.ObjectClass.DxfName == "INSERT")
+                    {
+                        BlockReference br = tr.GetObject(id, OpenMode.ForRead) as BlockReference;
+                        if (br != null && CadConfig.ArrowLayers.Contains(br.Layer))
+                        {
+                            double rotDeg = Geometry.ArrowAngle(br);
+                            _arrowCache[id] = new ArrowCacheInfo { Position = br.Position, Rotation = rotDeg };
+                        }
+                    }
+                }
+            }
+
+            _isInitialized = true;
+            return _arrowCache;
+        }
+
+        /// <summary>
+        /// 供外部事件 Db_ObjectErased 调用
+        /// </summary>
+        public static void RemoveArrow(ObjectId id)
+        {
+            // 如果还没初始化过，说明缓存是空的，不需要移除
+            if (!_isInitialized) return; 
+            
+            if (_arrowCache.ContainsKey(id))
+            {
+                _arrowCache.Remove(id);
+            }
+        }
+
+        /// <summary>
+        /// 供外部事件 Db_ObjectAppended 和 Db_ObjectModified 调用
+        /// </summary>
+        public static void UpdateArrow(DBObject obj)
+        {
+            if (!_isInitialized) return;
+            if (obj == null) return;
+
+            if (obj is BlockReference br)
+            {
+                if (CadConfig.ArrowLayers.Contains(br.Layer))
+                {
+                    double rotDeg = Geometry.ArrowAngle(br);
+                    _arrowCache[br.Id] = new ArrowCacheInfo { Position = br.Position, Rotation = rotDeg };
+                }
+                else
+                {
+                    // 如果图层被改成了非箭头图层，从缓存中剔除
+                    RemoveArrow(br.Id);
+                }
+            }
+        }
+
+        /// <summary>
+        /// 强制清空缓存（比如切换图纸或手动要求重算时调用）
+        /// </summary>
+        public static void ClearCache()
+        {
+            _arrowCache.Clear(); // readonly 允许 Clear
+            _isInitialized = false;
         }
     }
 }

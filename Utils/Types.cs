@@ -1,10 +1,13 @@
 ﻿using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Geometry;
+using process_pipeline.Core;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Autodesk.AutoCAD.ApplicationServices; // CAD应用程序核心
+using AcadDb = Autodesk.AutoCAD.DatabaseServices;
 
 namespace process_pipeline.Utils
 {
@@ -60,5 +63,12 @@ namespace process_pipeline.Utils
     public enum ProblemLevel {
         Error,  // 明显错误
         Warning  // 警告
+    }
+
+    public class ArrowCacheInfo
+    {
+        public Point3d Position { get; set; }
+        public double Rotation { get; set; }
+        // 如果需要包围盒，也可以加进来：public Extents3d Extents { get; set; }
     }
 }

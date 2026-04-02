@@ -343,7 +343,7 @@ namespace process_pipeline.Forms
         public static void RefreshDataGridView(Document doc, List<ObjectId> idsToProcess)
         {
             // 你的具体刷新代码...
-            //GraphicManager.ClearAuxiliaryGraphics();
+            GraphicManager.ClearAuxiliaryGraphics();
             if (palCheckArrow.Instance.IsVisible) { 
                 var service = new FlowArrowService(doc.Database, doc.Editor, useEditor: false);
                 service.Run(Properties.Settings.Default.taskFlowArrow, true, idsToProcess);
