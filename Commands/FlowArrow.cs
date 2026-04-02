@@ -212,46 +212,6 @@ namespace process_pipeline.Commands
             return pipeRes.Value.GetObjectIds().ToList(); ;
         }
 
-        // ========== 数据库遍历方法（安全模式，无 Editor）==========
-        //private Dictionary<ObjectId, ArrowCacheInfo> GetArrowsFromDatabase()
-        //{
-        //    // 如果缓存已经存在，直接返回（O(1) 极速响应！）
-        //    if (ArrowsCache != null)
-        //    {
-        //        return ArrowsCache;
-        //    }
-
-        //    ArrowsCache = new Dictionary<ObjectId, ArrowCacheInfo>();
-
-        //    //using (Transaction tr = _db.TransactionManager.StartTransaction())
-        //    using (OpenCloseTransaction tr = _db.TransactionManager.StartOpenCloseTransaction())
-        //    {
-        //        BlockTableRecord btr = (BlockTableRecord)tr.GetObject(_db.CurrentSpaceId, OpenMode.ForRead);
-
-        //        foreach (ObjectId id in btr)
-        //        {
-        //            if (id.ObjectClass.DxfName == "INSERT")
-        //            {
-        //                //string _handle = id.Handle.ToString();
-
-        //                DBObject obj = tr.GetObject(id, OpenMode.ForRead);
-        //                Entity ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
-        //                BlockReference br = tr.GetObject(id, OpenMode.ForRead) as BlockReference;
-
-        //                if (ent != null && CadConfig.ArrowLayers.Contains(ent.Layer))
-        //                {
-        //                    double rotDeg = Geometry.ArrowAngle(br);
-        //                    ArrowsCache[id] = new ArrowCacheInfo { Position = br.Position, Rotation = rotDeg };  
-        //                }
-        //            }
-        //        }
-
-        //        //tr.Abort();
-        //    }
-
-        //    return arrowData.Count > 0 ? arrowData : null;
-        //}
-
         private List<ObjectId> GetPipesFromDatabase()
         {
             var pipeIds = new List<ObjectId>();
@@ -311,12 +271,15 @@ namespace process_pipeline.Commands
             {
                 foreach (ObjectId pipeId in pipeObjs)
                 {
+                    context?.Step();
+
+                    if (pipeId.IsErased || !pipeId.IsValid) continue;
+
                     DBObject obj = tr.GetObject(pipeId, OpenMode.ForRead);
                     string pipe_handle = obj.Handle.ToString(); // 如 "7B2A"
             
                     // 触发回调 2：告诉外部当前处理完了一个，进度条可以动了
                     //Thread.Sleep(20);  // 测试进度条
-                    context?.Step();
 
                     // 检查是否被用户按 ESC 取消（仅在有 UI 时生效）
                     if (context != null && context.Token.IsCancellationRequested)
@@ -324,12 +287,12 @@ namespace process_pipeline.Commands
                         break; 
                     }
 
-                    if (pipeId.IsErased || !pipeId.IsValid) continue;
-
-                    if (pipe_handle == "5784")
+                    if (pipe_handle == "51B9")
                     {
                         DbgLog.Write(_ed, $"\n管线 {pipe_handle}正在调试");
                     }
+
+                    if (pipeId.IsErased || !pipeId.IsValid) continue;
 
                     Entity pipe_ent = tr.GetObject(pipeId, OpenMode.ForRead) as Entity;
 

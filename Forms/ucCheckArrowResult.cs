@@ -189,7 +189,7 @@ namespace process_pipeline.Forms
         {
             // 转换为绑定源
             var bindableList = _currentProblems
-            .Where(p => p.Value.IsFixed == false) // 先筛选：只保留未修复的原始项
+            .Where(p => p.Value.IsFixed == false && !p.Value.PipeId.IsErased && !p.Value.PipeId.IsNull) // 先筛选：只保留未修复的原始项
             .Select((p, _ind) => new ProblemItemViewModel // 再生成ViewModel，_ind是筛选后的索引
             {
                 NO = _ind + 1, // 此时索引从0开始，+1后就是1、2、3...连续增长
