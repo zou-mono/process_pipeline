@@ -72,6 +72,9 @@ namespace process_pipeline.Forms
                 //doc = null; // 释放Document引用
                 GraphicManager.ClearAuxiliaryGraphics(); // 控件销毁时，务必擦除屏幕上的临时线
             };
+
+            // 在初始化完成后，调用递归绑定方法
+            BindMouseEnterFocus(this);
         }
 
         public void UpdateProblems(Dictionary<ObjectId, ProblemItem> newProblems)
@@ -280,38 +283,6 @@ namespace process_pipeline.Forms
             dgvProblems.ClearSelection();
         }
 
-        //private void dgvProblems_SelectionChanged(object sender, EventArgs e)
-        //{
-        //    if (_isUpdatingData) return;  // 拦截非用户主动点击的触发
-        //    //doc = AcadApp.DocumentManager.MdiActiveDocument;
-        //    //if (doc is null || doc.IsDisposed) return;
-
-        //    // 确保有选中的行
-        //    if (dgvProblems.SelectedRows.Count == 0) return;
- 
-        //    // 获取所有选中的 ProblemItem
-        //    var selectedItems = dgvProblems.SelectedRows
-        //        .Cast<DataGridViewRow>()
-        //        .Select(row => row.DataBoundItem as ProblemItemViewModel)
-        //        .Where(vm => vm != null && vm.OriginalItem != null)
-        //        .Select(vm => vm.OriginalItem)
-        //        .ToList();
-
-        //    if (selectedItems.Count == 0) return;
-
-        //    var objectIds = selectedItems.Select(p => p.PipeId).ToArray();
-        //    SelectByHandleCommands sbh = new SelectByHandleCommands();
-
-        //    if (objectIds.Count() > 500)
-        //    {
-        //        sbh.SelectByHandles(objectIds, false);   // 你的跳转选中函数
-        //    }
-        //    else
-        //    {
-        //        sbh.SelectByHandles(objectIds);   // 你的跳转选中函数
-        //    }
-        //}
-
         private void btnReversePolyline_Click(object sender, EventArgs e)
         {
             ReversePolylineCommands rpc = new ReversePolylineCommands();
@@ -333,11 +304,6 @@ namespace process_pipeline.Forms
         {
             var service = new FlowArrowService(doc.Database, doc.Editor, useEditor: false);
             service.Run(Properties.Settings.Default.taskFlowArrow, true);
-
-            //var service = new FlowArrowService(doc.Database, doc.Editor, useEditor: false);
-            //var problems = service.RunChecker();
-            
-            //palCheckArrow.Instance.Update(problems);
         }
 
         public static void RefreshDataGridView(Document doc, List<ObjectId> idsToProcess)
@@ -357,6 +323,28 @@ namespace process_pipeline.Forms
                         }
                     }
                 }
+            }
+        }
+
+        /// <summary>
+        /// 递归给所有子控件绑定鼠标进入事件，实现“悬停即激活”
+        /// </summary>
+        private void BindMouseEnterFocus(Control ctrl)
+        {
+            // 当鼠标进入任何一个控件的区域时
+            ctrl.MouseEnter += (s, e) =>
+            {
+                // 如果当前 UserControl 还没有焦点，就强制让它获取焦点
+                if (!this.ContainsFocus)
+                {
+                    this.Focus();
+                }
+            };
+
+            // 遍历并递归绑定里面的所有子控件（比如你的那两个按钮）
+            foreach (Control child in ctrl.Controls)
+            {
+                BindMouseEnterFocus(child);
             }
         }
     }

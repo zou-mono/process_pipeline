@@ -292,7 +292,7 @@ namespace process_pipeline.Commands
                         DbgLog.Write(_ed, $"\n管线 {pipe_handle}正在调试");
                     }
 
-                    if (pipeId.IsErased || !pipeId.IsValid) continue;
+                    //if (pipeId.IsErased || !pipeId.IsValid) continue;
 
                     Entity pipe_ent = tr.GetObject(pipeId, OpenMode.ForRead) as Entity;
 
