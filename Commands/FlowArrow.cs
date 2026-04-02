@@ -91,7 +91,7 @@ namespace process_pipeline.Commands
         protected override Dictionary<ObjectId, ProblemItem> Execute(ProgressContext context)
         {
             List<ObjectId> pipeIds;
-            Dictionary<ObjectId, (DBObject, Point3d, double)> arrowData;
+            Dictionary<ObjectId, (Point3d, double)> arrowData;
 
             //if (_useEditor)
             //    arrowData = SelectArrows();
@@ -115,7 +115,7 @@ namespace process_pipeline.Commands
         // 只对局部的pipeIds进行重新检查
         protected override Dictionary<ObjectId, ProblemItem> Execute(ProgressContext context, List<ObjectId> pipeIds)
         { 
-            Dictionary<ObjectId, (DBObject, Point3d, double)> arrowData = GetArrowsFromDatabase();
+            Dictionary<ObjectId, (Point3d, double)> arrowData = GetArrowsFromDatabase();
 
             if (arrowData == null || pipeIds == null || arrowData.Count == 0 || pipeIds.Count == 0)
                 return new Dictionary<ObjectId, ProblemItem>();
@@ -207,9 +207,9 @@ namespace process_pipeline.Commands
         }
 
         // ========== 数据库遍历方法（安全模式，无 Editor）==========
-        private Dictionary<ObjectId, (DBObject, Point3d, double)> GetArrowsFromDatabase()
+        private Dictionary<ObjectId, (Point3d, double)> GetArrowsFromDatabase()
         {
-            var arrowData = new Dictionary<ObjectId, (DBObject, Point3d, double)>();
+            var arrowData = new Dictionary<ObjectId, (Point3d, double)>();
 
             //using (Transaction tr = _db.TransactionManager.StartTransaction())
             using (OpenCloseTransaction tr = _db.TransactionManager.StartOpenCloseTransaction())
@@ -229,7 +229,7 @@ namespace process_pipeline.Commands
                         if (ent != null && CadConfig.ArrowLayers.Contains(ent.Layer))
                         {
                             double rotDeg = Geometry.ArrowAngle(br);
-                            arrowData[id] = (obj, br.Position, rotDeg);  //这里要小心DBObject会在跨事务时被清理掉
+                            arrowData[id] = (br.Position, rotDeg);  //这里要小心DBObject会在跨事务时被清理掉
                         }
                     }
                 }
@@ -275,7 +275,7 @@ namespace process_pipeline.Commands
         }
 
         private Dictionary<ObjectId, ProblemItem> _RunChecker(ObjectId[] pipeObjs, 
-            Dictionary<ObjectId, (DBObject, Point3d Position, double Rotation)> arrowData,
+            Dictionary<ObjectId, (Point3d Position, double Rotation)> arrowData,
             ProgressContext context)
         {
             //var problems = new List<ProblemItem>();
@@ -332,7 +332,7 @@ namespace process_pipeline.Commands
         }
 
         private void Checker(Dictionary<ObjectId, ProblemItem> problems, ObjectId pipeId, Entity pipe_ent, 
-            Dictionary<ObjectId, (DBObject, Point3d Position, double Rotation)> arrowData) 
+            Dictionary<ObjectId, (Point3d Position, double Rotation)> arrowData) 
         { 
             //string pipe_handle = obj.Handle.ToString(); // 如 "7B2A"
 
@@ -344,9 +344,9 @@ namespace process_pipeline.Commands
             List<ObjectId> candidates = new List<ObjectId>();
             foreach (var kv in arrowData)
             {
-                if (kv.Value.Item1.Handle.ToString() == "5241")
+                if (kv.Key.Handle.ToString() == "5241")
                 {
-                    DbgLog.Write(_ed, $"\n箭头 {kv.Value.Item1.Handle.ToString()}正在调试");
+                    DbgLog.Write(_ed, $"\n箭头 {kv.Key.Handle.ToString()}正在调试");
                 }
 
                 if (Geometry.IsIntersection2D(kv.Value.Position, pipe_ent, MaxBufferDistance))
@@ -378,7 +378,7 @@ namespace process_pipeline.Commands
             //double realDiff = double.MaxValue;
             Point3d ap;
             Point3d closePoint;
-            DBObject aobj;
+            //DBObject aobj;
 
             // 收集所有“可能匹配”的箭头（方向在阈值内或接近180°）
             //var possibleMatches = new List<(ObjectId Id, double Dist, Point3d closePoint, 
@@ -391,7 +391,7 @@ namespace process_pipeline.Commands
             foreach (ObjectId aid in candidates)
             {
                 //pipeDir = Geometry.GetPipeDirection(ent);  // 获取管线局部方向（度）
-                (aobj, ap, arrowRealAngle) = arrowData[aid];
+                (ap, arrowRealAngle) = arrowData[aid];
 
                 //obj = tr.GetObject(aid, OpenMode.ForRead);
                 //string arrow_handle = obj.Handle.ToString(); // 如 "7B2A"
