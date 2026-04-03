@@ -123,10 +123,6 @@ namespace process_pipeline.Commands
 
                 if (reversedCount > 0)
                 {
-                    // Commit 成功后再更新列表（Undo 时列表不会提前删）
-                    //if(palCheckArrow.Instance.IsVisible)
-                    //    palCheckArrow.Instance?.MarkProblemFixed(_fixedIds, true);
-
                     Ed.WriteMessage($"\n已成功反转 {reversedCount} 个对象。");
                     Doc.Editor.Regen();  // 刷新显示，确保反转立即可见
                 }

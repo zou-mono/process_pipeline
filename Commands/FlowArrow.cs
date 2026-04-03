@@ -250,9 +250,9 @@ namespace process_pipeline.Commands
             Dictionary<ObjectId, ArrowCacheInfo> arrowData, ProgressContext context)
         {
             Dictionary<ObjectId, ProblemItem> problems = null;
-            if(palCheckArrow.Instance.CurrentProblems != null)
+            if(palCheckResult.Instance.CurrentProblems != null)
             {
-                problems = palCheckArrow.Instance.CurrentProblems
+                problems = palCheckResult.Instance.CurrentProblems
                     .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
             }
 
@@ -558,11 +558,11 @@ namespace process_pipeline.Commands
 
             if (bOnlyUpdate)
             {
-                palCheckArrow.Instance.Update(result);
+                palCheckResult.Instance.Update(result);
             }
             else { 
                 // 弹窗展示
-                palCheckArrow.Instance.Show(result);    
+                palCheckResult.Instance.Show(result);    
             }
         }
     }

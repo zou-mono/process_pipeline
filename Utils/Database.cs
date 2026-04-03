@@ -214,7 +214,7 @@ namespace process_pipeline.Utils
 
             // 在这里执行你耗时的 List<ProblemItem> 重新计算
             // 并更新 DataGridView
-            ucCheckArrowResult.RefreshDataGridView(doc, idsToProcess);
+            ucCheckResult.RefreshDataGrid(doc, idsToProcess);
         }
     }
 }

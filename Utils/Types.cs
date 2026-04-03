@@ -8,6 +8,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Autodesk.AutoCAD.ApplicationServices; // CAD应用程序核心
 using AcadDb = Autodesk.AutoCAD.DatabaseServices;
+using System.ComponentModel;
 
 namespace process_pipeline.Utils
 {
@@ -54,10 +55,42 @@ namespace process_pipeline.Utils
         public List<MatchItem> PossibleMatches { get; set; }
     }
 
+    public class ProblemItemViewModel
+    {
+        public int NO { get; set; }
+        public bool IsFixed { get; set; }
+        public string PipeId { get; set; }
+        public string Location { get; set; }
+        public string Description { get; set; }
+        public ProblemItem OriginalItem { get; set; } // 存储原始对象
+
+        public ProblemItemViewModel()
+        {
+        }
+
+        public ProblemItemViewModel(int no, ProblemItem item)
+        {
+            NO = no;
+            OriginalItem = item;
+            IsFixed = item.IsFixed;
+            Description = item.Description;
+    
+            // CAD ObjectId 转字符串 (通常显示 Handle 句柄比较直观)
+            PipeId = item.PipeId.IsNull ? "null" : item.PipeId.Handle.ToString();
+    
+            // CAD Point3d 转字符串 (保留两位小数)
+            Location = $"{item.Location.X:F2}, {item.Location.Y:F2}";
+        }
+    }
+
     public enum ProblemType {
-        OppositeDirection,  // 方向不一致
+        [Description("与管线关联的多个箭头方向冲突（同向 {0} 个，反向 {1} 个）")]
         OneToMany,  // 一对多，比如一根管线找到了多个匹配的箭头
+
+        [Description("无匹配箭头（在管线{0}米范围内没有找到符合方向的箭头）")]
         NoAdjacentItems, // 没有邻近的要素
+
+        [Description("管线和箭头方向不一致")]
         DirectionConflict
     }
     public enum ProblemLevel {
