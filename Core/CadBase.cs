@@ -88,6 +88,14 @@ namespace process_pipeline.Core
         }
 
         /// <summary>
+        /// 【新增】判断结果是否有效。默认不为 null 则有效。
+        /// </summary>
+        protected virtual bool IsResultValid(TResult result)
+        {
+            return result != null;
+        }
+
+        /// <summary>
         /// 简化的命令行输出（封装WriteMessage，统一格式）
         /// </summary>
         protected void WriteLog(string message)
@@ -133,10 +141,13 @@ namespace process_pipeline.Core
                 }
                 else
                 {
-                    if (result != null)
-                        // 3. 成功后，将结果交给子类处理（比如弹窗、写文件等）
+                    // 【修改这里】：使用 IsResultValid 而不是直接判断 null
+                    if (IsResultValid(result))
+                    {
                         OnSuccess(result, bOnlyUpdate);
-                    else { 
+                    }
+                    else 
+                    { 
                         Application.ShowAlertDialog(
                             $"没有合规的管线数据和箭头数据，无法进行检查.\n\n" +
                             $"{IconUnicode.Info}管线数据要求：\n" +
@@ -201,6 +212,12 @@ namespace process_pipeline.Core
         {
             ExecuteVoid(context, objectIds);
             return null; 
+        }
+
+        // 【关键重写】：对于无返回值的任务，永远返回 true，跳过 ShowErrorDialog
+        protected override bool IsResultValid(object result)
+        {
+            return true; 
         }
 
         /// <summary>

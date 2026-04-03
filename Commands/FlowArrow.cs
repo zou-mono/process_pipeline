@@ -68,7 +68,7 @@ namespace process_pipeline.Commands
         private readonly Editor _ed;
         private readonly bool _useEditor = true; // true = 使用Editor 方法
 
-        private ProgressContext _context;
+        //private ProgressContext _context;
 
         // 箭头 -> 管线集合 (用途：当箭头移动时，极速查出哪些管线受影响)
         public static Dictionary<ObjectId, HashSet<ObjectId>> ArrowToPipes = new Dictionary<ObjectId, HashSet<ObjectId>>();
@@ -293,7 +293,7 @@ namespace process_pipeline.Commands
                         break; 
                     }
 
-                    if (pipe_handle == "51B9")
+                    if (pipe_handle == "511D")
                     {
                         DbgLog.Write(_ed, $"\n管线 {pipe_handle}正在调试");
                     }

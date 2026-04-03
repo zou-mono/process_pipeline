@@ -72,13 +72,20 @@ namespace process_pipeline.Forms
                 _observableList.Clear();
                 
                 int index = 1; // 用于生成序号 NO
-                
-                foreach (var kvp in _currentProblems)
+
+                // 先筛选：只保留未修复的原始项
+                var filteredItems = _currentProblems
+                    .Where(p => p.Value.IsFixed == false && !p.Value.PipeId.IsErased && !p.Value.PipeId.IsNull)
+                    .ToList();
+                    
+
+                foreach (var kvp in filteredItems)
                 {
                     ProblemItem originalItem = kvp.Value;
+                    
                     _observableList.Add(new ProblemItemViewModel(index++, kvp.Value));
                 }
-            });
+            }); 
         }
 
         public void UpdateProblems(Dictionary<ObjectId, ProblemItem> newProblems)
@@ -94,26 +101,8 @@ namespace process_pipeline.Forms
 
         private void dgvProblems_MouseDoubleClick(object sender, MouseButtonEventArgs e)
         {
-            // 1. 判断选中的是否是我们的 ViewModel
-            if (dgvProblems.SelectedItem is ProblemItemViewModel selectedRow)
-            {
-                // 2. 直接拿到原始的 ProblemItem！
-                ProblemItem targetItem = selectedRow.OriginalItem;
-                
-                if (targetItem != null)
-                {
-                    // 3. 执行你的 CAD 缩放/高亮逻辑
-                    // 例如：ZoomToObject(targetItem.ObjectId);
-                    ExecuteCadSelection();
-                    
-                    // 测试输出
-                    //AcadApp.DocumentManager.MdiActiveDocument.Editor.WriteMessage(
-                    //    $"\n双击了管线: {selectedRow.PipeId}, 问题: {selectedRow.Description}");
-                }
-            }
+
         }
-
-
 
         // 将原先 SelectionChanged 里的 CAD 跳转逻辑提炼成独立方法
         private void ExecuteCadSelection()
@@ -186,6 +175,37 @@ namespace process_pipeline.Forms
             rpc.Execute();
 
             PaletteRefreshManager.TriggerPaletteRefreshIfNeeded();
+        }
+
+        private void DataGridRow_Click(object sender, MouseButtonEventArgs e)
+        {
+            //// sender 直接就是被点击的那一行对象
+            //var row = sender as DataGridRow;
+
+            //if (row != null)
+            //{
+            //    // row.Item 就是你绑定到这一行的实体对象（比如 ProblemModel）
+            //    //var data = row.Item as ProblemItemViewModel; 
+            //        // 执行你的 CAD 任务
+            //    ExecuteCadSelection();
+            //}
+        }
+
+        private void dgvProblems_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            // 只有当用户真的选择了东西（且不是在初始化加载时）才触发
+            if (!dgvProblems.IsLoaded || dgvProblems.SelectedItems.Count == 0) return;
+
+            // 1. 获取所有选中的 ViewModel
+            var selectedViewModels = dgvProblems.SelectedItems.Cast<ProblemItemViewModel>().ToList();
+
+            // 2. 提取出所有的 ObjectId (假设你的 OriginalItem 里有 ObjectId)
+            List<ObjectId> ids = selectedViewModels
+                .Select(vm => vm.OriginalItem.PipeId)
+                .ToList();
+
+            // 3. 统一执行 CAD 任务
+            ExecuteCadSelection(); 
         }
     }
 

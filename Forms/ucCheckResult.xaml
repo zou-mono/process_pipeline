@@ -78,7 +78,7 @@
                   VerticalGridLinesBrush="{DynamicResource GridLineColor}"
                   HeadersVisibility="All"
                   RowHeaderWidth="0" 
-                  MouseDoubleClick="dgvProblems_MouseDoubleClick">
+                  MouseDoubleClick="dgvProblems_MouseDoubleClick" SelectionChanged="dgvProblems_SelectionChanged">
 
       <!-- 【新增】：在 DataGrid 内部定义专属的单元格文字样式 -->
       <DataGrid.Resources>
@@ -205,6 +205,13 @@
         <DataGridTextColumn Header="问题描述" Binding="{Binding Description}" Width="Auto"
                             ElementStyle="{StaticResource LeftText}"/>
       </DataGrid.Columns>
+
+      <DataGrid.RowStyle>
+        <Style TargetType="DataGridRow" BasedOn="{StaticResource {x:Type DataGridRow}}">
+          <!-- 只有真正点在“行”上才会触发 -->
+          <EventSetter Event="PreviewMouseLeftButtonDown" Handler="DataGridRow_Click"/>
+        </Style>
+      </DataGrid.RowStyle>
     </DataGrid>
   </Grid>
 </UserControl>
