@@ -112,7 +112,7 @@ namespace process_pipeline.Commands
             //DbgLog.Write(_ed, $"\n找到箭头: {arrowData.Count} 个，管线: {pipeIds.Count} 条");
 
             if (arrowData == null || pipeIds == null || arrowData.Count == 0 || pipeIds.Count == 0)
-                return new Dictionary<ObjectId, ProblemItem>();
+                return null;
 
             return _RunChecker(pipeIds.ToArray(), arrowData, context);
         }
@@ -124,7 +124,7 @@ namespace process_pipeline.Commands
             Dictionary<ObjectId, ArrowCacheInfo> arrowData = ArrowCacheManager.GetOrBuildCache(_db);
 
             if (arrowData == null || pipeIds == null || arrowData.Count == 0 || pipeIds.Count == 0)
-                return new Dictionary<ObjectId, ProblemItem>();
+                return null; // new Dictionary<ObjectId, ProblemItem>()
 
             return _RunChecker(pipeIds.ToArray(), arrowData, context);
         }
@@ -249,9 +249,15 @@ namespace process_pipeline.Commands
         private Dictionary<ObjectId, ProblemItem> _RunChecker(ObjectId[] pipeObjs, 
             Dictionary<ObjectId, ArrowCacheInfo> arrowData, ProgressContext context)
         {
-            //var problems = new List<ProblemItem>();
-            Dictionary<ObjectId, ProblemItem> problems = palCheckArrow.Instance.CurrentProblems
-                .ToDictionary(kvp => kvp.Key, kvp => kvp.Value) ?? new Dictionary<ObjectId, ProblemItem>();
+            Dictionary<ObjectId, ProblemItem> problems = null;
+            if(palCheckArrow.Instance.CurrentProblems != null)
+            {
+                problems = palCheckArrow.Instance.CurrentProblems
+                    .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+            }
+
+            //Dictionary<ObjectId, ProblemItem> problems = palCheckArrow.Instance.CurrentProblems
+            //    .ToDictionary(kvp => kvp.Key, kvp => kvp.Value) ?? new Dictionary<ObjectId, ProblemItem>();
 
             // 清空辅助线图层
             //ClearLayerCommands cl = new ClearLayerCommands();
@@ -307,7 +313,9 @@ namespace process_pipeline.Commands
 
         private void Checker(Dictionary<ObjectId, ProblemItem> problems, ObjectId pipeId, Entity pipe_ent, 
             Dictionary<ObjectId, ArrowCacheInfo> arrowData) 
-        { 
+        {
+            if (problems == null) return;
+
             //string pipe_handle = obj.Handle.ToString(); // 如 "7B2A"
 
             //Extents3d ext = pipe_ent.GeometricExtents;
@@ -570,12 +578,23 @@ namespace process_pipeline.Commands
         // 2. 标记是否已经进行过全量加载
         private static bool _isInitialized = false;
 
+        // 【新增】：记录当前缓存属于哪个数据库（图纸）
+        private static AcadDb.Database _currentDb = null;
+
         /// <summary>
         /// 获取缓存（如果是第一次，则进行全量扫描）
         /// 供 FlowArrowService 的 Execute 方法调用
         /// </summary>
         public static Dictionary<ObjectId, ArrowCacheInfo> GetOrBuildCache(AcadDb.Database db)
         {
+            // 【核心修复】：如果发现传入的 db 和缓存的 db 不是同一个（说明用户切换了图纸，或者打开了新图纸）
+            if (_currentDb != db)
+            {
+                _arrowCache.Clear();       // 清空旧图纸的缓存
+                _isInitialized = false;    // 重置初始化状态
+                _currentDb = db;           // 记住新的图纸
+            }
+
             if (_isInitialized) return _arrowCache;
 
             // 第一次调用：全量扫描数据库
@@ -607,6 +626,9 @@ namespace process_pipeline.Commands
         {
             // 如果还没初始化过，说明缓存是空的，不需要移除
             if (!_isInitialized) return; 
+
+        // 【安全防护】：只处理当前图纸的事件，防止后台其他图纸的修改污染当前缓存
+            if (id.Database != _currentDb) return;
             
             if (_arrowCache.ContainsKey(id))
             {
@@ -621,6 +643,9 @@ namespace process_pipeline.Commands
         {
             if (!_isInitialized) return;
             if (obj == null) return;
+
+            // 【安全防护】：只处理当前图纸的事件
+            if (obj.Database != _currentDb) return;
 
             if (obj is BlockReference br)
             {
@@ -644,6 +669,7 @@ namespace process_pipeline.Commands
         {
             _arrowCache.Clear(); // readonly 允许 Clear
             _isInitialized = false;
+            _currentDb = null;
         }
     }
 }

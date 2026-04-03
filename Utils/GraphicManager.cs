@@ -84,4 +84,26 @@ namespace process_pipeline.Utils
             }
         }
     }
+
+    /// <summary>
+/// 统一管理 Unicode 图标（纯字符串，优雅无依赖）
+/// </summary>
+    public static class IconUnicode
+    {
+        // 成功/完成
+        public const string Success = "\u2714";    // ✅ 
+        public const string OK = "\u2713";        // ✓
+        
+        // 错误/失败
+        public const string Error = "\u2716";     // ❌
+        public const string Fail = "\u2717";      // ✗
+    
+        // 警告/提示
+        public const string Warning = "\u26A0";   // ⚠️
+        public const string Info = "\u2139";      // ℹ️
+    
+        // 其他常用
+        public const string Question = "\u2753";  // ❓
+        public const string Loading = "\u2699";   // ⚙️
+    }
 }

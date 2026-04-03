@@ -11,6 +11,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using Autodesk.AutoCAD.DatabaseServices;
+using process_pipeline.Commands;
+using process_pipeline.Forms;
 
 namespace process_pipeline.Core
 {
@@ -134,6 +136,17 @@ namespace process_pipeline.Core
                     if (result != null)
                         // 3. 成功后，将结果交给子类处理（比如弹窗、写文件等）
                         OnSuccess(result, bOnlyUpdate);
+                    else { 
+                        Application.ShowAlertDialog(
+                            $"没有合规的管线数据和箭头数据，无法进行检查.\n\n" +
+                            $"{IconUnicode.Info}管线数据要求：\n" +
+                            $"1.Entity类型必须是Line或者Polyline;\n" +
+                            $"2.Layer名称必须满足：{string.Join("、", CadConfig.PipeLayers)}.\n" +
+                            $"{IconUnicode.Info}箭头数据要求：\n" +
+                            $"1.Entity类型必须是Line或者Polyline;\n" +
+                            $"2.Layer名称必须满足：{string.Join("、", CadConfig.ArrowLayers)}."
+                        );
+                    }
                 }
             }
             catch (OperationCanceledException) 
@@ -389,12 +402,12 @@ namespace process_pipeline.Core
 
                     // 使用 CAD 原生的弹窗，确保模态显示在 CAD 窗口上
                     Application.ShowAlertDialog(
-                        "【图层配置错误自动修复】\n\n" +
-                        "检测到您的 Config.ini 配置文件格式错误或缺少必要标签。\n" +
-                        "为了保证插件正常运行，系统已自动为您重置为标准默认配置。\n\n" +
-                        "💡 您原来的配置文件已安全备份为：\n" +
-                        "Config_error_bak.ini\n\n" +
-                        "请打开新的 Config.ini 参考标准格式，并将您的自定义参数重新填入。"
+                        $"【图层配置错误自动修复】\n\n" +
+                        $"检测到Config.ini 配置文件格式错误或缺少必要标签。\n" +
+                        $"为了保证插件正常运行，系统已自动为您重置为标准默认配置。\n\n" +
+                        $"{IconUnicode.Info}原来的配置文件已安全备份为：\n" +
+                        $"Config_error_bak.ini\n\n" +
+                        $"请打开新的 Config.ini参考标准格式，并重新填入自定义参数。"
                     );
                 }
                 catch

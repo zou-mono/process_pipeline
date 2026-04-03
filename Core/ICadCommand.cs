@@ -24,7 +24,7 @@ namespace process_pipeline.Core
     {
         // 1. 经典写法：每次调用 Doc，都会执行 get 里面的代码，实时获取当前文档！
         public Document Doc
-        {
+        {   set { }
             get 
             { 
                 return AcadApp.DocumentManager.MdiActiveDocument; 
