@@ -66,7 +66,8 @@ namespace process_pipeline.Utils
                 Vector3d vec = line.EndPoint - line.StartPoint;
                 bestSegAngle = VectorAngle(vec);
                 bestClosestPoint = new LineSegment3d(line.StartPoint, line.EndPoint).GetClosestPointTo(arrowPoint).Point;
-                minDist = arrowPoint.DistanceTo(bestClosestPoint);
+                //minDist = arrowPoint.DistanceTo(bestClosestPoint);
+                minDist = arrowPoint.Distance2dTo(bestClosestPoint);
             }
             else if (ent is Polyline pl)
             {
@@ -106,7 +107,8 @@ namespace process_pipeline.Utils
                 {
                     LineSegment3d seg = pl.GetLineSegmentAt(i);
                     PointOnCurve3d poc = seg.GetClosestPointTo(arrowPoint);
-                    double dist = arrowPoint.DistanceTo(poc.Point);
+                    //double dist = arrowPoint.DistanceTo(poc.Point);
+                    double dist = arrowPoint.Distance2dTo(poc.Point);
 
                     if (dist < minDist)
                     {
@@ -122,6 +124,16 @@ namespace process_pipeline.Utils
             }
 
             return (minDist, bestSegAngle, bestClosestPoint);
+        }
+
+
+        /// <summary>
+        /// 忽略 Z 轴，计算两个 3D 点在 XY 平面上的距离
+        /// </summary>
+        public static double Distance2dTo(this Point3d startPoint, Point3d endPoint)
+        {
+            return new Point2d(startPoint.X, startPoint.Y)
+                    .GetDistanceTo(new Point2d(endPoint.X, endPoint.Y));
         }
 
 

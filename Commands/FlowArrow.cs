@@ -326,7 +326,7 @@ namespace process_pipeline.Commands
             List<ObjectId> candidates = new List<ObjectId>();
             foreach (var kv in arrowData)
             {
-                if (kv.Key.Handle.ToString() == "5241")
+                if (kv.Key.Handle.ToString() == "52E6")
                 {
                     DbgLog.Write(_ed, $"\n箭头 {kv.Key.Handle.ToString()}正在调试");
                 }
@@ -608,6 +608,10 @@ namespace process_pipeline.Commands
                         BlockReference br = tr.GetObject(id, OpenMode.ForRead) as BlockReference;
                         if (br != null && CadConfig.ArrowLayers.Contains(br.Layer))
                         {
+                            //if (id.Handle.ToString() == "52E6") {
+                            //    ;
+                            //}
+
                             double rotDeg = Geometry.ArrowAngle(br);
                             _arrowCache[id] = new ArrowCacheInfo { Position = br.Position, Rotation = rotDeg };
                         }
