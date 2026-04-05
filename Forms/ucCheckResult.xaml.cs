@@ -196,14 +196,6 @@ namespace process_pipeline.Forms
             // 只有当用户真的选择了东西（且不是在初始化加载时）才触发
             if (!dgvProblems.IsLoaded || dgvProblems.SelectedItems.Count == 0) return;
 
-            // 1. 获取所有选中的 ViewModel
-            var selectedViewModels = dgvProblems.SelectedItems.Cast<ProblemItemViewModel>().ToList();
-
-            // 2. 提取出所有的 ObjectId (假设你的 OriginalItem 里有 ObjectId)
-            List<ObjectId> ids = selectedViewModels
-                .Select(vm => vm.OriginalItem.PipeId)
-                .ToList();
-
             // 3. 统一执行 CAD 任务
             ExecuteCadSelection(); 
         }
