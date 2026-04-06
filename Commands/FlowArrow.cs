@@ -113,11 +113,11 @@ namespace process_pipeline.Commands
 
             if (arrowData == null || pipeIds == null || arrowData.Count == 0 || pipeIds.Count == 0) {
                 CadDialogService.ShowMessage(
-                    $"没有合规的管线数据和箭头数据，无法进行检查.\n\n" +
-                    $"{IconUnicode.Info}管线数据要求：\n" +
+                    $"[Title]没有合规的管线数据和箭头数据，无法进行检查.\n\n" +
+                    $"[Hint]管线数据要求：\n" +
                     $"1.Entity类型必须是Line或者Polyline;\n" +
                     $"2.Layer名称必须满足：{string.Join("、", CadConfig.PipeLayers)}.\n" +
-                    $"{IconUnicode.Info}箭头数据要求：\n" +
+                    $"[Hint]箭头数据要求：\n" +
                     $"1.Entity类型必须是Line或者Polyline;\n" +
                     $"2.Layer名称必须满足：{string.Join("、", CadConfig.ArrowLayers)}.",
                     type: MessageBoxType.Warning
