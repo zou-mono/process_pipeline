@@ -199,6 +199,11 @@ namespace process_pipeline.Forms
             // 3. 统一执行 CAD 任务
             ExecuteCadSelection(); 
         }
+
+        private void UserControl_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            //dgvProblems.UpdateLayout();
+        }
     }
 
     public class palCheckResult : IDisposable
