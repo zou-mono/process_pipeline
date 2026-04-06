@@ -206,7 +206,7 @@
                             ElementStyle="{StaticResource CenterText}"/>
                 <DataGridTextColumn Header="位置" Binding="{Binding Location}" Width="150"
                             ElementStyle="{StaticResource CenterText}"/>
-                <DataGridTextColumn Header="问题描述" Binding="{Binding Description}" Width="*" MinWidth="200"
+                <DataGridTextColumn Header="问题描述" Binding="{Binding Description}" Width="*" MinWidth="250"
                             ElementStyle="{StaticResource LeftText}"/>
             </DataGrid.Columns>
 
