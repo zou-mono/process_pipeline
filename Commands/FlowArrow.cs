@@ -111,8 +111,19 @@ namespace process_pipeline.Commands
 
             //DbgLog.Write(_ed, $"\n找到箭头: {arrowData.Count} 个，管线: {pipeIds.Count} 条");
 
-            if (arrowData == null || pipeIds == null || arrowData.Count == 0 || pipeIds.Count == 0)
+            if (arrowData == null || pipeIds == null || arrowData.Count == 0 || pipeIds.Count == 0) {
+                CadDialogService.ShowMessage(
+                    $"没有合规的管线数据和箭头数据，无法进行检查.\n\n" +
+                    $"{IconUnicode.Info}管线数据要求：\n" +
+                    $"1.Entity类型必须是Line或者Polyline;\n" +
+                    $"2.Layer名称必须满足：{string.Join("、", CadConfig.PipeLayers)}.\n" +
+                    $"{IconUnicode.Info}箭头数据要求：\n" +
+                    $"1.Entity类型必须是Line或者Polyline;\n" +
+                    $"2.Layer名称必须满足：{string.Join("、", CadConfig.ArrowLayers)}.",
+                    type: MessageBoxType.Warning
+                );
                 return null;
+            }
 
             return _RunChecker(pipeIds.ToArray(), arrowData, context);
         }

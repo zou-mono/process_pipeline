@@ -8,7 +8,7 @@
         WindowStyle="None" ResizeMode="NoResize" AllowsTransparency="True" Background="Transparent"
         ShowInTaskbar="False">
 
-  <Border Background="#F3F3F3" CornerRadius="8" BorderBrush="#CCCCCC" BorderThickness="0">
+  <Border Background="#F3F3F3" CornerRadius="5" BorderBrush="#CCCCCC" BorderThickness="0">
     <Grid>
       <Grid.RowDefinitions>
         <RowDefinition Height="40"/>
@@ -20,7 +20,7 @@
       </Grid.RowDefinitions>
 
       <!-- 标题栏 -->
-      <Border x:Name="HeaderBar" Grid.Row="0" CornerRadius="8,8,0,0" MouseLeftButtonDown="Header_MouseDown">
+      <Border x:Name="HeaderBar" Grid.Row="0" CornerRadius="5,5,0,0" MouseLeftButtonDown="Header_MouseDown">
         <TextBlock x:Name="txtTitle" VerticalAlignment="Center" Margin="20,0" 
                            Foreground="White" FontWeight="Bold" FontSize="14"/>
       </Border>
@@ -47,7 +47,7 @@
       </Grid>
 
       <!-- 按钮区 -->
-      <Border Grid.Row="2" Background="#F9F9F9" CornerRadius="0,0,8,8">
+      <Border Grid.Row="2" Background="#F9F9F9" CornerRadius="0,0,5,5">
         <Button Content="确定" IsDefault="True" Width="90" Height="32" 
                         HorizontalAlignment="Right" Margin="0,0,20,5"
                         Click="Ok_Click" Cursor="Hand">
