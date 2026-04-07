@@ -80,9 +80,6 @@ namespace process_pipeline.Commands
             {
                 // 转成数组，便于处理
                 var objectIds = selObjs.Where(id => !id.IsNull && !id.IsErased).ToArray();
-
-                //string handleStr = selObj.ToString();
-
                 //using (var docLock = Doc.LockDocument())
                 // 事务处理 + 打开实体
                 Extents3d totalExtents = new Extents3d();
@@ -92,18 +89,21 @@ namespace process_pipeline.Commands
                 //using (OpenCloseTransaction tr = Db.TransactionManager.StartOpenCloseTransaction())
                 {
                     // 1. 高亮所有实体 + 计算联合包围盒            
-                    if (bZoomToExtent) { 
-                        foreach (var oid in objectIds)
-                        {
-                            if (oid.IsNull || oid.IsErased) continue;
+                    foreach (var oid in objectIds)
+                    {
+                        if (oid.IsNull || oid.IsErased) continue;
 
-                            Entity ent = tr.GetObject(oid, OpenMode.ForRead) as Entity;
-                            if (ent == null) continue;
+                        Entity ent = tr.GetObject(oid, OpenMode.ForRead) as Entity;
+                        if (ent == null) continue;
 
-                            ent.Highlight();  // 高亮当前实体
+                        ent.Highlight();  // 高亮当前实体
+
+                        if (bZoomToExtent) 
+                        { 
                             totalExtents.AddExtents(ent.GeometricExtents);
-                            hasValidEntity = true;
                         }
+                            
+                        hasValidEntity = true;    
                     }
                     tr.Commit();
                     //Ed.WriteMessage($"\n成功：已选中句柄为 [{handleStr}] 的要素，并跳转到其范围！");
@@ -118,15 +118,10 @@ namespace process_pipeline.Commands
                 // 2. 批量设置为当前选中（夹点、高亮等）
                 Ed.SetImpliedSelection(objectIds);
 
-                //// 3. 缩放到联合包围盒（所有实体的整体范围）
-                //// 稍微扩大一点范围，避免太紧
-                //totalExtents.MinPoint = totalExtents.MinPoint - new Vector3d(10, 10, 10);
-                //totalExtents.MaxPoint = totalExtents.MaxPoint + new Vector3d(10, 10, 10);
-
-                Ed.ZoomToExtents(totalExtents);
-                //tr.Abort();
-                    //Ed.WriteMessage($"\n成功：已选中句柄为 [{handleStr}] 的要素，并跳转到其范围！");
-                
+                if (bZoomToExtent) 
+                { 
+                    Ed.ZoomToExtents(totalExtents);
+                }
             }
             catch (System.Exception ex)
             {

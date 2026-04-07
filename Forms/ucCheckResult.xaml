@@ -6,12 +6,13 @@
              xmlns:local="clr-namespace:process_pipeline.Forms"
              mc:Ignorable="d" 
              d:DesignHeight="450" d:DesignWidth="800"
-             Background="#333333" Foreground="#F0F0F0" SizeChanged="UserControl_SizeChanged">
+             Background="#333333" Foreground="#F0F0F0" SizeChanged="UserControl_SizeChanged" Loaded="UserControl_Loaded">
   <!-- 替换 WinForms 的默认 Control 颜色，适配 CAD 深色 -->
   <UserControl.Resources>
     <ResourceDictionary>
       <ResourceDictionary.MergedDictionaries>
         <ResourceDictionary Source="/process_pipeline;component/Forms/Styles.xaml"/>
+        <ResourceDictionary Source="/process_pipeline;component/Forms/Icons.xaml"/>
       </ResourceDictionary.MergedDictionaries>
     </ResourceDictionary>
   </UserControl.Resources>
@@ -54,7 +55,26 @@
                   MouseDoubleClick="dgvProblems_MouseDoubleClick" 
                   SelectionChanged="dgvProblems_SelectionChanged" Grid.RowSpan="4">
 
-      <!-- 【新增】：在 DataGrid 内部定义专属的单元格文字样式 -->
+      <!-- ====================== 【新增：右键菜单】 ====================== -->
+      <DataGrid.ContextMenu>
+        <ContextMenu x:Name="ctxMenu">
+          <!-- 菜单选项（可自由增删） -->
+          <MenuItem x:Name="ctxZoomToExtent" Header="定位到CAD图纸" Click="CtxZoomToExtent_Click">
+            <MenuItem.Icon>
+              <!-- 可以使用矢量图标、图片或Path -->
+              <Path Data="{StaticResource Icon_ZoomToExtent}" Stretch="Uniform" Width="16" Height="16" Fill="#F0F0F0"/>
+            </MenuItem.Icon>
+          </MenuItem>
+                    
+          <!--<MenuItem x:Name="ctxFix" Header="🛠️ 一键修复当前项" Click="CtxFix_Click"/>-->
+          <!--<Separator/>-->
+          <!-- 分隔线 -->
+          <MenuItem x:Name="ctxRefresh" Header="🔄 刷新列表" Click="CtxRefresh_Click"/>
+          <MenuItem x:Name="ctxCopy" Header="📋 复制" Click="CtxCopy_Click"/>
+        </ContextMenu>
+    </DataGrid.ContextMenu>
+
+    <!-- 【新增】：在 DataGrid 内部定义专属的单元格文字样式 -->
       <DataGrid.Resources>
         <!-- 1. 居中对齐样式 (作为默认主力) -->
         <Style x:Key="CenterText" TargetType="TextBlock">

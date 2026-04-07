@@ -55,7 +55,7 @@ namespace process_pipeline.Forms
             ProblemsChanged += (s, e) => PopulateDataGridView();
 
             // 1. 初始化时应用 CAD 当前主题
-            GraphicManager.ApplyCadTheme(this);
+            //GraphicManager.ApplyCadTheme(this);
 
             // 初始化加载数据
             PopulateDataGridView();
@@ -122,15 +122,16 @@ namespace process_pipeline.Forms
 
             var objectIds = selectedItems.Select(p => p.PipeId).ToArray();
             SelectByHandleService sbh = new SelectByHandleService(doc.Database, doc.Editor);
+            sbh.SelectByHandles(objectIds, false);  // 只选择，不跳转
 
-            if (objectIds.Count() > 500)  // 太多了就不计算整体Extent
-            {
-                sbh.SelectByHandles(objectIds, false);   // 你的跳转选中函数
-            }
-            else
-            {
-                sbh.SelectByHandles(objectIds);   // 你的跳转选中函数
-            }
+            //if (objectIds.Count() > 500)  // 太多了就不计算整体Extent
+            //{
+            //    sbh.SelectByHandles(objectIds, false);
+            //}
+            //else
+            //{
+            //    sbh.SelectByHandles(objectIds);
+            //}
 
             GraphicManager.ClearAuxiliaryGraphics();
             if (selectedItems.Count == 1)
@@ -203,6 +204,26 @@ namespace process_pipeline.Forms
         private void UserControl_SizeChanged(object sender, SizeChangedEventArgs e)
         {
             //dgvProblems.UpdateLayout();
+        }
+
+        private void CtxZoomToExtent_Click(object sender, RoutedEventArgs e)
+        {
+
+        }
+
+        private void CtxRefresh_Click(object sender, RoutedEventArgs e)
+        {
+
+        }
+
+        private void CtxCopy_Click(object sender, RoutedEventArgs e)
+        {
+
+        }
+
+        private void UserControl_Loaded(object sender, RoutedEventArgs e)
+        {
+            GraphicManager.ApplyCadTheme(this);
         }
     }
 
