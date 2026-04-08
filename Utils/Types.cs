@@ -104,4 +104,10 @@ namespace process_pipeline.Utils
         public double Rotation { get; set; }
         // 如果需要包围盒，也可以加进来：public Extents3d Extents { get; set; }
     }
+
+    public enum MessageBoxType {
+        Error,
+        Warning,
+        Info
+    }
 }

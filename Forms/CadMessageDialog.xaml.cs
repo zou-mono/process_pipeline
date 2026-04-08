@@ -37,14 +37,14 @@ namespace process_pipeline.Forms
             ParseMessageWithIcons(message);
 
             // 应用颜色和图标
-            var themeColor = (Color)ColorConverter.ConvertFromString(config.ColorHex);
-            HeaderBar.Background = new SolidColorBrush(themeColor);
-            iconPath.Fill = new SolidColorBrush(themeColor);
+            Brush themeColor = config.DialogBrush;  // (Color)ColorConverter.ConvertFromString(config.ColorHex);
+            HeaderBar.Background = themeColor ;
+            iconPath.Fill = themeColor;
             //iconPath.Data = System.Windows.Media.Geometry.Parse(config.IconData);
 
             // 关键：从资源字典中根据 Key 查找 Geometry 对象
             // 这样即使路径变了，只要资源 Key 没变，代码就永远有效
-            this.iconPath.Data = this.FindResource(config.IconResourceKey) as System.Windows.Media.Geometry;
+            this.iconPath.Data = CadThemes.GetResource<System.Windows.Media.Geometry>(config.IconResourceKey);
         }
 
         private void ParseMessageWithIcons(string rawMessage)
@@ -166,11 +166,13 @@ namespace process_pipeline.Forms
             string finalTitle = title ?? config.DefaultTitle;
 
             var dialog = new CadMessageDialog(finalTitle, message, config);
-        
+
+            //Autodesk.AutoCAD.ApplicationServices.Application.ShowModalWindow(dialog);
+
             // 确保在 CAD 线程中运行并挂载句柄
-            dialog.SetOwner(); 
+            dialog.SetOwner();
             dialog.WindowStartupLocation = WindowStartupLocation.CenterOwner;
-        
+
             return dialog.ShowDialog();
         }
     }
@@ -179,7 +181,7 @@ namespace process_pipeline.Forms
     public class DialogConfig
     {
         public string DefaultTitle { get; set; }
-        public string ColorHex { get; set; }
+        public Brush DialogBrush { get; set; }
         //public string IconData { get; set; } // SVG Path 数据
         public string IconResourceKey { get; set; } // 改为存储 Key 名字
 
@@ -190,29 +192,23 @@ namespace process_pipeline.Forms
                 case MessageBoxType.Error:
                     return new DialogConfig { 
                         DefaultTitle = "错误", 
-                        ColorHex = "#F44336",
+                        DialogBrush = CadThemes.GetResource<Brush>("DialogErrorColor"),
                         IconResourceKey = "Icon_Error"
                     };
                 case MessageBoxType.Warning:
                     return new DialogConfig { 
                         DefaultTitle = "警告", 
-                        ColorHex = "#FF9800",
+                        DialogBrush = CadThemes.GetResource<Brush>("DialogWarningColor"),
                         IconResourceKey = "Icon_Warning"
                     };
                 case MessageBoxType.Info:
                 default:
                     return new DialogConfig { 
                         DefaultTitle = "提示", 
-                        ColorHex = "#2196F3",
+                        DialogBrush = CadThemes.GetResource<Brush>("BrushErrorRed"),
                         IconResourceKey = "Icon_Info"
                     };
             };
         }
-    }
-
-    public enum MessageBoxType {
-        Error,
-        Warning,
-        Info
     }
 }

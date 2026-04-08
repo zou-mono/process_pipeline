@@ -12,6 +12,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using System.Windows;
 using AcadApp = Autodesk.AutoCAD.ApplicationServices.Application;
 
 namespace process_pipeline.Utils
@@ -180,15 +181,26 @@ namespace process_pipeline.Utils
         {
             try
             {
-                // 1. 强制唤醒配置类，立刻读取 Config.ini 并检查错误
-                CadConfig.EnsureLoaded();
+                //// 1. 确保 WPF Application 实例存在
+                //if (System.Windows.Application.Current == null) { 
+                //    var app = new System.Windows.Application();
 
-                //    // 2. （可选）在 CAD 命令行打印一条加载成功的提示
-                //    Document doc = Application.DocumentManager.MdiActiveDocument;
-                //    if (doc != null)
-                //    {
-                //        doc.Editor.WriteMessage("\n>>> 管道绘制插件已成功加载！配置文件检查完毕。\n");
-                //    }
+                //    // 【关键代码】：禁止 WPF 在窗口关闭时自动关闭 Application 实例
+                //    app.ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown;
+                //}
+                    
+                //// 2. 加载总入口字典
+                //var uri = new Uri("/process_pipeline;component/Forms/App.xaml", UriKind.Relative);
+    
+                //// 3. 注入到全局资源中
+                //var appResources = System.Windows.Application.Current.Resources;
+                //if (!appResources.MergedDictionaries.Any(d => d.Source == uri))
+                //{
+                //    appResources.MergedDictionaries.Add(new ResourceDictionary { Source = uri });
+                //}
+
+                // 强制唤醒配置类，立刻读取 Config.ini 并检查错误
+                CadConfig.EnsureLoaded();
             }
             catch
             {

@@ -7,16 +7,16 @@
         WindowStyle="None" ResizeMode="NoResize" AllowsTransparency="True" Background="Transparent"
         ShowInTaskbar="False">
 
-    <Window.Resources>
-        <ResourceDictionary>
-            <ResourceDictionary.MergedDictionaries>
-                <ResourceDictionary Source="/process_pipeline;component/Forms/Icons.xaml"/>
-                <ResourceDictionary Source="/process_pipeline;component/Forms/Styles.xaml"/>
+  <Window.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.MergedDictionaries>
+        <!--只写这一行，设计器就能预览所有图标、样式和颜色-->
+        <ResourceDictionary Source="/process_pipeline;component/Forms/App.xaml"/>
       </ResourceDictionary.MergedDictionaries>
-        </ResourceDictionary>
-    </Window.Resources>
+    </ResourceDictionary>
+  </Window.Resources>
 
-    <Border Background="#F3F3F3" CornerRadius="5" BorderBrush="#CCCCCC" BorderThickness="0">
+  <Border Background="#F3F3F3" CornerRadius="5" BorderBrush="#CCCCCC" BorderThickness="0">
     <Grid>
       <Grid.RowDefinitions>
         <RowDefinition Height="40"/>
@@ -61,7 +61,8 @@
       <Border Grid.Row="2" Background="#F9F9F9" CornerRadius="0,0,5,5">
         <Button Content="确 定" IsDefault="True" Width="90" Height="24" 
                         HorizontalAlignment="Right" Margin="0,0,20,5"
-                        Click="Ok_Click">
+                        Click="Ok_Click"
+                        Style="{StaticResource DefaultButtonStyle}">
           <!-- 这里可以自定义 Button Style Style="{StaticResource RoundButton}" -->
         </Button>
       </Border>

@@ -2,15 +2,15 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:local="using:process_pipeline.Forms">
 
-  <Style TargetType="TextBlock">
+  <Style x:Key="DefaultTextBlockStyle" TargetType="TextBlock">
     <Setter Property="FontFamily" Value="Segoe UI, Microsoft YaHei" />
-    <Setter Property="FontSize" Value="9" />
+    <Setter Property="FontSize" Value="12" />
   </Style>
-  <Style TargetType="Button">
+  <Style x:Key="DefaultButtonStyle" TargetType="Button">
     <Setter Property="FontFamily" Value="Segoe UI, Microsoft YaHei" />
     <Setter Property="FontSize" Value="14" />
   </Style>
-  <Style TargetType="Label">
+  <Style x:Key="DefaultLabelStyle" TargetType="Label">
     <Setter Property="FontFamily" Value="Segoe UI, Microsoft YaHei" />
     <Setter Property="FontSize" Value="9" />
   </Style>

@@ -7,17 +7,17 @@
              mc:Ignorable="d" 
              d:DesignHeight="450" d:DesignWidth="800"
              Background="#333333" Foreground="#F0F0F0" SizeChanged="UserControl_SizeChanged" Loaded="UserControl_Loaded">
+  
   <!-- 替换 WinForms 的默认 Control 颜色，适配 CAD 深色 -->
   <UserControl.Resources>
     <ResourceDictionary>
       <ResourceDictionary.MergedDictionaries>
-        <ResourceDictionary Source="/process_pipeline;component/Forms/Styles.xaml"/>
-        <ResourceDictionary Source="/process_pipeline;component/Forms/Icons.xaml"/>
+        <ResourceDictionary Source="/process_pipeline;component/Forms/App.xaml"/>
       </ResourceDictionary.MergedDictionaries>
     </ResourceDictionary>
   </UserControl.Resources>
 
-  <Grid>
+  <Grid Width="600">
     <Grid.RowDefinitions>
       <!--高度由里面的控件（比如按钮）自动撑开-->
       <RowDefinition Height="15.341"/>
@@ -62,7 +62,8 @@
           <MenuItem x:Name="ctxZoomToExtent" Header="定位到CAD图纸" Click="CtxZoomToExtent_Click">
             <MenuItem.Icon>
               <!-- 可以使用矢量图标、图片或Path -->
-              <Path Data="{StaticResource Icon_ZoomToExtent}" Stretch="Uniform" Width="16" Height="16" Fill="#F0F0F0"/>
+              <Path Data="{StaticResource Icon_ZoomToExtent}" Stretch="Uniform" Width="16" Height="16" 
+                    Fill="{DynamicResource CadText}"/>
             </MenuItem.Icon>
           </MenuItem>
                     

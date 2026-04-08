@@ -88,6 +88,7 @@
     <Compile Include="Commands\SelectByHandle.cs" />
     <Compile Include="Core\CadBase.cs" />
     <Compile Include="Core\ICadCommand.cs" />
+    <Compile Include="Forms\CadTheme.cs" />
     <Compile Include="Forms\ucCheckResult.xaml.cs">
       <DependentUpon>ucCheckResult.xaml</DependentUpon>
     </Compile>
@@ -127,11 +128,18 @@
     </None>
   </ItemGroup>
   <ItemGroup>
+    <Page Include="Forms\App.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
     <Page Include="Forms\Icons.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
     <Page Include="Forms\Styles.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="Forms\Themes.xaml">
+      <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
     <Page Include="Forms\ucCheckResult.xaml">
@@ -152,7 +160,5 @@
     <PropertyGroup>
       <ErrorText>This project references NuGet package(s) that are missing on this computer. Use NuGet Package Restore to download them.  For more information, see http://go.microsoft.com/fwlink/?LinkID=322105. The missing file is {0}.</ErrorText>
     </PropertyGroup>
-    <Error Condition="!Exists('packages\JeremyAnsel.HLSL.Targets.1.0.13\build\JeremyAnsel.HLSL.Targets.targets')" Text="$([System.String]::Format('$(ErrorText)', 'packages\JeremyAnsel.HLSL.Targets.1.0.13\build\JeremyAnsel.HLSL.Targets.targets'))" />
-    <Error Condition="!Exists('packages\Microsoft.UI.Xaml.2.8.7\build\Microsoft.UI.Xaml.props')" Text="$([System.String]::Format('$(ErrorText)', 'packages\Microsoft.UI.Xaml.2.8.7\build\Microsoft.UI.Xaml.props'))" />
   </Target>
 </Project>

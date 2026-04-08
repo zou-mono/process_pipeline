@@ -223,7 +223,7 @@ namespace process_pipeline.Forms
 
         private void UserControl_Loaded(object sender, RoutedEventArgs e)
         {
-            GraphicManager.ApplyCadTheme(this);
+            CadThemes.ApplyCadTheme(this);
         }
     }
 
