@@ -12,7 +12,7 @@
   <UserControl.Resources>
     <ResourceDictionary>
       <ResourceDictionary.MergedDictionaries>
-        <ResourceDictionary Source="/process_pipeline;component/Forms/App.xaml"/>
+        <ResourceDictionary Source="/process_pipeline;component/Themes/App.xaml"/>
       </ResourceDictionary.MergedDictionaries>
     </ResourceDictionary>
   </UserControl.Resources>

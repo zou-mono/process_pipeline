@@ -11,7 +11,7 @@
     <ResourceDictionary>
       <ResourceDictionary.MergedDictionaries>
         <!--只写这一行，设计器就能预览所有图标、样式和颜色-->
-        <ResourceDictionary Source="/process_pipeline;component/Forms/App.xaml"/>
+        <ResourceDictionary Source="/process_pipeline;component/Themes/App.xaml"/>
       </ResourceDictionary.MergedDictionaries>
     </ResourceDictionary>
   </Window.Resources>

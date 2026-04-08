@@ -120,7 +120,7 @@ namespace process_pipeline.Commands
                     $"[Hint]箭头数据要求：\n" +
                     $"1.Entity类型必须是Line或者Polyline;\n" +
                     $"2.Layer名称必须满足：{string.Join("、", CadConfig.ArrowLayers)}.",
-                    type: MessageBoxType.Warning
+                    type: MessageBoxType.Error
                 );
                 return null;
             }

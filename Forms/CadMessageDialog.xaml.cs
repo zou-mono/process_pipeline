@@ -192,20 +192,20 @@ namespace process_pipeline.Forms
                 case MessageBoxType.Error:
                     return new DialogConfig { 
                         DefaultTitle = "错误", 
-                        DialogBrush = CadThemes.GetResource<Brush>("DialogErrorColor"),
+                        DialogBrush = CadThemes.GetResource<Brush>("Brush_DialogErrorColor"),
                         IconResourceKey = "Icon_Error"
                     };
                 case MessageBoxType.Warning:
                     return new DialogConfig { 
                         DefaultTitle = "警告", 
-                        DialogBrush = CadThemes.GetResource<Brush>("DialogWarningColor"),
+                        DialogBrush = CadThemes.GetResource<Brush>("Brush_DialogWarningColor"),
                         IconResourceKey = "Icon_Warning"
                     };
                 case MessageBoxType.Info:
                 default:
                     return new DialogConfig { 
                         DefaultTitle = "提示", 
-                        DialogBrush = CadThemes.GetResource<Brush>("BrushErrorRed"),
+                        DialogBrush = CadThemes.GetResource<Brush>("Brush_DialogInfoColor"),
                         IconResourceKey = "Icon_Info"
                     };
             };
