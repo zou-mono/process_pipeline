@@ -20,23 +20,24 @@
   <Grid Width="600">
     <Grid.RowDefinitions>
       <!--高度由里面的控件（比如按钮）自动撑开-->
-      <RowDefinition Height="15.341"/>
+      <!--<RowDefinition Height="15.341"/>
       <RowDefinition Height="16.899"/>
-      <!--WPF 里的 DockStyle.Fill！意思是占据所有剩余空间-->
+      --><!--WPF 里的 DockStyle.Fill！意思是占据所有剩余空间--><!--
       <RowDefinition Height="60*"/>
       <RowDefinition Height="279*"/>
       <RowDefinition Height="21*"/>
-      <RowDefinition Height="58*"/>
+      <RowDefinition Height="58*"/>-->
+      <RowDefinition Height="*"/>
     </Grid.RowDefinitions>
 
-    <!-- 顶部工具栏：使用 StackPanel，背景设为稍暗的颜色区分层次 -->
+    <!-- 顶部工具栏：使用 StackPanel，背景设为稍暗的颜色区分层次 --><!--
     <Border Grid.Row="0" Background="#2D2D2D" BorderBrush="#111111" BorderThickness="0,0,0,1" Grid.RowSpan="2">
       <StackPanel Orientation="Horizontal" Margin="2">
-        <!-- 应用刚才定义的样式：Style="{StaticResource CadFlatButton}" -->
+         --><!--应用刚才定义的样式：Style="{StaticResource CadFlatButton}"--><!-- 
         <Button x:Name="btnRefresh" Content="刷新 🔄" Style="{StaticResource CadFlatButton}" Click="btnRefresh_Click"/>
         <Button x:Name="btnReversePolyline" Content="一键修复 🛠️" Style="{StaticResource CadFlatButton}" Click="btnReversePolyline_Click"/>
       </StackPanel>
-    </Border>
+    </Border>-->
 
     <!-- 数据表格 -->
     <DataGrid x:Name="dgvProblems" Grid.Row="2" Margin="5,5,5,5" 
@@ -63,7 +64,7 @@
             <MenuItem.Icon>
               <!-- 可以使用矢量图标、图片或Path -->
               <Path Data="{StaticResource Icon_ZoomToExtent}" Stretch="Uniform" Width="16" Height="16" 
-                    Fill="{DynamicResource CadText}"/>
+                    Fill="{DynamicResource Brush.CadBlue}"/>
             </MenuItem.Icon>
           </MenuItem>
                     

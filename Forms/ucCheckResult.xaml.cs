@@ -104,11 +104,11 @@ namespace process_pipeline.Forms
 
         private void dgvProblems_MouseDoubleClick(object sender, MouseButtonEventArgs e)
         {
-
+            ExecuteCadSelection(true);
         }
 
         // 将原先 SelectionChanged 里的 CAD 跳转逻辑提炼成独立方法
-        private void ExecuteCadSelection()
+        private void ExecuteCadSelection(bool IsZoomTo = false)
         {
             // 确保有选中的行（WPF DataGrid 用 SelectedItems）
             if (dgvProblems.SelectedItems == null || dgvProblems.SelectedItems.Count == 0) 
@@ -125,7 +125,7 @@ namespace process_pipeline.Forms
 
             var objectIds = selectedItems.Select(p => p.PipeId).ToArray();
             SelectByHandleService sbh = new SelectByHandleService(doc.Database, doc.Editor);
-            sbh.SelectByHandles(objectIds, false);  // 只选择，不跳转
+            sbh.SelectByHandles(objectIds, IsZoomTo);  // 只选择，不跳转
 
             //if (objectIds.Count() > 500)  // 太多了就不计算整体Extent
             //{
@@ -201,7 +201,7 @@ namespace process_pipeline.Forms
             if (!dgvProblems.IsLoaded || dgvProblems.SelectedItems.Count == 0) return;
 
             // 3. 统一执行 CAD 任务
-            ExecuteCadSelection(); 
+            ExecuteCadSelection(false); 
         }
 
         private void UserControl_SizeChanged(object sender, SizeChangedEventArgs e)
