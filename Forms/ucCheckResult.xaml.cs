@@ -59,6 +59,9 @@ namespace process_pipeline.Forms
 
             // 初始化加载数据
             PopulateDataGridView();
+
+            // 2. 订阅系统变量改变事件
+            AcadApp.SystemVariableChanged += AcadApp_SystemVariableChanged;
         }
 
         // 【修改 3】: 数据填充逻辑优化
@@ -224,6 +227,18 @@ namespace process_pipeline.Forms
         private void UserControl_Loaded(object sender, RoutedEventArgs e)
         {
             CadThemes.ApplyCadTheme(this);
+        }
+
+        private void AcadApp_SystemVariableChanged(object sender, Autodesk.AutoCAD.ApplicationServices.SystemVariableChangedEventArgs e)
+        { 
+            // 检查改变的是否是主题变量
+            if (e.Name.Equals("COLORTHEME", StringComparison.OrdinalIgnoreCase))
+            {
+                // 必须在 UI 线程执行
+                this.Dispatcher.Invoke(() => {
+                    CadThemes.ApplyCadTheme(this);
+                });
+            }
         }
     }
 
