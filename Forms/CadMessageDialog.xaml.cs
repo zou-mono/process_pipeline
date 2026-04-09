@@ -24,9 +24,6 @@ namespace process_pipeline.Forms
     /// </summary>
     public partial class CadMessageDialog : Window
     {
-        // 定义深蓝色 (AutoCAD 风格或标准深蓝)
-        Brush highlightBrush = new SolidColorBrush(Color.FromRgb(0, 51, 153)); // 经典的深蓝色
-
         public CadMessageDialog(string title, string message, DialogConfig config)
         {
             InitializeComponent();
@@ -100,7 +97,7 @@ namespace process_pipeline.Forms
                     var path = new System.Windows.Shapes.Path
                     {
                         Data = this.FindResource(geoKey) as System.Windows.Media.Geometry,
-                        Fill = highlightBrush, // 或者根据业务定颜色
+                        Fill =  CadThemes.GetResource<Brush>("Brush.CadBlue"), // 或者根据业务定颜色
                         Width = 18,
                         Height = 18,
                         Stretch = Stretch.Uniform,
@@ -120,7 +117,7 @@ namespace process_pipeline.Forms
                         // --- 局部样式设置 ---
                         //run.FontWeight = FontWeights.Bold;       // 加粗
                         run.FontSize = txtMessage.FontSize + 4;  // 比默认大 4 号
-                        run.Foreground = highlightBrush;
+                        run.Foreground = CadThemes.GetResource<Brush>("Brush.DialogWarning");
                         //run.Foreground = Brushes.White;         // 标题可以更亮一点
                     }
 
@@ -192,20 +189,20 @@ namespace process_pipeline.Forms
                 case MessageBoxType.Error:
                     return new DialogConfig { 
                         DefaultTitle = "错误", 
-                        DialogBrush = CadThemes.GetResource<Brush>("Brush_DialogErrorColor"),
+                        DialogBrush = CadThemes.GetResource<Brush>("Brush.DialogError"),
                         IconResourceKey = "Icon_Error"
                     };
                 case MessageBoxType.Warning:
                     return new DialogConfig { 
                         DefaultTitle = "警告", 
-                        DialogBrush = CadThemes.GetResource<Brush>("Brush_DialogWarningColor"),
+                        DialogBrush = CadThemes.GetResource<Brush>("Brush.DialogWarning"),
                         IconResourceKey = "Icon_Warning"
                     };
                 case MessageBoxType.Info:
                 default:
                     return new DialogConfig { 
                         DefaultTitle = "提示", 
-                        DialogBrush = CadThemes.GetResource<Brush>("Brush_DialogInfoColor"),
+                        DialogBrush = CadThemes.GetResource<Brush>("Brush.DialogInfo"),
                         IconResourceKey = "Icon_Info"
                     };
             };

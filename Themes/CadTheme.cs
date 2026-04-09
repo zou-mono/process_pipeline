@@ -13,16 +13,13 @@ namespace process_pipeline.Forms
     {
         // 建议使用 pack URI 绝对路径，这是 WPF 最稳健的路径格式
         private static readonly string ResourcePath = "pack://application:,,,/process_pipeline;component/Forms/App.xaml";
-        private static readonly ResourceDictionary _cache;
+        private static readonly ResourceDictionary _cache = new ResourceDictionary();
 
         static CadThemes()
         {
             try
             {
-                _cache = new ResourceDictionary
-                {
-                    Source = new Uri(ResourcePath, UriKind.Absolute)
-                };
+                RefreshTheme();
             }
             catch (Exception ex)
             {
@@ -30,6 +27,39 @@ namespace process_pipeline.Forms
                 System.Diagnostics.Debug.WriteLine($"[Res] 资源加载失败: {ex.Message}");
                 _cache = new ResourceDictionary(); 
             }
+        }
+
+        public static void RefreshTheme() 
+        { 
+            // 1. 检测 AutoCAD 当前主题 (假设你已有检测逻辑)
+            //bool isDark = CheckIfAutoCADIsDark(); 
+            string themeName = CadThemeName();
+            //string themeFile = $"/process_pipeline;component/Themes/{themeName}.xaml";
+
+            // 2. 加载对应的字典
+            var themeDict = new ResourceDictionary { 
+                Source = new Uri($"/process_pipeline;component/Themes/{themeName}.xaml", UriKind.RelativeOrAbsolute) 
+            };
+
+            _cache.MergedDictionaries.Clear();
+            _cache.MergedDictionaries.Add(themeDict);
+
+            // 3. 合并通用资源 (如 Icons.xaml)
+            var IconsDict = new ResourceDictionary { 
+                Source = new Uri("/process_pipeline;component/Themes/Icons.xaml", UriKind.RelativeOrAbsolute) 
+            };
+
+            var StylesDict = new ResourceDictionary { 
+                Source = new Uri("/process_pipeline;component/Themes/Styles.xaml", UriKind.RelativeOrAbsolute) 
+            };
+
+            var CommonDict = new ResourceDictionary { 
+                Source = new Uri("/process_pipeline;component/Themes/Common.xaml", UriKind.RelativeOrAbsolute) 
+            };
+
+            _cache.MergedDictionaries.Add(IconsDict);
+            _cache.MergedDictionaries.Add(StylesDict);
+            _cache.MergedDictionaries.Add(CommonDict);
         }
 
        // 【核心】：根据 CAD 主题动态设置 WPF 颜色
@@ -44,50 +74,31 @@ namespace process_pipeline.Forms
             try
             {
                 // 1. 获取 CAD 的主题变量：0 是深色(Dark)，1 是浅色(Light)
-                object themeVar = AcadApp.GetSystemVariable("COLORTHEME");
-                bool isDarkTheme = themeVar != null && themeVar.ToString() == "0";
+                //object themeVar = AcadApp.GetSystemVariable("COLORTHEME");
+                //string themeName = (themeVar?.ToString() == "0") ? "Dark" : "Light";
+                string themeName = CadThemeName();
 
-                // 2. 创建新的资源字典
-                ResourceDictionary themeDict = new ResourceDictionary();
+                // 2. 构造资源字典的 URI
+                string uriPath = $"/process_pipeline;component/Themes/{themeName}.xaml";
+                var newThemeDict = new ResourceDictionary 
+                { 
+                    Source = new Uri(uriPath, UriKind.RelativeOrAbsolute) 
+                };
 
-                if (isDarkTheme)
+                // 3. 优雅地替换旧主题
+                // 建议：如果你的 MergedDictionaries 里还有别的字典（如 Icons），
+                // 最好通过判断 Source 来移除旧主题，而不是 Clear() 全部。
+                var dictionaries = element.Resources.MergedDictionaries;
+                for (int i = dictionaries.Count - 1; i >= 0; i--)
                 {
-                    // --- CAD 深色主题配色 ---
-                    // 面板底色 (稍浅的深灰)
-                    themeDict.Add("PanelBackground", new SolidColorBrush((Color)ColorConverter.ConvertFromString("#383838")));
-                    // 表头背景色 (类似图层管理器的表头)
-                    themeDict.Add("HeaderBackground", new SolidColorBrush((Color)ColorConverter.ConvertFromString("#45464A")));
-                    // 数据行背景 (主背景，较深)
-                    themeDict.Add("RowBackground", new SolidColorBrush((Color)ColorConverter.ConvertFromString("#2D2D30")));
-                    // 交替行背景 (稍微亮一点点，增加层次感)
-                    themeDict.Add("AltRowBackground", new SolidColorBrush((Color)ColorConverter.ConvertFromString("#333337")));
-                    // 字体颜色 (CAD标准浅灰白)
-                    themeDict.Add("TextForeground", new SolidColorBrush((Color)ColorConverter.ConvertFromString("#DFDFDF")));
-                    // 网格线颜色 (非常关键！调亮一点才能看清，类似 #555555)
-                    themeDict.Add("GridLineColor", new SolidColorBrush((Color)ColorConverter.ConvertFromString("#555555")));
-                    // 选中行背景 (CAD 经典的选中蓝)
-                    themeDict.Add("SelectedRowBackground", new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1E5E96")));
-                    // 选中行文字
-                    themeDict.Add("SelectedTextForeground", new SolidColorBrush(Colors.White));
-                }
-                else
-                {
-                    // --- CAD 浅色主题配色 ---
-                    themeDict.Add("PanelBackground", new SolidColorBrush((Color)ColorConverter.ConvertFromString("#F0F0F0")));
-                    themeDict.Add("HeaderBackground", new SolidColorBrush((Color)ColorConverter.ConvertFromString("#E0E0E0")));
-                    themeDict.Add("RowBackground", new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FFFFFF")));
-                    themeDict.Add("AltRowBackground", new SolidColorBrush((Color)ColorConverter.ConvertFromString("#F8F8F8")));
-                    themeDict.Add("TextForeground", new SolidColorBrush((Color)ColorConverter.ConvertFromString("#111111")));
-                    themeDict.Add("GridLineColor", new SolidColorBrush((Color)ColorConverter.ConvertFromString("#CCCCCC")));
-                    themeDict.Add("SelectedRowBackground", new SolidColorBrush((Color)ColorConverter.ConvertFromString("#CCE8FF")));
-                    themeDict.Add("SelectedTextForeground", new SolidColorBrush(Colors.Black));
+                    if (dictionaries[i].Source.OriginalString.Contains("Dark") || 
+                        dictionaries[i].Source.OriginalString.Contains("Light"))
+                    {
+                        dictionaries.RemoveAt(i);
+                    }
                 }
 
-                // 3. 清空旧的动态资源，防止多次调用导致内存泄漏或重复
-                element.Resources.MergedDictionaries.Clear();
-
-                // 4. 将生成的颜色字典注入到目标控件中
-                element.Resources.MergedDictionaries.Add(themeDict);
+                dictionaries.Add(newThemeDict);
             }
             catch (Exception ex)
             {
@@ -95,8 +106,6 @@ namespace process_pipeline.Forms
                 AcadApp.DocumentManager.MdiActiveDocument?.Editor.WriteMessage($"\n主题加载失败: {ex.Message}");
             }
         }
-
-
 
         // 辅助方法：安全地从资源字典获取对象
 // 泛型获取，找不到返回 null
@@ -116,6 +125,14 @@ namespace process_pipeline.Forms
             }
             
             return default;
+        }
+
+        public static string CadThemeName() 
+        { 
+            object themeVar = AcadApp.GetSystemVariable("COLORTHEME");
+            string themeName = (themeVar?.ToString() == "0") ? "Dark" : "Light";
+
+            return themeName;
         }
     }
 }

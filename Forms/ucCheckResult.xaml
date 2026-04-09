@@ -45,12 +45,12 @@
                   IsReadOnly="True"
                   BorderThickness="0" 
                   GridLinesVisibility="All"
-                  Background="{DynamicResource RowBackground}"
-                  RowBackground="{DynamicResource RowBackground}"
-                  AlternatingRowBackground="{DynamicResource AltRowBackground}"
-                  Foreground="{DynamicResource TextForeground}"
-                  HorizontalGridLinesBrush="{DynamicResource GridLineColor}"
-                  VerticalGridLinesBrush="{DynamicResource GridLineColor}"
+                  Background="{DynamicResource Brush.DataGrid.Row.Background}"
+                  RowBackground="{DynamicResource Brush.DataGrid.Row.Background}"
+                  AlternatingRowBackground="{DynamicResource Brush.DataGrid.AltRow.Background}"
+                  Foreground="{DynamicResource Brush.DataGrid.Text.Foreground}"
+                  HorizontalGridLinesBrush="{DynamicResource Brush.DataGrid.GridLine}"
+                  VerticalGridLinesBrush="{DynamicResource Brush.DataGrid.GridLine}"
                   HeadersVisibility="all"
                   MouseDoubleClick="dgvProblems_MouseDoubleClick" 
                   SelectionChanged="dgvProblems_SelectionChanged" Grid.RowSpan="4">
@@ -92,13 +92,13 @@
         </Style>
 
         <Style TargetType="DataGridColumnHeader">
-          <Setter Property="Background" Value="{DynamicResource HeaderBackground}"/>
-          <Setter Property="Foreground" Value="{DynamicResource TextForeground}"/>
+          <Setter Property="Background" Value="{DynamicResource Brush.DataGrid.Header.Background}"/>
+          <Setter Property="Foreground" Value="{DynamicResource Brush.DataGrid.Text.Foreground}"/>
           <Setter Property="FontWeight" Value="Bold"/>
           <Setter Property="Height" Value="25"/>
           <Setter Property="Padding" Value="5,0"/>
           <Setter Property="BorderThickness" Value="0,0,1,1"/>
-          <Setter Property="BorderBrush" Value="{DynamicResource GridLineColor}"/>
+          <Setter Property="BorderBrush" Value="{DynamicResource Brush.DataGrid.GridLine}"/>
           <Setter Property="HorizontalContentAlignment" Value="Center"/>
 
           <!-- 关键：通过 Template 彻底解决箭头不可见问题 -->
@@ -181,8 +181,8 @@
         <Style TargetType="DataGridRow">
           <Style.Triggers>
             <Trigger Property="IsSelected" Value="True">
-              <Setter Property="Background" Value="{DynamicResource SelectedRowBackground}"/>
-              <Setter Property="Foreground" Value="{DynamicResource SelectedTextForeground}"/>
+              <Setter Property="Background" Value="{DynamicResource Brush.DataGrid.SelectedRow.Background}"/>
+              <Setter Property="Foreground" Value="{DynamicResource Brush.DataGrid.SelectedText.Foreground}"/>
             </Trigger>
           </Style.Triggers>
         </Style>
