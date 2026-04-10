@@ -73,12 +73,12 @@
                       Fill="{DynamicResource Brush.CadBlue}"/>
             </MenuItem.Icon>
           </MenuItem>
+          <MenuItem x:Name="ctxCopy" Header="复制" Click="CtxCopy_Click"/>
 
           <!--<MenuItem x:Name="ctxFix" Header="🛠️ 一键修复当前项" Click="CtxFix_Click"/>-->
-          <!--<Separator/>-->
+          <Separator/>
           <!-- 分隔线 -->
-          <MenuItem x:Name="ctxRefresh" Header="刷新列表" Click="CtxRefresh_Click"/>
-          <MenuItem x:Name="ctxCopy" Header="复制" Click="CtxCopy_Click"/>
+          <MenuItem x:Name="ctxRefresh" Header="刷新" Click="CtxRefresh_Click"/>
         </ContextMenu>
       </DataGrid.ContextMenu>
 
@@ -102,7 +102,8 @@
           <Setter Property="Background" Value="{DynamicResource Brush.DataGrid.Header.Background}"/>
           <Setter Property="Foreground" Value="{DynamicResource Brush.DataGrid.Text.Foreground}"/>
           <Setter Property="FontWeight" Value="Bold"/>
-          <Setter Property="Height" Value="25"/>
+          <Setter Property="FontSize" Value="14"/>
+          <Setter Property="Height" Value="30"/>
           <Setter Property="Padding" Value="5,0"/>
           <Setter Property="BorderThickness" Value="0,0,1,1"/>
           <Setter Property="BorderBrush" Value="{DynamicResource Brush.DataGrid.GridLine}"/>
@@ -236,6 +237,7 @@
               <Setter Property="Foreground" Value="{DynamicResource Brush.DataGrid.SelectedText.Foreground}"/>
             </Trigger>
           </Style.Triggers>
+          <Setter Property="MinHeight" Value="25" />
         </Style>
       </DataGrid.Resources>
 
