@@ -17,7 +17,7 @@
     </ResourceDictionary>
   </UserControl.Resources>
 
-  <Grid Width="600">
+  <Grid>
     <Grid.RowDefinitions>
       <!--高度由里面的控件（比如按钮）自动撑开-->
       <!--<RowDefinition Height="15.341"/>
@@ -40,21 +40,26 @@
     </Border>-->
 
     <!-- 数据表格 -->
-    <DataGrid x:Name="dgvProblems" Grid.Row="2" Margin="5,5,5,5" 
-                  AutoGenerateColumns="False" 
-                  CanUserAddRows="False" 
-                  IsReadOnly="True"
-                  BorderThickness="0" 
-                  GridLinesVisibility="All"
-                  Background="{DynamicResource Brush.DataGrid.Row.Background}"
-                  RowBackground="{DynamicResource Brush.DataGrid.Row.Background}"
-                  AlternatingRowBackground="{DynamicResource Brush.DataGrid.AltRow.Background}"
-                  Foreground="{DynamicResource Brush.DataGrid.Text.Foreground}"
-                  HorizontalGridLinesBrush="{DynamicResource Brush.DataGrid.GridLine}"
-                  VerticalGridLinesBrush="{DynamicResource Brush.DataGrid.GridLine}"
-                  HeadersVisibility="all"
-                  MouseDoubleClick="dgvProblems_MouseDoubleClick" 
-                  SelectionChanged="dgvProblems_SelectionChanged" Grid.RowSpan="4">
+    <DataGrid x:Name="dgvProblems" Grid.Row="0" Margin="5,5,5,5" 
+              AutoGenerateColumns="False" 
+              CanUserAddRows="False" 
+              IsReadOnly="True"
+              BorderThickness="0" 
+              GridLinesVisibility="All"
+              SelectionUnit="CellOrRowHeader"
+              SelectionMode="Extended"
+              Background="{DynamicResource Brush.DataGrid.Row.Background}"
+              RowBackground="{DynamicResource Brush.DataGrid.Row.Background}"
+              AlternatingRowBackground="{DynamicResource Brush.DataGrid.AltRow.Background}"
+              Foreground="{DynamicResource Brush.DataGrid.Text.Foreground}"
+              HorizontalGridLinesBrush="{DynamicResource Brush.DataGrid.GridLine}"
+              VerticalGridLinesBrush="{DynamicResource Brush.DataGrid.GridLine}"
+              HeadersVisibility="All"
+              Grid.RowSpan="1"
+              MouseDoubleClick="dgvProblems_MouseDoubleClick"
+              SelectionChanged="dgvProblems_SelectionChanged"
+              PreviewMouseLeftButtonDown="dgvProblems_PreviewMouseLeftButtonDown"
+              LoadingRow="dgvProblems_LoadingRow" Loaded="dgvProblems_Loaded">
 
       <!-- ====================== 【新增：右键菜单】 ====================== -->
       <DataGrid.ContextMenu>
@@ -71,8 +76,8 @@
           <!--<MenuItem x:Name="ctxFix" Header="🛠️ 一键修复当前项" Click="CtxFix_Click"/>-->
           <!--<Separator/>-->
           <!-- 分隔线 -->
-          <MenuItem x:Name="ctxRefresh" Header="🔄 刷新列表" Click="CtxRefresh_Click"/>
-          <MenuItem x:Name="ctxCopy" Header="📋 复制" Click="CtxCopy_Click"/>
+          <MenuItem x:Name="ctxRefresh" Header="刷新列表" Click="CtxRefresh_Click"/>
+          <MenuItem x:Name="ctxCopy" Header="复制" Click="CtxCopy_Click"/>
         </ContextMenu>
     </DataGrid.ContextMenu>
 
@@ -169,14 +174,58 @@
           </Setter>
         </Style>
 
-        <!-- 【新增】：最左侧行头样式 (解决极窄问题) -->
-        <!--<Style TargetType="DataGridRowHeader">
-          <Setter Property="Width" Value="25"/>
-          <Setter Property="MinWidth" Value="25"/>
-          <Setter Property="Background" Value="{DynamicResource HeaderBackground}"/>
-          <Setter Property="BorderBrush" Value="{DynamicResource GridLineColor}"/>
+        <!-- 【新增】：最左侧行头样式，美化 -->
+        <Style TargetType="DataGridRowHeader">
+          <Setter Property="Width" Value="35"/>
+          <Setter Property="MinWidth" Value="35"/>
+          <Setter Property="Background" Value="{DynamicResource Brush.DataGrid.Header.Background}"/>
+          <Setter Property="BorderBrush" Value="{DynamicResource Brush.DataGrid.GridLine}"/>
           <Setter Property="BorderThickness" Value="0,0,1,1"/>
-        </Style>-->
+          <Setter Property="HorizontalContentAlignment" Value="Center"/>
+          <Setter Property="Template">
+            <Setter.Value>
+              <ControlTemplate TargetType="DataGridRowHeader">
+                <Grid>
+                  <Border x:Name="rowheaderborder"
+                          Background="{TemplateBinding Background}"
+                          BorderBrush="{TemplateBinding BorderBrush}"
+                          BorderThickness="{TemplateBinding BorderThickness}">
+                    
+                     <!--显示行号-->
+                    <TextBlock x:Name="rowheadertext"
+                               Text="{Binding RelativeSource={RelativeSource AncestorType=DataGridRow}, Path=Header}" 
+                               VerticalAlignment="Center"
+                               HorizontalAlignment="Center"
+                               Foreground="{DynamicResource Brush.DataGrid.Text.Foreground}"/>
+                  </Border>
+                   <!--关键：在这里拦截点击事件用于选中整行--> 
+                  <!--<Thumb x:Name="PART_RowHeaderGripper" Style="{StaticResource {x:Static DataGrid.RowHeaderGripperStyle}}" />-->
+                </Grid>
+
+                <ControlTemplate.Triggers>
+                  <!-- 注意：标签首字母必须大写 -->
+                  <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=DataGridRow}}" Value="True">
+                    <!-- 这里的 TargetName 必须对应上面的 x:Name -->
+                    <Setter TargetName="rowheaderborder" Property="Background" Value="{DynamicResource Brush.DataGrid.SelectedRow.Background}"/>
+                    <Setter TargetName="rowheadertext" Property="Foreground" Value="{DynamicResource Brush.DataGrid.SelectedText.Foreground}"/>
+                  </DataTrigger>
+                </ControlTemplate.Triggers>
+              </ControlTemplate>
+            </Setter.Value>
+          </Setter>
+        </Style>
+
+        <!-- 重点：处理单元格选中颜色 -->
+        <Style TargetType="DataGridCell">
+          <Setter Property="BorderThickness" Value="0"/>
+          <Style.Triggers>
+            <!-- 选中时的颜色（无论是否有焦点） -->
+            <Trigger Property="IsSelected" Value="True">
+              <Setter Property="Background" Value="{DynamicResource Brush.DataGrid.SelectedRow.Background}"/>
+              <Setter Property="Foreground" Value="{DynamicResource Brush.DataGrid.SelectedText.Foreground}"/>
+            </Trigger>
+          </Style.Triggers>
+        </Style>
 
         <!-- 选中行的样式 -->
         <Style TargetType="DataGridRow">
@@ -191,9 +240,8 @@
 
       <DataGrid.Columns>
         <!-- 根据你的 ProblemItemViewModel 属性修改 Binding -->
-        <!-- 1. 序号：固定宽度 35，居中显示 -->
-        <DataGridTextColumn Header="序号" Binding="{Binding NO}" Width="40"
-                            ElementStyle="{StaticResource CenterText}"/>
+        <!--<DataGridTextColumn Header="序号" Binding="{Binding NO}" Width="40"
+                            ElementStyle="{StaticResource CenterText}"/>-->
         <DataGridTextColumn Header="管线ID" Binding="{Binding PipeId}" Width="80"
                             ElementStyle="{StaticResource CenterText}"/>
         <DataGridTextColumn Header="位置" Binding="{Binding Location}" Width="150"

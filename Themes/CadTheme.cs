@@ -12,7 +12,7 @@ namespace process_pipeline.Forms
     public static class CadThemes
     {
         // 建议使用 pack URI 绝对路径，这是 WPF 最稳健的路径格式
-        private static readonly string ResourcePath = "pack://application:,,,/process_pipeline;component/Forms/App.xaml";
+        //private static readonly string ResourcePath = "pack://application:,,,/process_pipeline;component/Forms/App.xaml";
         private static readonly ResourceDictionary _cache = new ResourceDictionary();
 
         static CadThemes()

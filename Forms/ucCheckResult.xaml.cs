@@ -11,6 +11,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Data;
 using System.Windows.Documents;
 using System.Windows.Input;
@@ -239,6 +240,107 @@ namespace process_pipeline.Forms
                     CadThemes.ApplyCadTheme(this);
                 });
             }
+        }
+
+        // 实现点击行头选中整行
+        private void dgvProblems_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            // 获取点击位置的元素
+            DependencyObject dep = (DependencyObject)e.OriginalSource;
+
+            DependencyObject temp = dep;
+            DataGridRowHeader rowHeader = null;
+            DataGridCell cell = null;
+
+            // 检查点击的是不是行头 (RowHeader)
+            while (temp != null && temp != dgvProblems)
+            {
+                if (temp is DataGridRowHeader rh) { rowHeader = rh; break; }
+                if (temp is DataGridCell c) { cell = c; break; }
+                temp = VisualTreeHelper.GetParent(temp);
+            }
+
+            // 3. 分情况处理逻辑
+            if (rowHeader != null)
+            {
+                // --- 情况 A：点击的是【行头】 ---
+                // 我们不拦截事件 (不设 e.Handled = true)，
+                // 让 WPF 原生的 Extended 模式处理：支持拖拽多选、Shift/Ctrl 多选。
+                return;
+            }
+            else if (cell != null)
+            {
+                // --- 情况 B：点击的是【单元格】 ---
+                // 如果没有按住 Ctrl 或 Shift，我们强制执行“单选单元格”逻辑
+                if (Keyboard.Modifiers == ModifierKeys.None)
+                {
+                    // 清除所有已选中的（包括之前选中的行或单元格）
+                    dgvProblems.SelectedCells.Clear();
+            
+                    // 获取当前单元格所属的行
+                    DataGridRow row = ItemsControl.ContainerFromElement(dgvProblems, cell) as DataGridRow;
+                    if (row != null)
+                    {
+                        // 只选中当前这一个单元格
+                        DataGridCellInfo cellInfo = new DataGridCellInfo(cell);
+                        dgvProblems.SelectedCells.Add(cellInfo);
+                
+                        // 关键：确保 Row.IsSelected 为 false，防止行头亮起
+                        // 在 CellOrRowHeader 模式下，只选单元格不会让 Row.IsSelected 变 true
+                        row.IsSelected = false; 
+                    }
+            
+                    // 聚焦到 DataGrid 确保键盘操作有效
+                    dgvProblems.Focus();
+            
+                    // 注意：这里由于我们手动处理了选中，如果不希望 WPF 默认的“点击单元格累加”逻辑介入，
+                    // 我们可以不设 e.Handled，但要确保 SelectedCells.Clear() 已经执行。
+                }
+            }
+
+            //if (dep is DataGridRowHeader rowHeader)
+            //{
+            //    // 找到对应的行
+            //    var row = FindVisualParent<DataGridRow>(rowHeader);
+            //    if (row == null) // 有时中间隔着一层 Grid
+            //    {
+            //        row = ItemsControl.ContainerFromElement(dgvProblems, rowHeader) as DataGridRow;
+            //    }
+
+            //    if (row != null)
+            //    {   
+            //        // 切换回“行选中”模式，选中该行，再切回“单元格”模式
+            //        // 或者直接手动操作 SelectedCells
+            //        //dgvProblems.SelectedCells.Clear();
+
+            //        //foreach (var column in dgvProblems.Columns)
+            //        //{
+            //        //    dgvProblems.SelectedCells.Add(new DataGridCellInfo(row.Item, column));
+            //        //}
+            //        row.IsSelected = true;
+            //        e.Handled = true; // 拦截事件，防止触发默认的单元格点击
+            //    }
+            //}
+        }
+
+        // 辅助方法：向上查找父级控件
+        private T FindVisualParent<T>(DependencyObject child) where T : DependencyObject
+        {
+            DependencyObject parentObject = VisualTreeHelper.GetParent(child);
+            if (parentObject == null) return null;
+            if (parentObject is T parent) return parent;
+            return FindVisualParent<T>(parentObject);
+        }
+
+        private void dgvProblems_LoadingRow(object sender, DataGridRowEventArgs e)
+        {
+            // 获取当前行索引并加1 
+            e.Row.Header = (e.Row.GetIndex() + 1).ToString();
+        }
+
+        private void dgvProblems_Loaded(object sender, RoutedEventArgs e)
+        {
+
         }
     }
 
