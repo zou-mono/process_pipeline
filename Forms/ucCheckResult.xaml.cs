@@ -342,6 +342,37 @@ namespace process_pipeline.Forms
         {
 
         }
+
+        private void dgvProblems_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+        {
+                // 获取点击位置的元素
+            DependencyObject dep = (DependencyObject)e.OriginalSource;
+
+            // 向上查找点击的是哪一行
+            while ((dep != null) && !(dep is DataGridRow))
+            {
+                dep = VisualTreeHelper.GetParent(dep);
+            }
+
+            if (dep is DataGridRow row)
+            {
+                // 核心逻辑：如果点击的这一行本身已经是选中状态，不做任何处理（让右键菜单正常弹出）
+                // 如果点击的是未选中的行，拦截点击事件，不让 DataGrid 改变选中项
+                if (!row.IsSelected)
+                {
+                    e.Handled = true; // 拦截事件，DataGrid 就不会收到点击信号，也就不会改变选中状态
+
+                    // 如果你依然希望在未选中行上弹出右键菜单，可以手动触发：
+                    // row.ContextMenu?.IsOpen = true;
+                    var contextMenu = row.ContextMenu ?? dgvProblems.ContextMenu;
+                    if (contextMenu != null)
+                            {
+                        contextMenu.PlacementTarget = row; // 设置弹出位置参考
+                        contextMenu.IsOpen = true;
+                    }
+                }
+            }
+        }
     }
 
     public class palCheckResult : IDisposable

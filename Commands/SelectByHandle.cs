@@ -96,7 +96,7 @@ namespace process_pipeline.Commands
                         Entity ent = tr.GetObject(oid, OpenMode.ForRead) as Entity;
                         if (ent == null) continue;
 
-                        ent.Highlight();  // 高亮当前实体
+                        //ent.Highlight();  // 高亮当前实体
 
                         if (bZoomToExtent) 
                         { 
@@ -105,7 +105,7 @@ namespace process_pipeline.Commands
                             
                         hasValidEntity = true;    
                     }
-                    tr.Commit();
+                    //tr.Commit();
                     //Ed.WriteMessage($"\n成功：已选中句柄为 [{handleStr}] 的要素，并跳转到其范围！");
                 }
 

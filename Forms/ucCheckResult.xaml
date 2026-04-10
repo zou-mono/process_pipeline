@@ -17,7 +17,7 @@
     </ResourceDictionary>
   </UserControl.Resources>
 
-  <Grid>
+  <Grid HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Margin="5">
     <Grid.RowDefinitions>
       <!--高度由里面的控件（比如按钮）自动撑开-->
       <!--<RowDefinition Height="15.341"/>
@@ -38,9 +38,9 @@
         <Button x:Name="btnReversePolyline" Content="一键修复 🛠️" Style="{StaticResource CadFlatButton}" Click="btnReversePolyline_Click"/>
       </StackPanel>
     </Border>-->
-
-    <!-- 数据表格 -->
-    <DataGrid x:Name="dgvProblems" Grid.Row="0" Margin="5,5,5,5" 
+     
+        <!-- 数据表格 -->
+    <DataGrid x:Name="dgvProblems" Grid.Row="0" Margin="0"
               AutoGenerateColumns="False" 
               CanUserAddRows="False" 
               IsReadOnly="True"
@@ -55,11 +55,12 @@
               HorizontalGridLinesBrush="{DynamicResource Brush.DataGrid.GridLine}"
               VerticalGridLinesBrush="{DynamicResource Brush.DataGrid.GridLine}"
               HeadersVisibility="All"
-              Grid.RowSpan="1"
+              VerticalScrollBarVisibility="Visible"
+              HorizontalScrollBarVisibility="Visible"
               MouseDoubleClick="dgvProblems_MouseDoubleClick"
               SelectionChanged="dgvProblems_SelectionChanged"
               PreviewMouseLeftButtonDown="dgvProblems_PreviewMouseLeftButtonDown"
-              LoadingRow="dgvProblems_LoadingRow" Loaded="dgvProblems_Loaded">
+              LoadingRow="dgvProblems_LoadingRow" Loaded="dgvProblems_Loaded" PreviewMouseRightButtonDown="dgvProblems_PreviewMouseRightButtonDown">
 
       <!-- ====================== 【新增：右键菜单】 ====================== -->
       <DataGrid.ContextMenu>
@@ -69,19 +70,19 @@
             <MenuItem.Icon>
               <!-- 可以使用矢量图标、图片或Path -->
               <Path Data="{StaticResource Icon_ZoomToExtent}" Stretch="Uniform" Width="16" Height="16" 
-                    Fill="{DynamicResource Brush.CadBlue}"/>
+                      Fill="{DynamicResource Brush.CadBlue}"/>
             </MenuItem.Icon>
           </MenuItem>
-                    
+
           <!--<MenuItem x:Name="ctxFix" Header="🛠️ 一键修复当前项" Click="CtxFix_Click"/>-->
           <!--<Separator/>-->
           <!-- 分隔线 -->
           <MenuItem x:Name="ctxRefresh" Header="刷新列表" Click="CtxRefresh_Click"/>
           <MenuItem x:Name="ctxCopy" Header="复制" Click="CtxCopy_Click"/>
         </ContextMenu>
-    </DataGrid.ContextMenu>
+      </DataGrid.ContextMenu>
 
-    <!-- 【新增】：在 DataGrid 内部定义专属的单元格文字样式 -->
+      <!-- 【新增】：在 DataGrid 内部定义专属的单元格文字样式 -->
       <DataGrid.Resources>
         <!-- 1. 居中对齐样式 (作为默认主力) -->
         <Style x:Key="CenterText" TargetType="TextBlock">
@@ -114,9 +115,9 @@
                 <Grid>
                   <!-- 主体背景和内容 -->
                   <Border x:Name="HeaderBorder" 
-                            Background="{TemplateBinding Background}" 
-                            BorderThickness="{TemplateBinding BorderThickness}" 
-                            BorderBrush="{TemplateBinding BorderBrush}">
+                              Background="{TemplateBinding Background}" 
+                              BorderThickness="{TemplateBinding BorderThickness}" 
+                              BorderBrush="{TemplateBinding BorderBrush}">
                     <Grid Margin="{TemplateBinding Padding}">
                       <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
@@ -124,16 +125,16 @@
                       </Grid.ColumnDefinitions>
 
                       <ContentPresenter Grid.Column="0" 
-                                              HorizontalAlignment="Center" 
-                                              VerticalAlignment="Center"/>
+                                                HorizontalAlignment="Center" 
+                                                VerticalAlignment="Center"/>
 
                       <Path x:Name="SortArrow" 
-                                  Grid.Column="1"
-                                  Visibility="Collapsed" 
-                                  Data="M 0,4 L 4,0 L 8,4 Z" 
-                                  Fill="{TemplateBinding Foreground}" 
-                                  Margin="5,0,2,0" 
-                                  VerticalAlignment="Center" />
+                                    Grid.Column="1"
+                                    Visibility="Collapsed" 
+                                    Data="M 0,4 L 4,0 L 8,4 Z" 
+                                    Fill="{TemplateBinding Foreground}" 
+                                    Margin="5,0,2,0" 
+                                    VerticalAlignment="Center" />
                     </Grid>
                   </Border>
 
@@ -142,10 +143,10 @@
 
                   <!-- 【关键新增】：右侧缩放抓手 (必须有它才能调宽) -->
                   <Thumb x:Name="PART_RightHeaderGripper" 
-                           HorizontalAlignment="Right" 
-                           Width="8" 
-                           Cursor="SizeWE" 
-                           Background="Transparent">
+                             HorizontalAlignment="Right" 
+                             Width="8" 
+                             Cursor="SizeWE" 
+                             Background="Transparent">
                     <Thumb.Template>
                       <ControlTemplate TargetType="Thumb">
                         <!-- 抓手本身是透明的，不影响视觉 -->
@@ -187,18 +188,18 @@
               <ControlTemplate TargetType="DataGridRowHeader">
                 <Grid>
                   <Border x:Name="rowheaderborder"
-                          Background="{TemplateBinding Background}"
-                          BorderBrush="{TemplateBinding BorderBrush}"
-                          BorderThickness="{TemplateBinding BorderThickness}">
-                    
-                     <!--显示行号-->
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}">
+
+                    <!--显示行号-->
                     <TextBlock x:Name="rowheadertext"
-                               Text="{Binding RelativeSource={RelativeSource AncestorType=DataGridRow}, Path=Header}" 
-                               VerticalAlignment="Center"
-                               HorizontalAlignment="Center"
-                               Foreground="{DynamicResource Brush.DataGrid.Text.Foreground}"/>
+                                 Text="{Binding RelativeSource={RelativeSource AncestorType=DataGridRow}, Path=Header}" 
+                                 VerticalAlignment="Center"
+                                 HorizontalAlignment="Center"
+                                 Foreground="{DynamicResource Brush.DataGrid.Text.Foreground}"/>
                   </Border>
-                   <!--关键：在这里拦截点击事件用于选中整行--> 
+                  <!--关键：在这里拦截点击事件用于选中整行-->
                   <!--<Thumb x:Name="PART_RowHeaderGripper" Style="{StaticResource {x:Static DataGrid.RowHeaderGripperStyle}}" />-->
                 </Grid>
 
@@ -241,13 +242,13 @@
       <DataGrid.Columns>
         <!-- 根据你的 ProblemItemViewModel 属性修改 Binding -->
         <!--<DataGridTextColumn Header="序号" Binding="{Binding NO}" Width="40"
-                            ElementStyle="{StaticResource CenterText}"/>-->
+                              ElementStyle="{StaticResource CenterText}"/>-->
         <DataGridTextColumn Header="管线ID" Binding="{Binding PipeId}" Width="80"
-                            ElementStyle="{StaticResource CenterText}"/>
+                              ElementStyle="{StaticResource CenterText}"/>
         <DataGridTextColumn Header="位置" Binding="{Binding Location}" Width="150"
-                            ElementStyle="{StaticResource CenterText}"/>
-        <DataGridTextColumn Header="问题描述" Binding="{Binding Description}" Width="*" MinWidth="250"
-                            ElementStyle="{StaticResource LeftText}"/>
+                              ElementStyle="{StaticResource CenterText}"/>
+        <DataGridTextColumn Header="问题描述" Binding="{Binding Description}" Width="350"
+                              ElementStyle="{StaticResource LeftText}"/>
       </DataGrid.Columns>
 
       <DataGrid.RowStyle>

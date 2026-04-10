@@ -12,6 +12,8 @@
   <Color x:Key="WarningColor">#FF9800</Color>
   <Color x:Key="InfoColor">#2196F3</Color>
 
+  <Color x:Key="RowSelectedColor">#1E5E96</Color>
+
   <!--<Color x:Key="PanelBackgroundColor">#F0F0F0</Color>
   <Color x:Key="HeaderBackground">#45464A</Color>
   <Color x:Key="RowBackground">#2D2D30</Color>
@@ -46,5 +48,5 @@
 
   <!-- 列表/表格类 -->
   <SolidColorBrush x:Key="Cad_GridLine" Color="#555555" />
-  <SolidColorBrush x:Key="Cad_SelectedRow" Color="#1E5E96" />
+  <SolidColorBrush x:Key="Cad_SelectedRow" Color="{StaticResource RowSelectedColor}" />
 </ResourceDictionary>
