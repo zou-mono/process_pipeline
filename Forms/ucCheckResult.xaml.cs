@@ -198,9 +198,6 @@ namespace process_pipeline.Forms
 
         private void dgvProblems_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            // 只有当用户真的选择了东西（且不是在初始化加载时）才触发
-            if (!dgvProblems.IsLoaded || dgvProblems.SelectedItems.Count == 0) return;
-
             // 3. 统一执行 CAD 任务
             ExecuteCadSelection(false); 
         }
@@ -212,12 +209,14 @@ namespace process_pipeline.Forms
 
         private void CtxZoomToExtent_Click(object sender, RoutedEventArgs e)
         {
-
+            // 3. 统一执行 CAD 任务
+            ExecuteCadSelection(true); 
         }
 
         private void CtxRefresh_Click(object sender, RoutedEventArgs e)
         {
-
+            var service = new FlowArrowService(doc.Database, doc.Editor, useEditor: false);
+            service.Run(Properties.Settings.Default.taskFlowArrow, true);
         }
 
         private void CtxCopy_Click(object sender, RoutedEventArgs e)
@@ -366,7 +365,7 @@ namespace process_pipeline.Forms
                     // row.ContextMenu?.IsOpen = true;
                     var contextMenu = row.ContextMenu ?? dgvProblems.ContextMenu;
                     if (contextMenu != null)
-                            {
+                    {
                         contextMenu.PlacementTarget = row; // 设置弹出位置参考
                         contextMenu.IsOpen = true;
                     }
