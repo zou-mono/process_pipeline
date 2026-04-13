@@ -84,7 +84,15 @@
                       Fill="{DynamicResource Brush.CadBlue}"/>
             </MenuItem.Icon>
           </MenuItem>
-          <MenuItem x:Name="ctxCopy" Header="复制" Click="CtxCopy_Click"/>
+          
+          <MenuItem x:Name="ctxCopy" Header="复制" Click="CtxCopy_Click">
+            <MenuItem.Icon>
+              <!-- 可以使用矢量图标、图片或Path -->
+              <Image Source="{StaticResource Icon_Copy}" Width="16" Height="16"/>
+            </MenuItem.Icon>
+           </MenuItem>
+
+          <MenuItem x:Name="ctxSelection" Header="选择/取消" Click="CtxSelection_Click"/>
 
           <!--<MenuItem x:Name="ctxFix" Header="🛠️ 一键修复当前项" Click="CtxFix_Click"/>-->
           <Separator/>

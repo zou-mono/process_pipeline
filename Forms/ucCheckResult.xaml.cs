@@ -176,19 +176,19 @@ namespace process_pipeline.Forms
             }
         }
 
-        private void btnRefresh_Click(object sender, RoutedEventArgs e)
-        {
-            var service = new FlowArrowService(doc.Database, doc.Editor, useEditor: false);
-            service.Run(Properties.Settings.Default.taskFlowArrow, true);
-        }
+        //private void btnRefresh_Click(object sender, RoutedEventArgs e)
+        //{
+        //    var service = new FlowArrowService(doc.Database, doc.Editor, useEditor: false);
+        //    service.Run(Properties.Settings.Default.taskFlowArrow, true);
+        //}
 
-        private void btnReversePolyline_Click(object sender, RoutedEventArgs e)
-        {
-            ReversePolylineCommands rpc = new ReversePolylineCommands();
-            rpc.Execute();
+        //private void btnReversePolyline_Click(object sender, RoutedEventArgs e)
+        //{
+        //    ReversePolylineCommands rpc = new ReversePolylineCommands();
+        //    rpc.Execute();
 
-            PaletteRefreshManager.TriggerPaletteRefreshIfNeeded();
-        }
+        //    PaletteRefreshManager.TriggerPaletteRefreshIfNeeded();
+        //}
 
         private void DataGridRow_Click(object sender, MouseButtonEventArgs e)
         {
@@ -223,8 +223,11 @@ namespace process_pipeline.Forms
 
         private void CtxRefresh_Click(object sender, RoutedEventArgs e)
         {
-            var service = new FlowArrowService(doc.Database, doc.Editor, useEditor: false);
-            service.Run(Properties.Settings.Default.taskFlowArrow, true);
+            Dispatcher.Invoke(() =>
+            {
+                var service = new FlowArrowService(doc.Database, doc.Editor, useEditor: false);
+                service.Run(Properties.Settings.Default.taskFlowArrow, true);
+            });
         }
 
         private void CtxCopy_Click(object sender, RoutedEventArgs e)
@@ -239,25 +242,19 @@ namespace process_pipeline.Forms
                 cm.IsOpen = false;
             }
 
-            Dispatcher.BeginInvoke(new Action(() =>
+            dgvProblems.Dispatcher.BeginInvoke(new Action(() =>
             {
                 TryCopy(CopyFormat.Smart);
             }), System.Windows.Threading.DispatcherPriority.Background);
+        }
 
-            //// 2. 延迟 100 毫秒执行，避开菜单关闭时的 UI 消息高峰
-            //var timer = new System.Windows.Threading.DispatcherTimer 
-            //{ 
-            //    Interval = TimeSpan.FromMilliseconds(100) 
-            //};
-            //timer.Tick += (s, args) => 
-            //{
-            //    timer.Stop();
-            //    TryCopy(CopyFormat.Smart);
-            //};
-            //timer.Start();
-
-            //AcadApp.Idle += OnAcadIdleCopy;
-            //TryCopy(CopyFormat.Smart);
+        private void CtxSelection_Click(object sender, RoutedEventArgs e)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                //var service = new FlowArrowService(doc.Database, doc.Editor, useEditor: false);
+                //service.Run(Properties.Settings.Default.taskFlowArrow, true);
+            });
         }
 
         // 拦截 Ctrl+C 快捷键
@@ -371,7 +368,7 @@ namespace process_pipeline.Forms
                 dep = VisualTreeHelper.GetParent(dep);
             }
 
-            UpdateCopyMenuState();
+            UpdateMenuState();
 
             if (dep is DataGridRow row)
             {
@@ -393,11 +390,15 @@ namespace process_pipeline.Forms
             }
         }
 
-        private void UpdateCopyMenuState()
+        private void UpdateMenuState()
         {
             bool has = DataGridCopyHelper.HasSelection(dgvProblems);
 
             if (ctxCopy != null) ctxCopy.IsEnabled = has;
+
+            has = (dgvProblems.SelectedItems != null && dgvProblems.SelectedItems.Count > 0);
+
+            if (ctxZoomToExtent != null) ctxZoomToExtent.IsEnabled = has;
         }
 
         private void TryCopy(CopyFormat fmt)
