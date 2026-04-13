@@ -6,8 +6,8 @@
              xmlns:local="clr-namespace:process_pipeline.Forms"
              mc:Ignorable="d" 
              d:DesignHeight="450" d:DesignWidth="800"
-             Background="#333333" Foreground="#F0F0F0" SizeChanged="UserControl_SizeChanged" Loaded="UserControl_Loaded">
-  
+             Background="#333333" Foreground="#F0F0F0" SizeChanged="UserControl_SizeChanged" Loaded="UserControl_Loaded" MouseEnter="UserControl_MouseEnter">
+
   <!-- 替换 WinForms 的默认 Control 颜色，适配 CAD 深色 -->
   <UserControl.Resources>
     <ResourceDictionary>
@@ -18,29 +18,39 @@
   </UserControl.Resources>
 
   <Grid HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Margin="5">
+    <Grid.ColumnDefinitions>
+      <ColumnDefinition Width="391*"/>
+      <ColumnDefinition Width="4*"/>
+    </Grid.ColumnDefinitions>
     <Grid.RowDefinitions>
       <!--高度由里面的控件（比如按钮）自动撑开-->
       <!--<RowDefinition Height="15.341"/>
       <RowDefinition Height="16.899"/>
-      --><!--WPF 里的 DockStyle.Fill！意思是占据所有剩余空间--><!--
+      -->
+      <!--WPF 里的 DockStyle.Fill！意思是占据所有剩余空间-->
+      <!--
       <RowDefinition Height="60*"/>
       <RowDefinition Height="279*"/>
       <RowDefinition Height="21*"/>
       <RowDefinition Height="58*"/>-->
-      <RowDefinition Height="*"/>
+      <RowDefinition Height="38*"/>
+      <RowDefinition Height="17*"/>
     </Grid.RowDefinitions>
 
-    <!-- 顶部工具栏：使用 StackPanel，背景设为稍暗的颜色区分层次 --><!--
+    <!-- 顶部工具栏：使用 StackPanel，背景设为稍暗的颜色区分层次 -->
+    <!--
     <Border Grid.Row="0" Background="#2D2D2D" BorderBrush="#111111" BorderThickness="0,0,0,1" Grid.RowSpan="2">
       <StackPanel Orientation="Horizontal" Margin="2">
-         --><!--应用刚才定义的样式：Style="{StaticResource CadFlatButton}"--><!-- 
+         -->
+    <!--应用刚才定义的样式：Style="{StaticResource CadFlatButton}"-->
+    <!-- 
         <Button x:Name="btnRefresh" Content="刷新 🔄" Style="{StaticResource CadFlatButton}" Click="btnRefresh_Click"/>
         <Button x:Name="btnReversePolyline" Content="一键修复 🛠️" Style="{StaticResource CadFlatButton}" Click="btnReversePolyline_Click"/>
       </StackPanel>
     </Border>-->
-     
-        <!-- 数据表格 -->
-    <DataGrid x:Name="dgvProblems" Grid.Row="0" Margin="0"
+
+    <!-- 数据表格 -->
+    <DataGrid x:Name="dgvProblems" Grid.Row="0"
               AutoGenerateColumns="False" 
               CanUserAddRows="False" 
               IsReadOnly="True"
@@ -59,8 +69,9 @@
               HorizontalScrollBarVisibility="Visible"
               MouseDoubleClick="dgvProblems_MouseDoubleClick"
               SelectionChanged="dgvProblems_SelectionChanged"
+              ClipboardCopyMode="None"
               PreviewMouseLeftButtonDown="dgvProblems_PreviewMouseLeftButtonDown"
-              LoadingRow="dgvProblems_LoadingRow" Loaded="dgvProblems_Loaded" PreviewMouseRightButtonDown="dgvProblems_PreviewMouseRightButtonDown">
+              LoadingRow="dgvProblems_LoadingRow" Loaded="dgvProblems_Loaded" PreviewMouseRightButtonDown="dgvProblems_PreviewMouseRightButtonDown" Grid.ColumnSpan="2" Grid.RowSpan="2">
 
       <!-- ====================== 【新增：右键菜单】 ====================== -->
       <DataGrid.ContextMenu>
@@ -81,6 +92,10 @@
           <MenuItem x:Name="ctxRefresh" Header="刷新" Click="CtxRefresh_Click"/>
         </ContextMenu>
       </DataGrid.ContextMenu>
+
+      <DataGrid.CommandBindings>
+        <CommandBinding Command="Copy" Executed="DataGrid_ExecuteCopy" />
+      </DataGrid.CommandBindings>
 
       <!-- 【新增】：在 DataGrid 内部定义专属的单元格文字样式 -->
       <DataGrid.Resources>

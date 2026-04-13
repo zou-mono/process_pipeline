@@ -42,6 +42,14 @@ namespace process_pipeline.Forms
         // 自定义事件
         public event EventHandler ProblemsChanged;
 
+        private readonly DataGridCopyOptions _copyOptions = new DataGridCopyOptions
+        {
+            IncludeHeader = true,
+            VisibleColumnsOnly = true,
+            KeepDisplayOrder = true,
+            KeepSelectionOrder = true
+        };
+
         public ucCheckResult(Dictionary<ObjectId, ProblemItem> problems)
         {
             InitializeComponent();
@@ -221,7 +229,41 @@ namespace process_pipeline.Forms
 
         private void CtxCopy_Click(object sender, RoutedEventArgs e)
         {
+             // 只要 SelectedItems 有东西，说明用户选中了至少一行（通过行头点击）, 此时我们带上表头
+             _copyOptions.IncludeHeader = (dgvProblems.SelectedItems != null && dgvProblems.SelectedItems.Count > 0);
 
+            // 1. 【核心】立即手动关闭右键菜单
+            // 很多时候是菜单这个窗口本身占用了剪贴板相关的 Win32 消息
+            if (sender is System.Windows.Controls.MenuItem mi && mi.Parent is ContextMenu cm)
+            {
+                cm.IsOpen = false;
+            }
+
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                TryCopy(CopyFormat.Smart);
+            }), System.Windows.Threading.DispatcherPriority.Background);
+
+            //// 2. 延迟 100 毫秒执行，避开菜单关闭时的 UI 消息高峰
+            //var timer = new System.Windows.Threading.DispatcherTimer 
+            //{ 
+            //    Interval = TimeSpan.FromMilliseconds(100) 
+            //};
+            //timer.Tick += (s, args) => 
+            //{
+            //    timer.Stop();
+            //    TryCopy(CopyFormat.Smart);
+            //};
+            //timer.Start();
+
+            //AcadApp.Idle += OnAcadIdleCopy;
+            //TryCopy(CopyFormat.Smart);
+        }
+
+        // 拦截 Ctrl+C 快捷键
+        private void DataGrid_ExecuteCopy(object sender, ExecutedRoutedEventArgs e)
+        {
+            TryCopy(CopyFormat.Smart);
         }
 
         private void UserControl_Loaded(object sender, RoutedEventArgs e)
@@ -296,30 +338,6 @@ namespace process_pipeline.Forms
                     // 我们可以不设 e.Handled，但要确保 SelectedCells.Clear() 已经执行。
                 }
             }
-
-            //if (dep is DataGridRowHeader rowHeader)
-            //{
-            //    // 找到对应的行
-            //    var row = FindVisualParent<DataGridRow>(rowHeader);
-            //    if (row == null) // 有时中间隔着一层 Grid
-            //    {
-            //        row = ItemsControl.ContainerFromElement(dgvProblems, rowHeader) as DataGridRow;
-            //    }
-
-            //    if (row != null)
-            //    {   
-            //        // 切换回“行选中”模式，选中该行，再切回“单元格”模式
-            //        // 或者直接手动操作 SelectedCells
-            //        //dgvProblems.SelectedCells.Clear();
-
-            //        //foreach (var column in dgvProblems.Columns)
-            //        //{
-            //        //    dgvProblems.SelectedCells.Add(new DataGridCellInfo(row.Item, column));
-            //        //}
-            //        row.IsSelected = true;
-            //        e.Handled = true; // 拦截事件，防止触发默认的单元格点击
-            //    }
-            //}
         }
 
         // 辅助方法：向上查找父级控件
@@ -353,6 +371,8 @@ namespace process_pipeline.Forms
                 dep = VisualTreeHelper.GetParent(dep);
             }
 
+            UpdateCopyMenuState();
+
             if (dep is DataGridRow row)
             {
                 // 核心逻辑：如果点击的这一行本身已经是选中状态，不做任何处理（让右键菜单正常弹出）
@@ -372,7 +392,37 @@ namespace process_pipeline.Forms
                 }
             }
         }
+
+        private void UpdateCopyMenuState()
+        {
+            bool has = DataGridCopyHelper.HasSelection(dgvProblems);
+
+            if (ctxCopy != null) ctxCopy.IsEnabled = has;
+        }
+
+        private void TryCopy(CopyFormat fmt)
+        {
+            try
+            {
+                if (!DataGridCopyHelper.HasSelection(dgvProblems))
+                    return;
+
+                DataGridCopyHelper.CopyToClipboard(dgvProblems, fmt, _copyOptions);
+            }
+            catch (Exception ex)
+            {
+                //AcadApp.DocumentManager.MdiActiveDocument.Editor.WriteMessage($"\n复制失败: {ex.Message}");
+                //MessageBox.Show($"复制失败：{ex.Message}", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+
+        private void UserControl_MouseEnter(object sender, MouseEventArgs e)
+        {
+            this.Focus();
+            dgvProblems.Focus();
+        }
     }
+
 
     public class palCheckResult : IDisposable
     {

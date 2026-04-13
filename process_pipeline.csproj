@@ -88,6 +88,7 @@
     <Compile Include="Commands\SelectByHandle.cs" />
     <Compile Include="Core\CadBase.cs" />
     <Compile Include="Core\ICadCommand.cs" />
+    <Compile Include="Forms\DataGridCopyHelper.cs" />
     <Compile Include="Themes\CadTheme.cs" />
     <Compile Include="Forms\ucCheckResult.xaml.cs">
       <DependentUpon>ucCheckResult.xaml</DependentUpon>
