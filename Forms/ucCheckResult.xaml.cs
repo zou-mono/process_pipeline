@@ -250,11 +250,21 @@ namespace process_pipeline.Forms
 
         private void CtxSelection_Click(object sender, RoutedEventArgs e)
         {
-            Dispatcher.Invoke(() =>
+            // 从 Tag 中取出刚才存下的行对象
+            if (dgvProblems.Tag is DataGridRow row)
             {
-                //var service = new FlowArrowService(doc.Database, doc.Editor, useEditor: false);
-                //service.Run(Properties.Settings.Default.taskFlowArrow, true);
-            });
+                // 执行反转逻辑
+                // row.IsSelected 会自动同步 SelectedItems，从而配合你的复制逻辑
+                row.IsSelected = !row.IsSelected;
+
+                // 执行完后可以清空 Tag（可选）
+                dgvProblems.Tag = null;
+
+                ExecuteCadSelection(false); 
+
+                // 强制焦点回到 DataGrid，防止 AutoCAD 干扰
+                dgvProblems.Focus();
+            }
         }
 
         // 拦截 Ctrl+C 快捷键
@@ -372,6 +382,8 @@ namespace process_pipeline.Forms
 
             if (dep is DataGridRow row)
             {
+                dgvProblems.Tag = row;
+
                 // 核心逻辑：如果点击的这一行本身已经是选中状态，不做任何处理（让右键菜单正常弹出）
                 // 如果点击的是未选中的行，拦截点击事件，不让 DataGrid 改变选中项
                 if (!row.IsSelected)
