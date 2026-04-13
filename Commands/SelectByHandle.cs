@@ -26,7 +26,14 @@ namespace process_pipeline.Commands
 
     public class SelectByHandleService : CadBase
     {
-        public SelectByHandleService(Autodesk.AutoCAD.DatabaseServices.Database db, Editor ed) : base(db, ed) { }
+        short _gripLimit = 100; // 默认夹点上限值
+
+        public SelectByHandleService(Autodesk.AutoCAD.DatabaseServices.Database db, Editor ed) : base(db, ed) {
+            _gripLimit = CadConfig.GripLimit;
+            
+            // 夹点上限值
+            Application.SetSystemVariable("GRIPOBJLIMIT", _gripLimit);
+        }
 
         protected override void ExecuteVoid(ProgressContext context, List<ObjectId> objectids) { }
 
@@ -96,7 +103,7 @@ namespace process_pipeline.Commands
                         Entity ent = tr.GetObject(oid, OpenMode.ForRead) as Entity;
                         if (ent == null) continue;
 
-                        //ent.Highlight();  // 高亮当前实体
+                        ent.Highlight();  // 高亮当前实体
 
                         if (bZoomToExtent) 
                         { 
@@ -118,10 +125,29 @@ namespace process_pipeline.Commands
                 // 2. 批量设置为当前选中（夹点、高亮等）
                 Ed.SetImpliedSelection(objectIds);
 
+                if (objectIds.Length > _gripLimit && _gripLimit > 0)
+                {
+                    // 3. 如果超过上限，只取前 gripLimit 个
+                    ObjectId[] limitedIds = objectIds.Take(_gripLimit).ToArray();
+    
+                    // 执行选中
+                    Ed.SetImpliedSelection(limitedIds);
+    
+                    // 可选：给用户一个提示，告诉他们为什么没全选
+                    Ed.WriteMessage($"\n提示：选中的对象总数({objectIds.Length})超过了系统夹点限制({_gripLimit})，已为您选中前 {_gripLimit} 个。");
+                }
+                else
+                {
+                    // 4. 没超过上限，正常全选
+                    Ed.SetImpliedSelection(objectIds);
+                }
+
                 if (bZoomToExtent) 
                 { 
                     Ed.ZoomToExtents(totalExtents);
                 }
+
+                //Ed.Regen();
             }
             catch (System.Exception ex)
             {

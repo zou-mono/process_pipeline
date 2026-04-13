@@ -244,6 +244,7 @@ namespace process_pipeline.Core
         // 【新增】全局参数，并赋予默认值（防止配置文件里没写或者写错了）
         public static double MaxBufferDistance { get; private set; } = 50.0; 
         public static double AngleTolerance { get; private set; } = 30.0;
+        public static short GripLimit { get; private set; } = 500;
 
         private static readonly string[] DefaultPipeLayers = new string[]
         {
@@ -327,6 +328,9 @@ namespace process_pipeline.Core
                                 else if (key == "AngleTolerance" && double.TryParse(value, out double angleTol))
                                 {
                                     AngleTolerance = angleTol;
+                                }
+                                else if (key == "GripLimit" && short.TryParse(value, out short c)) { 
+                                    GripLimit = c;
                                 }
                             }
                         }
@@ -434,6 +438,7 @@ namespace process_pipeline.Core
                 "[Settings]",
                 $"MaxBufferDistance={MaxBufferDistance}",
                 $"AngleTolerance={AngleTolerance}",
+                $"GripLimit={GripLimit}",
                 "",
                 "[PipeLayers]"
             };
