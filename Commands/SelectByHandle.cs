@@ -123,7 +123,7 @@ namespace process_pipeline.Commands
                 }
 
                 // 2. 批量设置为当前选中（夹点、高亮等）
-                Ed.SetImpliedSelection(objectIds);
+                //Ed.SetImpliedSelection(objectIds);
 
                 if (objectIds.Length > _gripLimit && _gripLimit > 0)
                 {
