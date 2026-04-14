@@ -103,7 +103,7 @@ namespace process_pipeline.Commands
                         Entity ent = tr.GetObject(oid, OpenMode.ForRead) as Entity;
                         if (ent == null) continue;
 
-                        ent.Highlight();  // 高亮当前实体
+                        //ent.Highlight();  // 高亮当前实体
 
                         if (bZoomToExtent) 
                         { 

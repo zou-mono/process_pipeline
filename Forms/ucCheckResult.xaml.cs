@@ -1,5 +1,6 @@
 ﻿using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
+using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Windows;
 using process_pipeline.Commands;
 using process_pipeline.Utils;
@@ -30,15 +31,18 @@ namespace process_pipeline.Forms
     {
         // 核心数据字典
         private Dictionary<ObjectId, ProblemItem> _currentProblems = new Dictionary<ObjectId, ProblemItem>();
-        
+
         // WPF 专用的可观察集合，绑定到界面后，增删数据会自动刷新 UI
         private ObservableCollection<ProblemItemViewModel> _observableList = new ObservableCollection<ProblemItemViewModel>();
 
         // 暴露给外部的只读字典
         public IReadOnlyDictionary<ObjectId, ProblemItem> CurrentProblems => _currentProblems;
 
-        private Document doc;
+        // 在类定义中增加一个私有字典
+        private Dictionary<ObjectId, ProblemItemViewModel> _idToViewModelMap = new Dictionary<ObjectId, ProblemItemViewModel>();
 
+        private Document doc;
+        private bool _isSyncing = false;  // 防止CAD图纸和DataGrid选中状态的“循环触发”冲突
         // 自定义事件
         public event EventHandler ProblemsChanged;
 
@@ -71,6 +75,8 @@ namespace process_pipeline.Forms
 
             // 2. 订阅系统变量改变事件
             AcadApp.SystemVariableChanged += AcadApp_SystemVariableChanged;
+
+            doc.ImpliedSelectionChanged += Editor_ImpliedSelectionChanged;
         }
 
         // 【修改 3】: 数据填充逻辑优化
@@ -82,22 +88,27 @@ namespace process_pipeline.Forms
             Dispatcher.Invoke(() =>
             {
                 _observableList.Clear();
-                
+
                 int index = 1; // 用于生成序号 NO
 
                 // 先筛选：只保留未修复的原始项
                 var filteredItems = _currentProblems
                     .Where(p => p.Value.IsFixed == false && !p.Value.PipeId.IsErased && !p.Value.PipeId.IsNull)
                     .ToList();
-                    
+
 
                 foreach (var kvp in filteredItems)
                 {
                     ProblemItem originalItem = kvp.Value;
-                    
-                    _observableList.Add(new ProblemItemViewModel(index++, kvp.Value));
+
+                    var vm = new ProblemItemViewModel(index++, kvp.Value);
+                    _observableList.Add(vm);
+
+                    // 【新增】：存入索引字典
+                    if (!kvp.Value.PipeId.IsNull)
+                        _idToViewModelMap[kvp.Value.PipeId] = vm;
                 }
-            }); 
+            });
         }
 
         public void UpdateProblems(Dictionary<ObjectId, ProblemItem> newProblems)
@@ -119,40 +130,50 @@ namespace process_pipeline.Forms
         // 将原先 SelectionChanged 里的 CAD 跳转逻辑提炼成独立方法
         private void ExecuteCadSelection(bool IsZoomTo = false)
         {
-            // 确保有选中的行（WPF DataGrid 用 SelectedItems）
-            if (dgvProblems.SelectedItems == null || dgvProblems.SelectedItems.Count == 0) 
-                return;
+            if (_isSyncing) return;
+            _isSyncing = true;
 
-            // 获取所有选中的 ProblemItem（WPF 直接强转绑定项，无需 DataBoundItem）
-            var selectedItems = dgvProblems.SelectedItems
-                .Cast<ProblemItemViewModel>()
-                .Where(vm => vm != null && vm.OriginalItem != null)
-                .Select(vm => vm.OriginalItem)
-                .ToList();
-
-            if (selectedItems.Count == 0) return;
-
-            var objectIds = selectedItems.Select(p => p.PipeId).ToArray();
-            SelectByHandleService sbh = new SelectByHandleService(doc.Database, doc.Editor);
-            sbh.SelectByHandles(objectIds, IsZoomTo);  // 只选择，不跳转
-
-            //if (objectIds.Count() > 500)  // 太多了就不计算整体Extent
-            //{
-            //    sbh.SelectByHandles(objectIds, false);
-            //}
-            //else
-            //{
-            //    sbh.SelectByHandles(objectIds);
-            //}
-
-            GraphicManager.ClearAuxiliaryGraphics();
-            if (selectedItems.Count == 1)
+            try
             {
-                if (selectedItems[0].Type == ProblemType.OneToMany)
+                // 确保有选中的行（WPF DataGrid 用 SelectedItems）
+                if (dgvProblems.SelectedItems == null || dgvProblems.SelectedItems.Count == 0)
+                    return;
+
+                // 获取所有选中的 ProblemItem（WPF 直接强转绑定项，无需 DataBoundItem）
+                var selectedItems = dgvProblems.SelectedItems
+                    .Cast<ProblemItemViewModel>()
+                    .Where(vm => vm != null && vm.OriginalItem != null)
+                    .Select(vm => vm.OriginalItem)
+                    .ToList();
+
+                if (selectedItems.Count == 0) return;
+
+                var objectIds = selectedItems.Select(p => p.PipeId).ToArray();
+                SelectByHandleService sbh = new SelectByHandleService(doc.Database, doc.Editor);
+                sbh.SelectByHandles(objectIds, IsZoomTo);  // 只选择，不跳转
+
+                //if (objectIds.Count() > 500)  // 太多了就不计算整体Extent
+                //{
+                //    sbh.SelectByHandles(objectIds, false);
+                //}
+                //else
+                //{
+                //    sbh.SelectByHandles(objectIds);
+                //}
+
+                GraphicManager.ClearAuxiliaryGraphics();
+                if (selectedItems.Count == 1)
                 {
-                    List<MatchItem> PossibleMatches = selectedItems[0].PossibleMatches;
-                    GraphicManager.DrawAuxiliaryLines(PossibleMatches);
+                    if (selectedItems[0].Type == ProblemType.OneToMany)
+                    {
+                        List<MatchItem> PossibleMatches = selectedItems[0].PossibleMatches;
+                        GraphicManager.DrawAuxiliaryLines(PossibleMatches);
+                    }
                 }
+            }
+            finally
+            {
+                _isSyncing = false;
             }
         }
 
@@ -160,15 +181,18 @@ namespace process_pipeline.Forms
         {
             // 你的具体刷新代码...
             GraphicManager.ClearAuxiliaryGraphics();
-            if (palCheckResult.Instance.IsVisible) { 
+            if (palCheckResult.Instance.IsVisible)
+            {
                 var service = new FlowArrowService(doc.Database, doc.Editor, useEditor: false);
                 service.Run(Properties.Settings.Default.taskFlowArrow, true, idsToProcess);
 
-                foreach (ObjectId oid in idsToProcess) {
-                    if (palCheckResult.Instance.CurrentProblems.ContainsKey(oid)) 
-                    { 
+                foreach (ObjectId oid in idsToProcess)
+                {
+                    if (palCheckResult.Instance.CurrentProblems.ContainsKey(oid))
+                    {
                         ProblemItem _problem = palCheckResult.Instance.CurrentProblems[oid];
-                        if (_problem.Type == ProblemType.OneToMany && !_problem.IsFixed) {
+                        if (_problem.Type == ProblemType.OneToMany && !_problem.IsFixed)
+                        {
                             GraphicManager.DrawAuxiliaryLines(_problem.PossibleMatches);
                         }
                     }
@@ -192,22 +216,13 @@ namespace process_pipeline.Forms
 
         private void DataGridRow_Click(object sender, MouseButtonEventArgs e)
         {
-            //// sender 直接就是被点击的那一行对象
-            //var row = sender as DataGridRow;
 
-            //if (row != null)
-            //{
-            //    // row.Item 就是你绑定到这一行的实体对象（比如 ProblemModel）
-            //    //var data = row.Item as ProblemItemViewModel; 
-            //        // 执行你的 CAD 任务
-            //    ExecuteCadSelection();
-            //}
         }
 
         private void dgvProblems_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             // 3. 统一执行 CAD 任务
-            ExecuteCadSelection(false); 
+            ExecuteCadSelection(false);
         }
 
         private void UserControl_SizeChanged(object sender, SizeChangedEventArgs e)
@@ -218,7 +233,7 @@ namespace process_pipeline.Forms
         private void CtxZoomToExtent_Click(object sender, RoutedEventArgs e)
         {
             // 3. 统一执行 CAD 任务
-            ExecuteCadSelection(true); 
+            ExecuteCadSelection(true);
         }
 
         private void CtxRefresh_Click(object sender, RoutedEventArgs e)
@@ -232,8 +247,8 @@ namespace process_pipeline.Forms
 
         private void CtxCopy_Click(object sender, RoutedEventArgs e)
         {
-             // 只要 SelectedItems 有东西，说明用户选中了至少一行（通过行头点击）, 此时我们带上表头
-             _copyOptions.IncludeHeader = (dgvProblems.SelectedItems != null && dgvProblems.SelectedItems.Count > 0);
+            // 只要 SelectedItems 有东西，说明用户选中了至少一行（通过行头点击）, 此时我们带上表头
+            _copyOptions.IncludeHeader = (dgvProblems.SelectedItems != null && dgvProblems.SelectedItems.Count > 0);
 
             // 1. 【核心】立即手动关闭右键菜单
             // 很多时候是菜单这个窗口本身占用了剪贴板相关的 Win32 消息
@@ -260,7 +275,7 @@ namespace process_pipeline.Forms
                 // 执行完后可以清空 Tag（可选）
                 dgvProblems.Tag = null;
 
-                ExecuteCadSelection(false); 
+                ExecuteCadSelection(false);
 
                 // 强制焦点回到 DataGrid，防止 AutoCAD 干扰
                 dgvProblems.Focus();
@@ -279,12 +294,13 @@ namespace process_pipeline.Forms
         }
 
         private void AcadApp_SystemVariableChanged(object sender, Autodesk.AutoCAD.ApplicationServices.SystemVariableChangedEventArgs e)
-        { 
+        {
             // 检查改变的是否是主题变量
             if (e.Name.Equals("COLORTHEME", StringComparison.OrdinalIgnoreCase))
             {
                 // 必须在 UI 线程执行
-                this.Dispatcher.Invoke(() => {
+                this.Dispatcher.Invoke(() =>
+                {
                     CadThemes.ApplyCadTheme(this);
                 });
             }
@@ -324,7 +340,7 @@ namespace process_pipeline.Forms
                 {
                     // 清除所有已选中的（包括之前选中的行或单元格）
                     dgvProblems.SelectedCells.Clear();
-            
+
                     // 获取当前单元格所属的行
                     DataGridRow row = ItemsControl.ContainerFromElement(dgvProblems, cell) as DataGridRow;
                     if (row != null)
@@ -332,15 +348,15 @@ namespace process_pipeline.Forms
                         // 只选中当前这一个单元格
                         DataGridCellInfo cellInfo = new DataGridCellInfo(cell);
                         dgvProblems.SelectedCells.Add(cellInfo);
-                
+
                         // 关键：确保 Row.IsSelected 为 false，防止行头亮起
                         // 在 CellOrRowHeader 模式下，只选单元格不会让 Row.IsSelected 变 true
-                        row.IsSelected = false; 
+                        row.IsSelected = false;
                     }
-            
+
                     // 聚焦到 DataGrid 确保键盘操作有效
                     dgvProblems.Focus();
-            
+
                     // 注意：这里由于我们手动处理了选中，如果不希望 WPF 默认的“点击单元格累加”逻辑介入，
                     // 我们可以不设 e.Handled，但要确保 SelectedCells.Clear() 已经执行。
                 }
@@ -369,7 +385,7 @@ namespace process_pipeline.Forms
 
         private void dgvProblems_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
         {
-                // 获取点击位置的元素
+            // 获取点击位置的元素
             DependencyObject dep = (DependencyObject)e.OriginalSource;
 
             // 向上查找点击的是哪一行
@@ -434,20 +450,74 @@ namespace process_pipeline.Forms
             this.Focus();
             dgvProblems.Focus();
         }
+
+        // CAD图纸和DataGrid联动
+        private void Editor_ImpliedSelectionChanged(object sender, EventArgs e)
+        {
+            if (_isSyncing) return;
+
+            // 异步处理，避免阻塞 CAD 操作线程
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                _isSyncing = true;
+                try
+                {
+                    var ed = AcadApp.DocumentManager.MdiActiveDocument.Editor;
+                    var psr = ed.SelectImplied();
+
+                    // 1. 获取当前 CAD 选中的所有 ID (HashSet 查找速度 O(1))
+                    var selectedIds = new HashSet<ObjectId>();
+                    if (psr.Status == PromptStatus.OK)
+                    {
+                        foreach (var id in psr.Value.GetObjectIds()) selectedIds.Add(id);
+                    }
+
+                    // 2. 只有当选择集真的变了才操作 UI
+                    // 批量更新 DataGrid 选中状态
+                    dgvProblems.SelectedItems.Clear();
+
+                    foreach (var id in selectedIds)
+                    {
+                        // 【核心】：从我们维护的字典里直接取现有的 ViewModel 实例
+                        if (_idToViewModelMap.TryGetValue(id, out var vm))
+                        {
+                            dgvProblems.SelectedItems.Add(vm);
+                        }
+                    }
+
+                    //// 可选：如果只选了一个，自动滚动到它
+                    //if (dgvProblems.SelectedItems.Count > 0)
+                    //{
+                    //    dgvProblems.ScrollIntoView(dgvProblems.SelectedItems[0]);
+                    //}
+                }
+                catch (Exception ex)
+                {
+                    // 静默处理或记录日志
+                }
+                finally
+                {
+                    _isSyncing = false;
+                }
+            }), System.Windows.Threading.DispatcherPriority.Background); // 使用 Background 优先级，不抢占渲染
+        }
     }
+
+
+
 
 
     public class palCheckResult : IDisposable
     {
         private static PaletteSet _paletteSet = null;
-        
+
         // 【改造点1】：替换为 WPF 控件引用
-        private ucCheckResult _currentControl;  
+        private ucCheckResult _currentControl;
 
         private Dictionary<ObjectId, ProblemItem> _currentProblems = new Dictionary<ObjectId, ProblemItem>();
         public IReadOnlyDictionary<ObjectId, ProblemItem> CurrentProblems => _currentProblems;
 
-        private PaletteRefreshManager _refreshManager; 
+        private PaletteRefreshManager _refreshManager;
 
         private readonly Guid _paletteGuid = new Guid("7e8d4f9a-5b7c-4890-8a7b-123456789abc");
 
@@ -455,12 +525,12 @@ namespace process_pipeline.Forms
         public static palCheckResult Instance => _instance.Value;
 
         private palCheckResult()
-        {  
+        {
             _currentProblems = new Dictionary<ObjectId, ProblemItem>();
             AcadApp.DocumentManager.DocumentToBeDestroyed += OnDocumentToBeDestroyed;
-            
+
             // 假设你的 PaletteRefreshManager 依然有效
-            _refreshManager = new PaletteRefreshManager(); 
+            _refreshManager = new PaletteRefreshManager();
         }
 
         private void OnDocumentToBeDestroyed(object sender, DocumentCollectionEventArgs e)
@@ -490,14 +560,14 @@ namespace process_pipeline.Forms
 
                 // 创建新的 WPF 控件
                 _currentControl = new ucCheckResult(initialProblems);
-                
+
                 // 【改造点3】：使用 AddVisual 桥接 WPF 控件！！！
                 _paletteSet.AddVisual("检查结果", _currentControl);
 
                 _refreshManager.StartListening(currentDoc);
             }
-            else 
-            { 
+            else
+            {
                 if (_currentControl != null)
                 {
                     _currentControl.UpdateProblems(initialProblems);
@@ -550,7 +620,7 @@ namespace process_pipeline.Forms
         public void RefreshProblems()
         {
             Document Doc = AcadApp.DocumentManager.MdiActiveDocument;
-            
+
             // 假设你的 FlowArrowService 依然有效
             var service = new FlowArrowService(Doc.Database, Doc.Editor);
             Dictionary<ObjectId, ProblemItem> newProblems = service.RunChecker();
@@ -569,8 +639,8 @@ namespace process_pipeline.Forms
             {
                 foreach (var _item in _newProblems)
                 {
-                    _currentProblems[_item.Key] = _item.Value; 
-                } 
+                    _currentProblems[_item.Key] = _item.Value;
+                }
             }
 
             if (_currentControl != null)
@@ -579,7 +649,7 @@ namespace process_pipeline.Forms
                 // 如果当前不在 UI 线程，则使用 Dispatcher.Invoke 调度
                 if (!_currentControl.Dispatcher.CheckAccess())
                 {
-                    _currentControl.Dispatcher.Invoke(() => 
+                    _currentControl.Dispatcher.Invoke(() =>
                     {
                         _currentControl.UpdateProblems(_currentProblems);
                     });
