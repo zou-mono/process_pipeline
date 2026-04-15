@@ -124,7 +124,20 @@ namespace process_pipeline.Forms
 
         private void dgvProblems_MouseDoubleClick(object sender, MouseButtonEventArgs e)
         {
-            ExecuteCadSelection(true);
+            // 使用封装的工具函数直接获取 RowHeader
+            // 一次遍历，同时拿到 Header 和 Row
+            var (rowHeader, row) = VisualTree.GetRowContext(e.OriginalSource);
+
+            // 只有当点击的是行头 (header != null) 且 属于有效行 (row != null) 时触发
+            if (rowHeader != null && row?.Item is ProblemItemViewModel vm)
+            {
+                ExecuteCadSelection(true); // 执行 CAD 定位逻辑
+        
+                e.Handled = true; 
+                return;
+            }
+
+            // 如果 header == null 但 row != null，说明点在了单元格内部，可以写其他逻辑
         }
 
         // 将原先 SelectionChanged 里的 CAD 跳转逻辑提炼成独立方法
@@ -361,15 +374,6 @@ namespace process_pipeline.Forms
                     // 我们可以不设 e.Handled，但要确保 SelectedCells.Clear() 已经执行。
                 }
             }
-        }
-
-        // 辅助方法：向上查找父级控件
-        private T FindVisualParent<T>(DependencyObject child) where T : DependencyObject
-        {
-            DependencyObject parentObject = VisualTreeHelper.GetParent(child);
-            if (parentObject == null) return null;
-            if (parentObject is T parent) return parent;
-            return FindVisualParent<T>(parentObject);
         }
 
         private void dgvProblems_LoadingRow(object sender, DataGridRowEventArgs e)
