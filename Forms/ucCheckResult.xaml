@@ -4,6 +4,7 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
              xmlns:local="clr-namespace:process_pipeline.Forms"
+             xmlns:utils="clr-namespace:process_pipeline.Utils"
              mc:Ignorable="d" 
              d:DesignHeight="450" d:DesignWidth="800"
              Background="#333333" Foreground="#F0F0F0" SizeChanged="UserControl_SizeChanged" Loaded="UserControl_Loaded" MouseEnter="UserControl_MouseEnter">
@@ -80,19 +81,40 @@
           <MenuItem x:Name="ctxZoomToExtent" Header="定位到CAD图纸" Click="CtxZoomToExtent_Click">
             <MenuItem.Icon>
               <!-- 可以使用矢量图标、图片或Path -->
-              <Path Data="{StaticResource Icon_ZoomToExtent}" Stretch="Uniform" Width="16" Height="16" 
-                      Fill="{DynamicResource Brush.CadBlue}"/>
+              <Path Data="{StaticResource Icon_ZoomToExtent}" Stretch="Uniform" Width="16" Height="16">
+                <Path.Style>
+                  <Style TargetType="Path">
+                    <!-- 默认颜色 -->
+                    <Setter Property="Fill" Value="{DynamicResource Brush.CadBlue}"/>
+                    <Style.Triggers>
+                      <!-- 禁用时变灰 -->
+                      <Trigger Property="IsEnabled" Value="False">
+                        <Setter Property="Fill" Value="{DynamicResource Brush.Icon.Disabled}"/>
+                      </Trigger>
+                    </Style.Triggers>
+                  </Style>
+                </Path.Style>
+              </Path>
             </MenuItem.Icon>
           </MenuItem>
-          
-          <MenuItem x:Name="ctxCopy" Header="复制" Click="CtxCopy_Click">
-            <MenuItem.Icon>
-              <!-- 可以使用矢量图标、图片或Path -->
-              <Image Source="{StaticResource Icon_Copy}" Width="16" Height="16"/>
-            </MenuItem.Icon>
-           </MenuItem>
 
-          <MenuItem x:Name="ctxSelection" Header="选择/取消" Click="CtxSelection_Click"/>
+          <!--<MenuItem x:Name="ctxCopy" Header="测试图标" Click="CtxCopy_Click">
+            <MenuItem.Icon>
+              --><!-- 直接引用资源，不走 Helper，不走 Style --><!--
+              <Image Source="{StaticResource Icon.Copy.Disabled}" Width="16" Height="16"/>
+            </MenuItem.Icon>
+          </MenuItem>-->
+          <!--<MenuItem x:Name="ctxCopy" Header="复制" Click="CtxCopy_Click"
+                    Style="{StaticResource Style.MenuItem.Copy}">
+          </MenuItem>-->
+          <MenuItem Header="复制" 
+                    x:Name="ctxCopy"
+                    Tag="Copy" 
+                    Style="{StaticResource Style.MenuItem.AutoIcon}"
+                    Click="CtxCopy_Click"/>
+
+          <MenuItem x:Name="ctxSelect" Header="选择/取消选择" Click="CtxSelect_Click"/>
+          <MenuItem x:Name="ctxClearSelected" Header="清除所有选择" Click="CtxClearSelected_Click"/>
 
           <!--<MenuItem x:Name="ctxFix" Header="🛠️ 一键修复当前项" Click="CtxFix_Click"/>-->
           <Separator/>

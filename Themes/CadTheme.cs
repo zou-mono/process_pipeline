@@ -7,7 +7,7 @@ using System.Windows.Media;
 using System.Windows;
 using AcadApp = Autodesk.AutoCAD.ApplicationServices.Application;
 
-namespace process_pipeline.Forms
+namespace process_pipeline.Themes
 {
     public static class CadThemes
     {
@@ -42,9 +42,12 @@ namespace process_pipeline.Forms
             };
 
             _cache.MergedDictionaries.Clear();
-            _cache.MergedDictionaries.Add(themeDict);
 
             // 3. 合并通用资源 (如 Icons.xaml)
+            var CommonDict = new ResourceDictionary { 
+                Source = new Uri("/process_pipeline;component/Themes/Common.xaml", UriKind.RelativeOrAbsolute) 
+            };
+            
             var IconsDict = new ResourceDictionary { 
                 Source = new Uri("/process_pipeline;component/Themes/Icons.xaml", UriKind.RelativeOrAbsolute) 
             };
@@ -53,13 +56,10 @@ namespace process_pipeline.Forms
                 Source = new Uri("/process_pipeline;component/Themes/Styles.xaml", UriKind.RelativeOrAbsolute) 
             };
 
-            var CommonDict = new ResourceDictionary { 
-                Source = new Uri("/process_pipeline;component/Themes/Common.xaml", UriKind.RelativeOrAbsolute) 
-            };
-
+            _cache.MergedDictionaries.Add(CommonDict);
             _cache.MergedDictionaries.Add(IconsDict);
             _cache.MergedDictionaries.Add(StylesDict);
-            _cache.MergedDictionaries.Add(CommonDict);
+            _cache.MergedDictionaries.Add(themeDict);
         }
 
        // 【核心】：根据 CAD 主题动态设置 WPF 颜色

@@ -3,6 +3,7 @@ using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Windows;
 using process_pipeline.Commands;
+using process_pipeline.Themes;
 using process_pipeline.Utils;
 using System;
 using System.Collections.Generic;
@@ -276,7 +277,7 @@ namespace process_pipeline.Forms
             }), System.Windows.Threading.DispatcherPriority.Background);
         }
 
-        private void CtxSelection_Click(object sender, RoutedEventArgs e)
+        private void CtxSelect_Click(object sender, RoutedEventArgs e)
         {
             // 从 Tag 中取出刚才存下的行对象
             if (dgvProblems.Tag is DataGridRow row)
@@ -293,6 +294,11 @@ namespace process_pipeline.Forms
                 // 强制焦点回到 DataGrid，防止 AutoCAD 干扰
                 dgvProblems.Focus();
             }
+        }
+
+        private void CtxClearSelected_Click(object sender, RoutedEventArgs e)
+        { 
+            dgvProblems.SelectedItems.Clear();
         }
 
         // 拦截 Ctrl+C 快捷键
@@ -431,6 +437,7 @@ namespace process_pipeline.Forms
             has = (dgvProblems.SelectedItems != null && dgvProblems.SelectedItems.Count > 0);
 
             if (ctxZoomToExtent != null) ctxZoomToExtent.IsEnabled = has;
+            if (ctxClearSelected != null) ctxClearSelected.IsEnabled = has;
         }
 
         private void TryCopy(CopyFormat fmt)
