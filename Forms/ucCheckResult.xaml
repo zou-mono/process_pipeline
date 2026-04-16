@@ -130,10 +130,33 @@
         </Style>
 
         <Style x:Key="{ComponentResourceKey ResourceId=DataGridSelectAllButtonStyle, TypeInTargetAssembly={x:Type DataGrid}}" 
-           TargetType="{x:Type Button}"
-           BasedOn="{StaticResource {ComponentResourceKey ResourceId=DataGridSelectAllButtonStyle, TypeInTargetAssembly={x:Type DataGrid}}}">
+           TargetType="{x:Type Button}">
           <!-- 只修改背景颜色 -->
           <Setter Property="Background" Value="{DynamicResource Brush.DataGrid.Header.Background}" />
+          <Setter Property="Template">
+            <Setter.Value>
+              <ControlTemplate TargetType="{x:Type Button}">
+                <!-- 
+                   关键点：
+                   1. 使用 Border 绑定 Background。
+                   2. 使用 DynamicResource 确保主题切换时颜色会变。
+                -->
+                <Border Background="{DynamicResource Brush.DataGrid.Header.Background}"
+                        BorderBrush="{DynamicResource Brush.DataGrid.GridLine}"
+                        BorderThickness="0,0,1,1">
+                  <!-- 
+                       画一个装饰性的小三角形（可选），
+                       颜色也可以绑定到你的前景色资源 
+                    -->
+                  <Polygon Points="3,10 10,10 10,3" 
+                             Fill="{DynamicResource Brush.DataGrid.Text.Foreground}" 
+                             Opacity="0.3" 
+                             HorizontalAlignment="Right" 
+                             VerticalAlignment="Bottom"/>
+                </Border>
+              </ControlTemplate>
+            </Setter.Value>
+          </Setter>
         </Style>
 
         <Style TargetType="DataGridColumnHeader">
