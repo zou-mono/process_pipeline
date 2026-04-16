@@ -435,11 +435,11 @@ namespace process_pipeline.Forms
 
             if (ctxCopy != null) ctxCopy.IsEnabled = has;
 
-            has = ((dgvProblems.SelectedItems != null && dgvProblems.SelectedItems.Count > 0) ||
-                   (dgvProblems.SelectedCells != null && dgvProblems.SelectedCells.Count > 0));
+            bool has1 = (dgvProblems.SelectedItems != null && dgvProblems.SelectedItems.Count > 0);
+            bool has2 = (dgvProblems.SelectedCells != null && dgvProblems.SelectedCells.Count > 0);
 
-            if (ctxZoomToExtent != null) ctxZoomToExtent.IsEnabled = has;
-            if (ctxClearSelected != null) ctxClearSelected.IsEnabled = has;
+            if (ctxZoomToExtent != null) ctxZoomToExtent.IsEnabled = has1;
+            if (ctxClearSelected != null) ctxClearSelected.IsEnabled = has1 || has2;
         }
 
         private void TryCopy(CopyFormat fmt)

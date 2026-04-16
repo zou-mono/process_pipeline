@@ -104,9 +104,9 @@
     <Style.Triggers>
       <!-- 当所属的 MenuItem 被禁用时，Path 自动变色 -->
       <!-- 注意：这里使用 DataTrigger 绑定到宿主 MenuItem 的 IsEnabled -->
-      <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=MenuItem}, Path=IsEnabled}" Value="False">
+      <Trigger Property="IsEnabled" Value="False">
         <Setter Property="Fill" Value="{DynamicResource Brush.Icon.Disabled}"/>
-      </DataTrigger>
+      </Trigger>
     </Style.Triggers>
   </Style>
 
