@@ -19,25 +19,6 @@
   </UserControl.Resources>
 
   <Grid HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Margin="5">
-    <Grid.ColumnDefinitions>
-      <ColumnDefinition Width="391*"/>
-      <ColumnDefinition Width="4*"/>
-    </Grid.ColumnDefinitions>
-    <Grid.RowDefinitions>
-      <!--高度由里面的控件（比如按钮）自动撑开-->
-      <!--<RowDefinition Height="15.341"/>
-      <RowDefinition Height="16.899"/>
-      -->
-      <!--WPF 里的 DockStyle.Fill！意思是占据所有剩余空间-->
-      <!--
-      <RowDefinition Height="60*"/>
-      <RowDefinition Height="279*"/>
-      <RowDefinition Height="21*"/>
-      <RowDefinition Height="58*"/>-->
-      <RowDefinition Height="38*"/>
-      <RowDefinition Height="17*"/>
-    </Grid.RowDefinitions>
-
     <!-- 顶部工具栏：使用 StackPanel，背景设为稍暗的颜色区分层次 -->
     <!--
     <Border Grid.Row="0" Background="#2D2D2D" BorderBrush="#111111" BorderThickness="0,0,0,1" Grid.RowSpan="2">
@@ -59,7 +40,7 @@
               GridLinesVisibility="All"
               SelectionUnit="CellOrRowHeader"
               SelectionMode="Extended"
-              Background="{DynamicResource Brush.DataGrid.Row.Background}"
+              Background="{DynamicResource Brush.DataGrid.Header.Background}"
               RowBackground="{DynamicResource Brush.DataGrid.Row.Background}"
               AlternatingRowBackground="{DynamicResource Brush.DataGrid.AltRow.Background}"
               Foreground="{DynamicResource Brush.DataGrid.Text.Foreground}"
@@ -72,7 +53,8 @@
               SelectionChanged="dgvProblems_SelectionChanged"
               ClipboardCopyMode="None"
               PreviewMouseLeftButtonDown="dgvProblems_PreviewMouseLeftButtonDown"
-              LoadingRow="dgvProblems_LoadingRow" Loaded="dgvProblems_Loaded" PreviewMouseRightButtonDown="dgvProblems_PreviewMouseRightButtonDown" Grid.ColumnSpan="2" Grid.RowSpan="2">
+              LoadingRow="dgvProblems_LoadingRow" Loaded="dgvProblems_Loaded" 
+              PreviewMouseRightButtonDown="dgvProblems_PreviewMouseRightButtonDown">
 
       <!-- ====================== 【新增：右键菜单】 ====================== -->
       <DataGrid.ContextMenu>
