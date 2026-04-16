@@ -80,14 +80,19 @@
           <!-- 菜单选项（可自由增删） -->
           <MenuItem x:Name="ctxZoomToExtent" Header="定位到CAD图纸" Click="CtxZoomToExtent_Click">
             <MenuItem.Icon>
-              <!-- 可以使用矢量图标、图片或Path -->
+              <!-- 只需要指定 Data 和 Style -->
+              <Path Data="{StaticResource Icon_ZoomToExtent}" 
+                    Style="{StaticResource Style.MenuItem.Path}"/>
+            </MenuItem.Icon>
+            <!--<MenuItem.Icon>
+              --><!-- 可以使用矢量图标、图片或Path --><!--
               <Path Data="{StaticResource Icon_ZoomToExtent}" Stretch="Uniform" Width="16" Height="16">
                 <Path.Style>
                   <Style TargetType="Path">
-                    <!-- 默认颜色 -->
+                    --><!-- 默认颜色 --><!--
                     <Setter Property="Fill" Value="{DynamicResource Brush.CadBlue}"/>
                     <Style.Triggers>
-                      <!-- 禁用时变灰 -->
+                      --><!-- 禁用时变灰 --><!--
                       <Trigger Property="IsEnabled" Value="False">
                         <Setter Property="Fill" Value="{DynamicResource Brush.Icon.Disabled}"/>
                       </Trigger>
@@ -95,7 +100,7 @@
                   </Style>
                 </Path.Style>
               </Path>
-            </MenuItem.Icon>
+            </MenuItem.Icon>-->
           </MenuItem>
 
           <!--<MenuItem x:Name="ctxCopy" Header="测试图标" Click="CtxCopy_Click">
@@ -110,10 +115,17 @@
           <MenuItem Header="复制" 
                     x:Name="ctxCopy"
                     Tag="Copy" 
-                    Style="{StaticResource Style.MenuItem.AutoIcon}"
+                    Style="{StaticResource Style.MenuItem.Image}"
                     Click="CtxCopy_Click"/>
 
-          <MenuItem x:Name="ctxSelect" Header="选择/取消选择" Click="CtxSelect_Click"/>
+          <MenuItem x:Name="ctxSelect" Header="选择/取消选择" Click="CtxSelect_Click">
+            <MenuItem.Icon>
+              <!-- 只需要指定 Data 和 Style -->
+              <Path Data="{StaticResource Icon_SelectRow}" Fill="{StaticResource Cad_SelectedRow}" 
+                    Style="{StaticResource Style.MenuItem.Path}"/>
+            </MenuItem.Icon>
+          </MenuItem>
+
           <MenuItem x:Name="ctxClearSelected" Header="清除所有选择" Click="CtxClearSelected_Click"/>
 
           <!--<MenuItem x:Name="ctxFix" Header="🛠️ 一键修复当前项" Click="CtxFix_Click"/>-->
