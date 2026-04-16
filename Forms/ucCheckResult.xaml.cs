@@ -297,7 +297,8 @@ namespace process_pipeline.Forms
         }
 
         private void CtxClearSelected_Click(object sender, RoutedEventArgs e)
-        { 
+        {   
+            dgvProblems.SelectedCells.Clear();
             dgvProblems.SelectedItems.Clear();
         }
 
@@ -434,7 +435,8 @@ namespace process_pipeline.Forms
 
             if (ctxCopy != null) ctxCopy.IsEnabled = has;
 
-            has = (dgvProblems.SelectedItems != null && dgvProblems.SelectedItems.Count > 0);
+            has = ((dgvProblems.SelectedItems != null && dgvProblems.SelectedItems.Count > 0) ||
+                   (dgvProblems.SelectedCells != null && dgvProblems.SelectedCells.Count > 0));
 
             if (ctxZoomToExtent != null) ctxZoomToExtent.IsEnabled = has;
             if (ctxClearSelected != null) ctxClearSelected.IsEnabled = has;
@@ -467,6 +469,8 @@ namespace process_pipeline.Forms
         {
             if (_isSyncing) return;
 
+            if (AcadApp.DocumentManager.MdiActiveDocument == null) return;
+
             // 异步处理，避免阻塞 CAD 操作线程
             Dispatcher.BeginInvoke(new Action(() =>
             {
@@ -475,6 +479,11 @@ namespace process_pipeline.Forms
                 {
                     var ed = AcadApp.DocumentManager.MdiActiveDocument.Editor;
                     var psr = ed.SelectImplied();
+                    //Editor ed;
+                    //if (AcadApp.DocumentManager.MdiActiveDocument != null) { 
+                    //    ed = AcadApp.DocumentManager.MdiActiveDocument.Editor;
+                    //    var psr = ed.SelectImplied();
+                    //}
 
                     // 1. 获取当前 CAD 选中的所有 ID (HashSet 查找速度 O(1))
                     var selectedIds = new HashSet<ObjectId>();
@@ -687,7 +696,7 @@ namespace process_pipeline.Forms
                 }
                 _paletteSet = null;
 
-                _currentProblems = null;
+                _currentProblems = new Dictionary<ObjectId, ProblemItem>();;
 
                 var currentDoc = AcadApp.DocumentManager.MdiActiveDocument;
                 if (currentDoc != null && _refreshManager != null)

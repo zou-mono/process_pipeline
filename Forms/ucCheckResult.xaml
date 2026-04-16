@@ -84,41 +84,15 @@
               <Path Data="{StaticResource Icon_ZoomToExtent}" 
                     Style="{StaticResource Style.MenuItem.Path}"/>
             </MenuItem.Icon>
-            <!--<MenuItem.Icon>
-              --><!-- 可以使用矢量图标、图片或Path --><!--
-              <Path Data="{StaticResource Icon_ZoomToExtent}" Stretch="Uniform" Width="16" Height="16">
-                <Path.Style>
-                  <Style TargetType="Path">
-                    --><!-- 默认颜色 --><!--
-                    <Setter Property="Fill" Value="{DynamicResource Brush.CadBlue}"/>
-                    <Style.Triggers>
-                      --><!-- 禁用时变灰 --><!--
-                      <Trigger Property="IsEnabled" Value="False">
-                        <Setter Property="Fill" Value="{DynamicResource Brush.Icon.Disabled}"/>
-                      </Trigger>
-                    </Style.Triggers>
-                  </Style>
-                </Path.Style>
-              </Path>
-            </MenuItem.Icon>-->
           </MenuItem>
 
-          <!--<MenuItem x:Name="ctxCopy" Header="测试图标" Click="CtxCopy_Click">
-            <MenuItem.Icon>
-              --><!-- 直接引用资源，不走 Helper，不走 Style --><!--
-              <Image Source="{StaticResource Icon.Copy.Disabled}" Width="16" Height="16"/>
-            </MenuItem.Icon>
-          </MenuItem>-->
-          <!--<MenuItem x:Name="ctxCopy" Header="复制" Click="CtxCopy_Click"
-                    Style="{StaticResource Style.MenuItem.Copy}">
-          </MenuItem>-->
           <MenuItem Header="复制" 
                     x:Name="ctxCopy"
                     Tag="Copy" 
                     Style="{StaticResource Style.MenuItem.Image}"
                     Click="CtxCopy_Click"/>
 
-          <MenuItem x:Name="ctxSelect" Header="选择/取消选择" Click="CtxSelect_Click">
+          <MenuItem x:Name="ctxSelect" Header="选择/取消(实体)" Click="CtxSelect_Click">
             <MenuItem.Icon>
               <!-- 只需要指定 Data 和 Style -->
               <Path Data="{StaticResource Icon_SelectRow}" Fill="{StaticResource Cad_SelectedRow}" 
@@ -126,7 +100,7 @@
             </MenuItem.Icon>
           </MenuItem>
 
-          <MenuItem x:Name="ctxClearSelected" Header="清除所有选择" Click="CtxClearSelected_Click"/>
+          <MenuItem x:Name="ctxClearSelected" Header="清空选择" Click="CtxClearSelected_Click"/>
 
           <!--<MenuItem x:Name="ctxFix" Header="🛠️ 一键修复当前项" Click="CtxFix_Click"/>-->
           <Separator/>
@@ -153,6 +127,13 @@
           <Setter Property="VerticalAlignment" Value="Center"/>
           <!-- 左对齐时，文字紧贴边框不好看，加 5 个像素的左边距 (Margin="左,上,右,下") -->
           <Setter Property="Margin" Value="5,0,0,0"/>
+        </Style>
+
+        <Style x:Key="{ComponentResourceKey ResourceId=DataGridSelectAllButtonStyle, TypeInTargetAssembly={x:Type DataGrid}}" 
+           TargetType="{x:Type Button}"
+           BasedOn="{StaticResource {ComponentResourceKey ResourceId=DataGridSelectAllButtonStyle, TypeInTargetAssembly={x:Type DataGrid}}}">
+          <!-- 只修改背景颜色 -->
+          <Setter Property="Background" Value="{DynamicResource Brush.DataGrid.Header.Background}" />
         </Style>
 
         <Style TargetType="DataGridColumnHeader">

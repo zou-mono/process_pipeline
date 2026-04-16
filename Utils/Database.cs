@@ -64,6 +64,7 @@ namespace process_pipeline.Utils
         public void StartListening(Document doc)
         {
             _currentDb = doc.Database;
+            _changedObjectIds = new HashSet<ObjectId>();
         
             // 1. 监听底层数据库的增、删、改
             _currentDb.ObjectAppended += Db_ObjectChanged;
