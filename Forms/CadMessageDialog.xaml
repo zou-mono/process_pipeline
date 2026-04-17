@@ -52,9 +52,7 @@
 
         <TextBlock x:Name="txtMessage" Grid.Column="1" TextWrapping="Wrap"
                    VerticalAlignment="Center" FontSize="12" 
-                   LineHeight="20" 
-                   Foreground="#444444"
-                   LineStackingStrategy="BlockLineHeight"/>
+                   Foreground="#444444"/>
       </Grid>
 
       <!-- 按钮区 -->

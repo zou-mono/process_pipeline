@@ -25,14 +25,55 @@ namespace process_pipeline.Forms
     /// </summary>
     public partial class CadMessageDialog : Window
     {
+        // 定义更细粒度的 Token 类型，用于顺序扫描
+        private enum TokenType
+        {
+            Text,
+            Marker,      // [Info], [Title] 等
+            BoldToggle,  // **
+            BigOpen,     // [Big]
+            BigClose,    // [/Big]
+            LineBreak    // \n
+        }
+
+        // 样式状态追踪
+        private class TextState
+        {
+            public bool IsBold { get; set; }
+            public bool IsBig { get; set; }
+            public bool IsTitleNext { get; set; }
+        }
+
+        private sealed class MessageToken
+        {
+            public TokenType Type { get; set; }
+            public string Value { get; set; } // Marker: [Info] / [Warning]... ; Text: 文本内容
+        }
+
+        // 标签到图标资源Key映射（可扩展）
+        private static readonly Dictionary<string, string> MarkerConfigs = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            { "[Title]",   null }, 
+            { "[Info]", "Icon_Info" },
+            { "[Warning]", "Icon_Warning" },
+            { "[Error]", "Icon_Error" },
+            { "[Hint]", "Icon_Hint" }
+        };
+
+        // 用于识别所有标签（含 Title）
+        // 核心修复：将所有标签平铺在一个 () 捕获组内，去掉内部多余的 ()
+        private static readonly Regex MasterRegex = new Regex(
+            $"({string.Join("|", MarkerConfigs.Keys.Select(Regex.Escape))}|\\*\\*|\\[Big\\]|\\[/Big\\]|\\r\\n|\\n)", 
+            RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
         public CadMessageDialog(string title, string message, DialogConfig config)
         {
             InitializeComponent();
             txtTitle.Text = title;
             txtMessage.Text = message;
 
-            // --- 核心修改：不再直接 txtMessage.Text = message ---
-            ParseMessageWithIcons(message);
+            // 渲染富文本
+            RenderRichText(message);
 
             // 应用颜色和图标
             Brush themeColor = config.DialogBrush;  // (Color)ColorConverter.ConvertFromString(config.ColorHex);
@@ -45,85 +86,134 @@ namespace process_pipeline.Forms
             this.iconPath.Data = CadThemes.GetResource<System.Windows.Media.Geometry>(config.IconResourceKey);
         }
 
-        private void ParseMessageWithIcons(string rawMessage)
+         private void RenderRichText(string rawMessage)
         {
             txtMessage.Inlines.Clear();
-            if (string.IsNullOrEmpty(rawMessage)) return;
+            if (string.IsNullOrWhiteSpace(rawMessage)) return;
 
-            // 正则：匹配 [Info], [Warning], [Error] 等标签
-            // 你可以根据需要增加更多标签
-            string[] parts = Regex.Split(rawMessage, @"(\[Title\]|\[Hint\]|\[Info\]|\[Warning\]|\[Error\])");
+            // 1. 拆分 Token
+            var tokens = Tokenize(rawMessage);
+
+            // 2. 顺序渲染
+            var state = new TextState();
+
+            foreach (var token in tokens)
+            {
+                switch (token.Type)
+                {
+                    case TokenType.Marker:
+                        if (token.Value.Equals("[Title]", StringComparison.OrdinalIgnoreCase))
+                            state.IsTitleNext = true;
+                        else if (MarkerConfigs.TryGetValue(token.Value, out string iconKey) && !string.IsNullOrEmpty(iconKey))
+                        {
+                            var icon = CreateInlineIcon(iconKey);
+                            if (icon != null) txtMessage.Inlines.Add(new InlineUIContainer(icon));
+                        }
+                        break;
+
+                    case TokenType.BoldToggle:
+                        state.IsBold = !state.IsBold; // 切换加粗状态
+                        break;
+
+                    case TokenType.BigOpen:
+                        state.IsBig = true;
+                        break;
+
+                    case TokenType.BigClose:
+                        state.IsBig = false;
+                        break;
+
+                    case TokenType.LineBreak:
+                        // 优雅的换行间距：换行 + 零宽字符占位 + 换行
+                        txtMessage.Inlines.Add(new LineBreak());
+                        txtMessage.Inlines.Add(new Run("\u200B") { FontSize = 4 });
+                        txtMessage.Inlines.Add(new LineBreak());
+                        break;
+
+                    case TokenType.Text:
+                        var run = new Run(token.Value);
+                        
+                        // 样式叠加逻辑
+                        if (state.IsTitleNext)
+                        {
+                            ApplyTitleStyle(run);
+                            state.IsTitleNext = false; // 消费标题状态
+                        }
+                        else
+                        {
+                            // 自由叠加加粗和放大
+                            if (state.IsBold) run.FontWeight = FontWeights.Bold;
+                            if (state.IsBig) run.FontSize = txtMessage.FontSize + 4;
+                        }
+                        
+                        txtMessage.Inlines.Add(run);
+                        break;
+                }
+            }
+        }
+
+        private List<MessageToken> Tokenize(string input)
+        {
+            var result = new List<MessageToken>();
+            if (string.IsNullOrEmpty(input)) return result;
+
+            // Split 会把匹配到的标签也放进数组
+            string[] parts = MasterRegex.Split(input);
 
             foreach (var part in parts)
             {
                 if (string.IsNullOrEmpty(part)) continue;
 
-                // 根据标签映射到资源字典里的 Geometry Key
-                string geoKey = null;
+                // 规范化判断
+                string upperPart = part.ToUpper();
 
-                if (part == "[Title]")
+                if (upperPart == "**") 
+                    result.Add(new MessageToken { Type = TokenType.BoldToggle });
+                else if (upperPart == "[BIG]") 
+                    result.Add(new MessageToken { Type = TokenType.BigOpen });
+                else if (upperPart == "[/BIG]") 
+                    result.Add(new MessageToken { Type = TokenType.BigClose });
+                else if (part == "\n" || part == "\r\n") 
+                    result.Add(new MessageToken { Type = TokenType.LineBreak });
+                else if (MarkerConfigs.ContainsKey(upperPart)) // 确保 MarkerConfigs 的 Key 也是大写或处理好大小写
+                    result.Add(new MessageToken { Type = TokenType.Marker, Value = upperPart });
+                else 
+                    result.Add(new MessageToken { Type = TokenType.Text, Value = part });
+            }
+            return result;
+        }
+
+        // 提取样式设置，让代码更整洁
+        private void ApplyTitleStyle(Run run)
+        {
+            run.FontSize = txtMessage.FontSize + 4;
+            run.FontWeight = FontWeights.Bold;
+            run.Foreground = CadThemes.GetResource<Brush>("Brush.DialogWarning");
+        }
+
+        private FrameworkElement CreateInlineIcon(string iconResourceKey)
+        {
+            try
+            {
+                var geo = this.FindResource(iconResourceKey) as System.Windows.Media.Geometry;
+                if (geo == null)
+                    return null;
+
+                var path = new System.Windows.Shapes.Path
                 {
-                    // 标记接下来的文字需要加粗变大
-                    // 我们不需要在这里做操作，只需在处理下一段文字时应用样式
-                    continue;
-                }
+                    Data = geo,
+                    Fill = CadThemes.GetResource<Brush>("Brush.CadBlue"),
+                    Width = 18,
+                    Height = 18,
+                    Stretch = Stretch.Uniform,
+                    Margin = new Thickness(2, 0, 5, -4) // 保留你原来的基线微调
+                };
 
-                // 检查前一个元素是不是 [Title]
-                int currentIndex = Array.IndexOf(parts, part);
-                bool isTitle = currentIndex > 0 && parts[currentIndex - 1] == "[Title]";
-
-                // C# 7.3 使用传统的 switch 语句
-                switch (part)
-                {
-                    case "[Info]":
-                        geoKey = "Icon_Info";
-                        break;
-                    case "[Warning]":
-                        geoKey = "Icon_Warning";
-                        break;
-                    case "[Error]":
-                        geoKey = "Icon_Error";
-                        break;
-                    case "[Hint]":
-                        geoKey = "Icon_Hint";
-                        break;
-                    default:
-                        geoKey = null;
-                        break;
-                }
-
-                if (geoKey != null)
-                {
-                    // 创建一个小图标控件
-                    var path = new System.Windows.Shapes.Path
-                    {
-                        Data = this.FindResource(geoKey) as System.Windows.Media.Geometry,
-                        Fill =  CadThemes.GetResource<Brush>("Brush.CadBlue"), // 或者根据业务定颜色
-                        Width = 18,
-                        Height = 18,
-                        Stretch = Stretch.Uniform,
-                        // 关键点：Margin 的第四个参数（Bottom）
-                        // 当图标比文字大时，通常需要一个负的 Bottom Margin 来让图标“沉”下去一点，
-                        // 从而和文字的中轴线对齐。
-                        Margin = new Thickness(2, 0, 5, -4) // 微调对齐文字基线
-                    };
-                    txtMessage.Inlines.Add(new InlineUIContainer(path));
-                }
-                else if (part != "[Title]") // 排除标签本身，处理纯文本
-                {
-                    Run run = new Run(part);
-
-                    if (isTitle)
-                    {
-                        // --- 局部样式设置 ---
-                        //run.FontWeight = FontWeights.Bold;       // 加粗
-                        run.FontSize = txtMessage.FontSize + 4;  // 比默认大 4 号
-                        run.Foreground = CadThemes.GetResource<Brush>("Brush.DialogWarning");
-                        //run.Foreground = Brushes.White;         // 标题可以更亮一点
-                    }
-
-                    txtMessage.Inlines.Add(run);
-                }
+                return path;
+            }
+            catch
+            {
+                return null;
             }
         }
 
