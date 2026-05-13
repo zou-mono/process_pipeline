@@ -3,6 +3,7 @@ using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Windows;
 using process_pipeline.Commands;
+using process_pipeline.Core;
 using process_pipeline.Themes;
 using process_pipeline.Utils;
 using System;
@@ -28,7 +29,7 @@ namespace process_pipeline.Forms
     /// <summary>
     /// Interaction logic for UserControl1.xaml
     /// </summary>
-    public partial class ucCheckResult : UserControl
+    public partial class ucCheckResult: UserControl, IPaletteControl<Dictionary<ObjectId, ProblemItem>>
     {
         // 核心数据字典
         private Dictionary<ObjectId, ProblemItem> _currentProblems = new Dictionary<ObjectId, ProblemItem>();
@@ -55,6 +56,11 @@ namespace process_pipeline.Forms
             KeepSelectionOrder = true
         };
 
+        // 【新增】：添加无参数构造函数（基类需要）
+        public ucCheckResult() : this(null)  // 调用带参数版本，默认传入 null
+        {
+        }
+
         public ucCheckResult(Dictionary<ObjectId, ProblemItem> problems)
         {
             InitializeComponent();
@@ -66,13 +72,13 @@ namespace process_pipeline.Forms
             dgvProblems.ItemsSource = _observableList;
 
             // 订阅事件（和 WinForms 一样）
-            ProblemsChanged += (s, e) => PopulateDataGridView();
+            ProblemsChanged += (s, e) => UpdateData(_currentProblems);
 
             // 1. 初始化时应用 CAD 当前主题
             //GraphicManager.ApplyCadTheme(this);
 
             // 初始化加载数据
-            PopulateDataGridView();
+            //PopulateDataGridView();
 
             // 2. 订阅系统变量改变事件
             AcadApp.SystemVariableChanged += AcadApp_SystemVariableChanged;
@@ -80,43 +86,70 @@ namespace process_pipeline.Forms
             doc.ImpliedSelectionChanged += Editor_ImpliedSelectionChanged;
         }
 
-        // 【修改 3】: 数据填充逻辑优化
-        // 为什么改：在 CAD 开发中，事件可能在非 UI 线程触发。WPF 对跨线程操作要求极严，
-        // 必须使用 Dispatcher.Invoke 来确保在 UI 线程更新 ObservableCollection。
-        private void PopulateDataGridView()
+        // 【新增】：实现接口方法 UpdateData
+        public void UpdateData(Dictionary<ObjectId, ProblemItem> data)
         {
-            // 必须在 UI 线程操作 ObservableCollection
+            // 更新内部数据
+            _currentProblems = data ?? new Dictionary<ObjectId, ProblemItem>();
+
+            // 在 UI 线程更新 ObservableCollection（触发 UI 刷新）
             Dispatcher.Invoke(() =>
             {
                 _observableList.Clear();
+                _idToViewModelMap.Clear();
 
-                int index = 1; // 用于生成序号 NO
-
-                // 先筛选：只保留未修复的原始项
-                var filteredItems = _currentProblems
-                    .Where(p => p.Value.IsFixed == false && !p.Value.PipeId.IsErased && !p.Value.PipeId.IsNull)
-                    .ToList();
-
-
-                foreach (var kvp in filteredItems)
+                int index = 1;  // 用于生成序号 NO
+                foreach (var kvp in _currentProblems.Where(p => !p.Value.IsFixed && !p.Value.PipeId.IsErased && !p.Value.PipeId.IsNull))
                 {
-                    ProblemItem originalItem = kvp.Value;
-
                     var vm = new ProblemItemViewModel(index++, kvp.Value);
                     _observableList.Add(vm);
-
-                    // 【新增】：存入索引字典
-                    if (!kvp.Value.PipeId.IsNull)
-                        _idToViewModelMap[kvp.Value.PipeId] = vm;
+                    _idToViewModelMap[kvp.Value.PipeId] = vm;
                 }
             });
+
+            dgvProblems.Items.Refresh();
+
+            // 触发事件（可选）
+            //OnProblemsChanged(EventArgs.Empty);
         }
 
-        public void UpdateProblems(Dictionary<ObjectId, ProblemItem> newProblems)
-        {
-            _currentProblems = newProblems ?? new Dictionary<ObjectId, ProblemItem>();
-            OnProblemsChanged(EventArgs.Empty);
-        }
+        // 【修改 3】: 数据填充逻辑优化
+        // 为什么改：在 CAD 开发中，事件可能在非 UI 线程触发。WPF 对跨线程操作要求极严，
+        // 必须使用 Dispatcher.Invoke 来确保在 UI 线程更新 ObservableCollection。
+        //private void PopulateDataGridView()
+        //{
+        //    // 必须在 UI 线程操作 ObservableCollection
+        //    Dispatcher.Invoke(() =>
+        //    {
+        //        _observableList.Clear();
+
+        //        int index = 1; // 用于生成序号 NO
+
+        //        // 先筛选：只保留未修复的原始项
+        //        var filteredItems = _currentProblems
+        //            .Where(p => p.Value.IsFixed == false && !p.Value.PipeId.IsErased && !p.Value.PipeId.IsNull)
+        //            .ToList();
+
+
+        //        foreach (var kvp in filteredItems)
+        //        {
+        //            ProblemItem originalItem = kvp.Value;
+
+        //            var vm = new ProblemItemViewModel(index++, kvp.Value);
+        //            _observableList.Add(vm);
+
+        //            // 【新增】：存入索引字典
+        //            if (!kvp.Value.PipeId.IsNull)
+        //                _idToViewModelMap[kvp.Value.PipeId] = vm;
+        //        }
+        //    });
+        //}
+
+        //public void UpdateProblems(Dictionary<ObjectId, ProblemItem> newProblems)
+        //{
+        //    _currentProblems = newProblems ?? new Dictionary<ObjectId, ProblemItem>();
+        //    OnProblemsChanged(EventArgs.Empty);
+        //}
 
         protected virtual void OnProblemsChanged(EventArgs e)
         {
@@ -213,20 +246,6 @@ namespace process_pipeline.Forms
                 }
             }
         }
-
-        //private void btnRefresh_Click(object sender, RoutedEventArgs e)
-        //{
-        //    var service = new FlowArrowService(doc.Database, doc.Editor, useEditor: false);
-        //    service.Run(Properties.Settings.Default.taskFlowArrow, true);
-        //}
-
-        //private void btnReversePolyline_Click(object sender, RoutedEventArgs e)
-        //{
-        //    ReversePolylineCommands rpc = new ReversePolylineCommands();
-        //    rpc.Execute();
-
-        //    PaletteRefreshManager.TriggerPaletteRefreshIfNeeded();
-        //}
 
         private void DataGridRow_Click(object sender, MouseButtonEventArgs e)
         {
@@ -523,192 +542,221 @@ namespace process_pipeline.Forms
         }
     }
 
-
-
-
-
-    public class palCheckResult : IDisposable
+    public class palCheckResult : PaletteSetBase<ucCheckResult, Dictionary<ObjectId, ProblemItem>>
     {
-        private static PaletteSet _paletteSet = null;
-
-        // 【改造点1】：替换为 WPF 控件引用
-        private ucCheckResult _currentControl;
+        // 子类单例（不变）
+        private static readonly Lazy<palCheckResult> _instance = new Lazy<palCheckResult>(() => new palCheckResult());
+        public static palCheckResult Instance => _instance.Value;
 
         private Dictionary<ObjectId, ProblemItem> _currentProblems = new Dictionary<ObjectId, ProblemItem>();
         public IReadOnlyDictionary<ObjectId, ProblemItem> CurrentProblems => _currentProblems;
 
-        private PaletteRefreshManager _refreshManager;
+        private palCheckResult() : base() { }
 
-        private readonly Guid _paletteGuid = new Guid("7e8d4f9a-5b7c-4890-8a7b-123456789abc");
+        // 【新增】：实现抽象属性，提供唯一 GUID（生成新 GUID，避免与基类冲突）
+        protected override Guid PaletteGuid => new Guid("7e8d4f9a-5b7c-4890-8a7b-123456789abc");
 
-        private static readonly Lazy<palCheckResult> _instance = new Lazy<palCheckResult>(() => new palCheckResult());
-        public static palCheckResult Instance => _instance.Value;
+        // 实现其他抽象方法（不变）
+        protected override string GetPaletteTitle() => "管线箭头检查";
+        protected override string GetPaletteName() => "PipeCheckPalette";
+        protected override Dictionary<ObjectId, ProblemItem> GetInitialData() => new Dictionary<ObjectId, ProblemItem>();
 
-        private palCheckResult()
+        public override void RefreshData()
         {
-            _currentProblems = new Dictionary<ObjectId, ProblemItem>();
-            AcadApp.DocumentManager.DocumentToBeDestroyed += OnDocumentToBeDestroyed;
+            var doc = AcadApp.DocumentManager.MdiActiveDocument;
+            if (doc == null) return;
 
-            // 假设你的 PaletteRefreshManager 依然有效
-            _refreshManager = new PaletteRefreshManager();
-        }
-
-        private void OnDocumentToBeDestroyed(object sender, DocumentCollectionEventArgs e)
-        {
-            Dispose();
-        }
-
-        public void Show(Dictionary<ObjectId, ProblemItem> initialProblems)
-        {
-            var currentDoc = AcadApp.DocumentManager.MdiActiveDocument;
-            if (currentDoc == null) return;
-
-            Update(initialProblems);
-
-            if (_paletteSet == null || _paletteSet.IsDisposed)
-            {
-                _paletteSet = new PaletteSet("管线箭头检查", "PipeCheckPalette", _paletteGuid)
-                {
-                    DockEnabled = DockSides.Left | DockSides.Right | DockSides.Top | DockSides.Bottom,
-                    MinimumSize = new System.Drawing.Size(600, 400),
-                    Size = new System.Drawing.Size(600, 700),
-                    Visible = true
-                };
-
-                // 【改造点2】：WPF 控件没有 Dispose() 方法，直接置空让 GC 回收即可
-                _currentControl = null;
-
-                // 创建新的 WPF 控件
-                _currentControl = new ucCheckResult(initialProblems);
-
-                // 【改造点3】：使用 AddVisual 桥接 WPF 控件！！！
-                _paletteSet.AddVisual("检查结果", _currentControl);
-
-                _refreshManager.StartListening(currentDoc);
-            }
-            else
-            {
-                if (_currentControl != null)
-                {
-                    _currentControl.UpdateProblems(initialProblems);
-                }
-            }
-
-            _paletteSet.Visible = true;
-            _paletteSet.Activate(0);
-
-            // 【改造点4】：删除了所有关于 AcadApp.Idle 和 Size 微调的 Hack 代码！
-            // WPF 的布局系统（Measure/Arrange）非常可靠，放入 PaletteSet 后会自动完美撑开，不再需要强制刷新。
-
-            _paletteSet.Focus();
-        }
-
-        public bool IsVisible
-        {
-            get => _paletteSet != null ? _paletteSet.Visible : false;
-        }
-
-        public void Hide()
-        {
-            if (_paletteSet != null && !_paletteSet.IsDisposed)
-                _paletteSet.Visible = false;
-        }
-
-        public void MarkProblemFixed(HashSet<ObjectId> _pipeIds, bool _isFixed)
-        {
-            if (_pipeIds == null || _pipeIds.Count == 0) return;
-
-            var validIds = _pipeIds.Where(id => !id.IsNull).ToHashSet();
-            if (validIds.Count == 0) return;
-
-            int fixedCount = 0;
-            foreach (var p in _currentProblems)
-            {
-                if (!p.Value.IsFixed && validIds.Contains(p.Value.PipeId))
-                {
-                    p.Value.IsFixed = _isFixed;
-                    fixedCount++;
-                }
-            }
-
-            if (fixedCount > 0)
-            {
-                _currentControl?.UpdateProblems(_currentProblems);
-            }
-        }
-
-        public void RefreshProblems()
-        {
-            Document Doc = AcadApp.DocumentManager.MdiActiveDocument;
-
-            // 假设你的 FlowArrowService 依然有效
-            var service = new FlowArrowService(Doc.Database, Doc.Editor);
-            Dictionary<ObjectId, ProblemItem> newProblems = service.RunChecker();
-
+            var service = new FlowArrowService(doc.Database, doc.Editor);
+            var newProblems = service.RunChecker();
             if (newProblems != null)
             {
-                Update(newProblems);
-            }
-        }
-
-        public void Update(Dictionary<ObjectId, ProblemItem> _newProblems)
-        {
-            _currentProblems = new Dictionary<ObjectId, ProblemItem>();
-
-            if (_newProblems != null)
-            {
-                foreach (var _item in _newProblems)
-                {
-                    _currentProblems[_item.Key] = _item.Value;
-                }
-            }
-
-            if (_currentControl != null)
-            {
-                // 【改造点5】：WPF 的跨线程调用使用 Dispatcher
-                // 如果当前不在 UI 线程，则使用 Dispatcher.Invoke 调度
-                if (!_currentControl.Dispatcher.CheckAccess())
-                {
-                    _currentControl.Dispatcher.Invoke(() =>
-                    {
-                        _currentControl.UpdateProblems(_currentProblems);
-                    });
-                }
-                else
-                {
-                    _currentControl.UpdateProblems(_currentProblems);
-                }
-            }
-        }
-
-        public void Dispose()
-        {
-            try
-            {
-                // 【改造点6】：WPF 控件不需要也不能调用 Dispose()
-                _currentControl = null;
-
-                if (_paletteSet != null && !_paletteSet.IsDisposed)
-                {
-                    _paletteSet.Visible = false;
-                    _paletteSet.Close();
-                    _paletteSet.Dispose();
-                }
-                _paletteSet = null;
-
-                _currentProblems = new Dictionary<ObjectId, ProblemItem>();;
-
-                var currentDoc = AcadApp.DocumentManager.MdiActiveDocument;
-                if (currentDoc != null && _refreshManager != null)
-                {
-                    _refreshManager.StopListening(currentDoc);
-                }
-            }
-            catch (System.Exception ex)
-            {
-                AcadApp.DocumentManager.MdiActiveDocument?.Editor.WriteMessage(
-                    $"\n关闭 PaletteSet 失败：{ex.Message}");
+                UpdateData(newProblems);
             }
         }
     }
+
+    //public class palCheckResult : IDisposable
+    //{
+    //    private static PaletteSet _paletteSet = null;
+
+    //    // 【改造点1】：替换为 WPF 控件引用
+    //    private ucCheckResult _currentControl;
+
+    //    private Dictionary<ObjectId, ProblemItem> _currentProblems = new Dictionary<ObjectId, ProblemItem>();
+    //    public IReadOnlyDictionary<ObjectId, ProblemItem> CurrentProblems => _currentProblems;
+
+    //    private PaletteRefreshManager _refreshManager;
+
+    //    private readonly Guid _paletteGuid = new Guid("7e8d4f9a-5b7c-4890-8a7b-123456789abc");
+
+    //    private static readonly Lazy<palCheckResult> _instance = new Lazy<palCheckResult>(() => new palCheckResult());
+    //    public static palCheckResult Instance => _instance.Value;
+
+    //    private palCheckResult()
+    //    {
+    //        _currentProblems = new Dictionary<ObjectId, ProblemItem>();
+    //        AcadApp.DocumentManager.DocumentToBeDestroyed += OnDocumentToBeDestroyed;
+
+    //        // 假设你的 PaletteRefreshManager 依然有效
+    //        _refreshManager = new PaletteRefreshManager();
+    //    }
+
+    //    private void OnDocumentToBeDestroyed(object sender, DocumentCollectionEventArgs e)
+    //    {
+    //        Dispose();
+    //    }
+
+    //    public void Show(Dictionary<ObjectId, ProblemItem> initialProblems)
+    //    {
+    //        var currentDoc = AcadApp.DocumentManager.MdiActiveDocument;
+    //        if (currentDoc == null) return;
+
+    //        Update(initialProblems);
+
+    //        if (_paletteSet == null || _paletteSet.IsDisposed)
+    //        {
+    //            _paletteSet = new PaletteSet("管线箭头检查", "PipeCheckPalette", _paletteGuid)
+    //            {
+    //                DockEnabled = DockSides.Left | DockSides.Right | DockSides.Top | DockSides.Bottom,
+    //                MinimumSize = new System.Drawing.Size(600, 400),
+    //                Size = new System.Drawing.Size(600, 700),
+    //                Visible = true
+    //            };
+
+    //            // 【改造点2】：WPF 控件没有 Dispose() 方法，直接置空让 GC 回收即可
+    //            _currentControl = null;
+
+    //            // 创建新的 WPF 控件
+    //            _currentControl = new ucCheckResult(initialProblems);
+
+    //            // 【改造点3】：使用 AddVisual 桥接 WPF 控件！！！
+    //            _paletteSet.AddVisual("检查结果", _currentControl);
+
+    //            _refreshManager.StartListening(currentDoc);
+    //        }
+    //        else
+    //        {
+    //            if (_currentControl != null)
+    //            {
+    //                _currentControl.UpdateProblems(initialProblems);
+    //            }
+    //        }
+
+    //        _paletteSet.Visible = true;
+    //        _paletteSet.Activate(0);
+
+    //        // 【改造点4】：删除了所有关于 AcadApp.Idle 和 Size 微调的 Hack 代码！
+    //        // WPF 的布局系统（Measure/Arrange）非常可靠，放入 PaletteSet 后会自动完美撑开，不再需要强制刷新。
+
+    //        _paletteSet.Focus();
+    //    }
+
+    //    public bool IsVisible
+    //    {
+    //        get => _paletteSet != null ? _paletteSet.Visible : false;
+    //    }
+
+    //    public void Hide()
+    //    {
+    //        if (_paletteSet != null && !_paletteSet.IsDisposed)
+    //            _paletteSet.Visible = false;
+    //    }
+
+    //    public void MarkProblemFixed(HashSet<ObjectId> _pipeIds, bool _isFixed)
+    //    {
+    //        if (_pipeIds == null || _pipeIds.Count == 0) return;
+
+    //        var validIds = _pipeIds.Where(id => !id.IsNull).ToHashSet();
+    //        if (validIds.Count == 0) return;
+
+    //        int fixedCount = 0;
+    //        foreach (var p in _currentProblems)
+    //        {
+    //            if (!p.Value.IsFixed && validIds.Contains(p.Value.PipeId))
+    //            {
+    //                p.Value.IsFixed = _isFixed;
+    //                fixedCount++;
+    //            }
+    //        }
+
+    //        if (fixedCount > 0)
+    //        {
+    //            _currentControl?.UpdateProblems(_currentProblems);
+    //        }
+    //    }
+
+    //    public void RefreshProblems()
+    //    {
+    //        Document Doc = AcadApp.DocumentManager.MdiActiveDocument;
+
+    //        // 假设你的 FlowArrowService 依然有效
+    //        var service = new FlowArrowService(Doc.Database, Doc.Editor);
+    //        Dictionary<ObjectId, ProblemItem> newProblems = service.RunChecker();
+
+    //        if (newProblems != null)
+    //        {
+    //            Update(newProblems);
+    //        }
+    //    }
+
+    //public void Update(Dictionary<ObjectId, ProblemItem> _newProblems)
+    //{
+    //    _currentProblems = new Dictionary<ObjectId, ProblemItem>();
+
+    //    if (_newProblems != null)
+    //    {
+    //        foreach (var _item in _newProblems)
+    //        {
+    //            _currentProblems[_item.Key] = _item.Value;
+    //        }
+    //    }
+
+    //    if (_currentControl != null)
+    //    {
+    //        // 【改造点5】：WPF 的跨线程调用使用 Dispatcher
+    //        // 如果当前不在 UI 线程，则使用 Dispatcher.Invoke 调度
+    //        if (!_currentControl.Dispatcher.CheckAccess())
+    //        {
+    //            _currentControl.Dispatcher.Invoke(() =>
+    //            {
+    //                _currentControl.UpdateProblems(_currentProblems);
+    //            });
+    //        }
+    //        else
+    //        {
+    //            _currentControl.UpdateProblems(_currentProblems);
+    //        }
+    //    }
+    //}
+
+    //    public void Dispose()
+    //    {
+    //        try
+    //        {
+    //            // 【改造点6】：WPF 控件不需要也不能调用 Dispose()
+    //            _currentControl = null;
+
+    //            if (_paletteSet != null && !_paletteSet.IsDisposed)
+    //            {
+    //                _paletteSet.Visible = false;
+    //                _paletteSet.Close();
+    //                _paletteSet.Dispose();
+    //            }
+    //            _paletteSet = null;
+
+    //            _currentProblems = new Dictionary<ObjectId, ProblemItem>();
+
+    //            var currentDoc = AcadApp.DocumentManager.MdiActiveDocument;
+    //            if (currentDoc != null && _refreshManager != null)
+    //            {
+    //                _refreshManager.StopListening(currentDoc);
+    //            }
+    //        }
+    //        catch (System.Exception ex)
+    //        {
+    //            AcadApp.DocumentManager.MdiActiveDocument?.Editor.WriteMessage(
+    //                $"\n关闭 PaletteSet 失败：{ex.Message}");
+    //        }
+    //    }
+    //}
 }

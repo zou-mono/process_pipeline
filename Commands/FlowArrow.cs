@@ -569,7 +569,7 @@ namespace process_pipeline.Commands
 
             if (bOnlyUpdate)
             {
-                palCheckResult.Instance.Update(result);
+                palCheckResult.Instance.UpdateData(result);
             }
             else { 
                 // 弹窗展示

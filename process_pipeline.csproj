@@ -66,6 +66,9 @@
       <HintPath>C:\Program Files\Autodesk\AutoCAD 2019\acmgd.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="Microsoft.Xaml.Behaviors, Version=1.1.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
+      <HintPath>packages\Microsoft.Xaml.Behaviors.Wpf.1.1.142\lib\net462\Microsoft.Xaml.Behaviors.dll</HintPath>
+    </Reference>
     <Reference Include="PresentationCore" />
     <Reference Include="PresentationFramework" />
     <Reference Include="System" />
@@ -88,7 +91,12 @@
     <Compile Include="Commands\SelectByHandle.cs" />
     <Compile Include="Core\CadBase.cs" />
     <Compile Include="Core\ICadCommand.cs" />
+    <Compile Include="Core\IPaletteControl.cs" />
     <Compile Include="Forms\DataGridCopyHelper.cs" />
+    <Compile Include="Forms\GridColumnCollapseBehavior.cs" />
+    <Compile Include="Forms\ucMainCheckWindow.xaml.cs">
+      <DependentUpon>ucMainCheckWindow.xaml</DependentUpon>
+    </Compile>
     <Compile Include="Themes\CadTheme.cs" />
     <Compile Include="Forms\ucCheckResult.xaml.cs">
       <DependentUpon>ucCheckResult.xaml</DependentUpon>
@@ -130,6 +138,10 @@
     </None>
   </ItemGroup>
   <ItemGroup>
+    <Page Include="Forms\ucMainCheckWindow.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
     <Page Include="Themes\App.xaml">
       <Generator>MSBuild:Compile</Generator>
     </Page>
