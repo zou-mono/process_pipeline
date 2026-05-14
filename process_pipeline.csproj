@@ -85,6 +85,7 @@
     <Reference Include="WindowsBase" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Commands\CheckPipe.cs" />
     <Compile Include="Commands\ClearLayer.cs" />
     <Compile Include="Commands\FlowArrow.cs" />
     <Compile Include="Commands\ReversePolyline.cs" />

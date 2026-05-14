@@ -1,4 +1,8 @@
-﻿using process_pipeline.Core;
+﻿using Autodesk.AutoCAD.DatabaseServices;
+using process_pipeline.Commands;
+using process_pipeline.Core;
+using process_pipeline.Themes;
+using process_pipeline.Utils;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -11,19 +15,53 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Documents;
-using System.Windows.Forms;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
+using AcadApp = Autodesk.AutoCAD.ApplicationServices.Application;
 
 namespace process_pipeline.Forms
 {
     /// <summary>
     /// Interaction logic for ucMainCheckWindow.xaml
     /// </summary>
-    public partial class ucMainCheckWindow : INotifyPropertyChanged
+    
+    // UserControl类，纯View类
+    public partial class ucMainCheckWindow : UserControl, IPaletteControl<Dictionary<ObjectId, ProblemItem>>
+    {
+        // 【移除】：所有属性、命令和逻辑（移到 MainViewModel 中）
+        // 例如：TreeNodes、Rows、StatusText、ToggleTreeCommand 等
+
+        public ucMainCheckWindow()
+        {
+            InitializeComponent();
+            // 【移除】：mock 数据和命令初始化（现在在 MainViewModel 中）
+
+            CadThemes.ApplyCadTheme(this);
+        }
+
+        // 【保留】：接口实现，用于外部更新数据
+        public void UpdateData(Dictionary<ObjectId, ProblemItem> data)
+        {
+            // 由于 DataContext 是 MainViewModel，假设 MainViewModel 有 UpdateData 方法或属性
+            // 你需要访问 ViewModel 来更新数据
+            if (this.DataContext is MainCheckWindowViewModel viewModel)
+            {
+                // 示例：调用 ViewModel 的方法来更新 Rows（假设你添加了这个方法）
+                viewModel.UpdateFromData(data);
+            }
+        }
+
+        private void UserControl_Loaded(object sender, RoutedEventArgs e)
+        {
+            CadThemes.ApplyCadTheme(this);
+        }
+    }
+
+    // viewModel类
+    public class MainCheckWindowViewModel : INotifyPropertyChanged
     {
         private bool _isTreeCollapsed;
         private string _statusText = "就绪";
@@ -39,14 +77,19 @@ namespace process_pipeline.Forms
         public ICommand ZoomToCommand { get; }
         public ICommand ExportCommand { get; }
 
-        public ucMainCheckWindow()
+        public MainCheckWindowViewModel()
         {
             ToggleTreeCommand = new RelayCommand(_ => ToggleTree());
             RefreshCommand = new RelayCommand(_ => StatusText = "已刷新");
             ZoomToCommand = new RelayCommand(_ => StatusText = "已定位");
             ExportCommand = new RelayCommand(_ => StatusText = "已导出");
 
-            // mock data
+            // 初始化 mock 数据（在实际应用中，可以从服务加载）
+            InitializeMockData();
+        }
+
+        private void InitializeMockData()
+        {
             TreeNodes.Add(new TreeNodeVm("全部图层")
             {
                 Children = {
@@ -56,9 +99,9 @@ namespace process_pipeline.Forms
                 }
             });
 
-            Rows.Add(new PipeRowVm("PL001","给水","待核查",300,1.20,"-"));
-            Rows.Add(new PipeRowVm("PL002","排水","已修改",400,0.95,"管径已更新"));
-            Rows.Add(new PipeRowVm("PL003","燃气","待复核",250,1.10,"高程疑似异常"));
+            Rows.Add(new PipeRowVm("PL001", "给水", "待核查", 300, 1.20, "-"));
+            Rows.Add(new PipeRowVm("PL002", "排水", "已修改", 400, 0.95, "管径已更新"));
+            Rows.Add(new PipeRowVm("PL003", "燃气", "待复核", 250, 1.10, "高程疑似异常"));
         }
 
         public bool IsTreeCollapsed
@@ -70,7 +113,7 @@ namespace process_pipeline.Forms
                 {
                     CollapseGlyph = value ? "▶" : "◀";
                     StatusText = value ? "目录已折叠" : "目录已展开";
-                    // 这里与 View 层配合设置列宽（建议用行为Behavior实现）
+                    // 这里与 View 层配合设置列宽（建议用行为 Behavior 实现）
                 }
             }
         }
@@ -100,7 +143,32 @@ namespace process_pipeline.Forms
             IsTreeCollapsed = !IsTreeCollapsed;
         }
 
+        // 【新增】：从外部数据更新 ViewModel（用于 UpdateData 调用）
+        // 假设 ProblemItem 有 Type、Status、Diameter、Height、Remark 等字段
+        public void UpdateFromData(Dictionary<ObjectId, ProblemItem> data)
+        {
+            if (data == null) return;
+
+            // 清空并重新填充 Rows（基于 ProblemItem 字段）
+            Rows.Clear();
+            int index = 1;
+            foreach (var kvp in data.Where(p => !p.Value.IsFixed && !p.Value.PipeId.IsErased))
+            {
+                var item = kvp.Value;
+                // 假设 ProblemItem 有这些属性；如果字段名不同，调整此处
+                //Rows.Add(new PipeRowVm($"PL{index++:D3}", item.Type, item.Status, item.Diameter, item.Height, item.Remark));
+            }
+
+            // 更新状态文本（可选）
+            StatusText = $"已更新 {Rows.Count} 条记录";
+
+            // 触发属性通知，确保 WPF 绑定刷新
+            OnPropertyChanged(nameof(Rows));
+            OnPropertyChanged(nameof(RowCountText));
+        }
+
         public event PropertyChangedEventHandler PropertyChanged;
+
         protected bool Set<T>(ref T field, T value, [CallerMemberName] string name = null)
         {
             if (Equals(field, value)) return false;
@@ -109,6 +177,11 @@ namespace process_pipeline.Forms
             if (name == nameof(Rows))
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(RowCountText)));
             return true;
+        }
+
+        protected void OnPropertyChanged([CallerMemberName] string name = null)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
         }
     }
 
@@ -141,6 +214,43 @@ namespace process_pipeline.Forms
             Diameter = diameter;
             Height = height;
             Remark = remark;
+        }
+    }
+
+    public class palCheckPipe : PaletteSetBase<ucMainCheckWindow, Dictionary<ObjectId, ProblemItem>>
+    {
+        // 子类单例（不变）
+        private static readonly Lazy<palCheckPipe> _instance = new Lazy<palCheckPipe>(() => new palCheckPipe());
+        public static palCheckPipe Instance => _instance.Value;
+
+        //private Dictionary<ObjectId, ProblemItem> _currentProblems = new Dictionary<ObjectId, ProblemItem>();
+        ////public IReadOnlyDictionary<ObjectId, ProblemItem> CurrentProblems => _currentProblems;
+        
+        // 和userControl的updateData保持一致
+        //public IReadOnlyDictionary<ObjectId, ProblemItem> CurrentProblems => _currentControl?.CurrentProblems ?? new Dictionary<ObjectId, ProblemItem>();
+
+
+        private palCheckPipe() : base() { }
+
+        // 【新增】：实现抽象属性，提供唯一 GUID（生成新 GUID，避免与基类冲突）
+        protected override Guid PaletteGuid => new Guid("9b3f8c21-7d12-4e5a-b98c-07f8e29d1a6c");
+
+        // 实现其他抽象方法（不变）
+        protected override string GetPaletteTitle() => "管线检查";
+        protected override string GetPaletteName() => "PipeCheckPalette";
+        protected override Dictionary<ObjectId, ProblemItem> GetInitialData() => new Dictionary<ObjectId, ProblemItem>();
+
+        public override void RefreshData()
+        {
+            var doc = AcadApp.DocumentManager.MdiActiveDocument;
+            if (doc == null) return;
+
+            var service = new FlowArrowService(doc.Database, doc.Editor);
+            var newProblems = service.RunChecker();
+            if (newProblems != null)
+            {
+                UpdateData(newProblems);
+            }
         }
     }
 }

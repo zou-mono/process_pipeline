@@ -31,13 +31,6 @@ namespace process_pipeline.Commands
         {
             if (Doc == null) return;
 
-            //var targetLayers = new HashSet<string>(Properties.Settings.Default.PipeLayerName.Split(','));
-            //var targetLayers = new HashSet<string>
-            //{
-            //    "3-污水管-2025新建", "3-污水管-规划扩建", "3-污水管-现状",
-            //    "3-污水压力管-规划新建", "3-污水压力管-现状"
-            //};
-
             // 1. 直接 new 服务，填参数
             var service = new FlowArrowService(Doc.Database, Doc.Editor, false)
             {
@@ -261,9 +254,9 @@ namespace process_pipeline.Commands
             Dictionary<ObjectId, ArrowCacheInfo> arrowData, ProgressContext context)
         {
             Dictionary<ObjectId, ProblemItem> problems = null;
-            if(palCheckResult.Instance.CurrentProblems != null)
+            if(palMatchArrowResult.Instance.CurrentProblems != null)
             {
-                problems = palCheckResult.Instance.CurrentProblems
+                problems = palMatchArrowResult.Instance.CurrentProblems
                     .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
             }
 
@@ -323,7 +316,7 @@ namespace process_pipeline.Commands
         }
 
         private void Checker(Dictionary<ObjectId, ProblemItem> problems, ObjectId pipeId, Entity pipe_ent, 
-            Dictionary<ObjectId, ArrowCacheInfo> arrowData) 
+            Dictionary<ObjectId, ArrowCacheInfo> arrowData)
         {
             if (problems == null) return;
 
@@ -569,11 +562,11 @@ namespace process_pipeline.Commands
 
             if (bOnlyUpdate)
             {
-                palCheckResult.Instance.UpdateData(result);
+                palMatchArrowResult.Instance.UpdateData(result);
             }
             else { 
                 // 弹窗展示
-                palCheckResult.Instance.Show(result);    
+                palMatchArrowResult.Instance.Show(result);    
             }
         }
     }

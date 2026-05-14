@@ -222,16 +222,16 @@ namespace process_pipeline.Forms
         {
             // 你的具体刷新代码...
             GraphicManager.ClearAuxiliaryGraphics();
-            if (palCheckResult.Instance.IsVisible)
+            if (palMatchArrowResult.Instance.IsVisible)
             {
                 var service = new FlowArrowService(doc.Database, doc.Editor, useEditor: false);
                 service.Run(Properties.Settings.Default.taskFlowArrow, true, idsToProcess);
 
                 foreach (ObjectId oid in idsToProcess)
                 {
-                    if (palCheckResult.Instance.CurrentProblems.ContainsKey(oid))
+                    if (palMatchArrowResult.Instance.CurrentProblems.ContainsKey(oid))
                     {
-                        ProblemItem _problem = palCheckResult.Instance.CurrentProblems[oid];
+                        ProblemItem _problem = palMatchArrowResult.Instance.CurrentProblems[oid];
                         if (_problem.Type == ProblemType.OneToMany && !_problem.IsFixed)
                         {
                             GraphicManager.DrawAuxiliaryLines(_problem.PossibleMatches);
@@ -517,12 +517,6 @@ namespace process_pipeline.Forms
                             dgvProblems.SelectedItems.Add(vm);
                         }
                     }
-
-                    //// 可选：如果只选了一个，自动滚动到它
-                    //if (dgvProblems.SelectedItems.Count > 0)
-                    //{
-                    //    dgvProblems.ScrollIntoView(dgvProblems.SelectedItems[0]);
-                    //}
                 }
                 catch (Exception ex)
                 {
@@ -536,11 +530,11 @@ namespace process_pipeline.Forms
         }
     }
 
-    public class palCheckResult : PaletteSetBase<ucCheckResult, Dictionary<ObjectId, ProblemItem>>
+    public class palMatchArrowResult : PaletteSetBase<ucCheckResult, Dictionary<ObjectId, ProblemItem>>
     {
         // 子类单例（不变）
-        private static readonly Lazy<palCheckResult> _instance = new Lazy<palCheckResult>(() => new palCheckResult());
-        public static palCheckResult Instance => _instance.Value;
+        private static readonly Lazy<palMatchArrowResult> _instance = new Lazy<palMatchArrowResult>(() => new palMatchArrowResult());
+        public static palMatchArrowResult Instance => _instance.Value;
 
         //private Dictionary<ObjectId, ProblemItem> _currentProblems = new Dictionary<ObjectId, ProblemItem>();
         ////public IReadOnlyDictionary<ObjectId, ProblemItem> CurrentProblems => _currentProblems;
@@ -549,14 +543,14 @@ namespace process_pipeline.Forms
         public IReadOnlyDictionary<ObjectId, ProblemItem> CurrentProblems => _currentControl?.CurrentProblems ?? new Dictionary<ObjectId, ProblemItem>();
 
 
-        private palCheckResult() : base() { }
+        private palMatchArrowResult() : base() { }
 
         // 【新增】：实现抽象属性，提供唯一 GUID（生成新 GUID，避免与基类冲突）
         protected override Guid PaletteGuid => new Guid("7e8d4f9a-5b7c-4890-8a7b-123456789abc");
 
         // 实现其他抽象方法（不变）
-        protected override string GetPaletteTitle() => "管线箭头检查";
-        protected override string GetPaletteName() => "PipeCheckPalette";
+        protected override string GetPaletteTitle() => "管线箭头匹配检查";
+        protected override string GetPaletteName() => "MatchArrowPalette";
         protected override Dictionary<ObjectId, ProblemItem> GetInitialData() => new Dictionary<ObjectId, ProblemItem>();
 
         public override void RefreshData()

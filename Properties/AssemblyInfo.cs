@@ -41,3 +41,4 @@ using System.Runtime.InteropServices;
 [assembly: CommandClass(typeof(process_pipeline.Commands.SelectByHandleCommands))]
 [assembly: CommandClass(typeof(process_pipeline.Commands.ReversePolylineCommands))]
 [assembly: CommandClass(typeof(process_pipeline.Commands.ClearLayerCommands))]
+[assembly: CommandClass(typeof(process_pipeline.Commands.CheckPipeCommands))]
