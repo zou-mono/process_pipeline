@@ -145,12 +145,6 @@ namespace process_pipeline.Forms
         //    });
         //}
 
-        //public void UpdateProblems(Dictionary<ObjectId, ProblemItem> newProblems)
-        //{
-        //    _currentProblems = newProblems ?? new Dictionary<ObjectId, ProblemItem>();
-        //    OnProblemsChanged(EventArgs.Empty);
-        //}
-
         protected virtual void OnProblemsChanged(EventArgs e)
         {
             ProblemsChanged?.Invoke(this, e);
@@ -548,8 +542,12 @@ namespace process_pipeline.Forms
         private static readonly Lazy<palCheckResult> _instance = new Lazy<palCheckResult>(() => new palCheckResult());
         public static palCheckResult Instance => _instance.Value;
 
-        private Dictionary<ObjectId, ProblemItem> _currentProblems = new Dictionary<ObjectId, ProblemItem>();
-        public IReadOnlyDictionary<ObjectId, ProblemItem> CurrentProblems => _currentProblems;
+        //private Dictionary<ObjectId, ProblemItem> _currentProblems = new Dictionary<ObjectId, ProblemItem>();
+        ////public IReadOnlyDictionary<ObjectId, ProblemItem> CurrentProblems => _currentProblems;
+        
+        // 和userControl的updateData保持一致
+        public IReadOnlyDictionary<ObjectId, ProblemItem> CurrentProblems => _currentControl?.CurrentProblems ?? new Dictionary<ObjectId, ProblemItem>();
+
 
         private palCheckResult() : base() { }
 
@@ -699,35 +697,35 @@ namespace process_pipeline.Forms
     //        }
     //    }
 
-    //public void Update(Dictionary<ObjectId, ProblemItem> _newProblems)
-    //{
-    //    _currentProblems = new Dictionary<ObjectId, ProblemItem>();
-
-    //    if (_newProblems != null)
+    //    public void Update(Dictionary<ObjectId, ProblemItem> _newProblems)
     //    {
-    //        foreach (var _item in _newProblems)
+    //        _currentProblems = new Dictionary<ObjectId, ProblemItem>();
+
+    //        if (_newProblems != null)
     //        {
-    //            _currentProblems[_item.Key] = _item.Value;
+    //            foreach (var _item in _newProblems)
+    //            {
+    //                _currentProblems[_item.Key] = _item.Value;
+    //            }
     //        }
-    //    }
 
-    //    if (_currentControl != null)
-    //    {
-    //        // 【改造点5】：WPF 的跨线程调用使用 Dispatcher
-    //        // 如果当前不在 UI 线程，则使用 Dispatcher.Invoke 调度
-    //        if (!_currentControl.Dispatcher.CheckAccess())
+    //        if (_currentControl != null)
     //        {
-    //            _currentControl.Dispatcher.Invoke(() =>
+    //            // 【改造点5】：WPF 的跨线程调用使用 Dispatcher
+    //            // 如果当前不在 UI 线程，则使用 Dispatcher.Invoke 调度
+    //            if (!_currentControl.Dispatcher.CheckAccess())
+    //            {
+    //                _currentControl.Dispatcher.Invoke(() =>
+    //                {
+    //                    _currentControl.UpdateProblems(_currentProblems);
+    //                });
+    //            }
+    //            else
     //            {
     //                _currentControl.UpdateProblems(_currentProblems);
-    //            });
-    //        }
-    //        else
-    //        {
-    //            _currentControl.UpdateProblems(_currentProblems);
+    //            }
     //        }
     //    }
-    //}
 
     //    public void Dispose()
     //    {
