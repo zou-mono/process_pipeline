@@ -1,10 +1,12 @@
-﻿<UserControl x:Class="process_pipeline.Forms.ucCheckResult"
+﻿<UserControl x:Class="process_pipeline.Forms.ucMatchArrowResult"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
              xmlns:local="clr-namespace:process_pipeline.Forms"
              xmlns:utils="clr-namespace:process_pipeline.Utils"
+             xmlns:core="clr-namespace:process_pipeline.Core"
+             xmlns:i="http://schemas.microsoft.com/xaml/behaviors"
              mc:Ignorable="d" 
              d:DesignHeight="450" d:DesignWidth="800"
              Background="#333333" Foreground="#F0F0F0" SizeChanged="UserControl_SizeChanged" Loaded="UserControl_Loaded" MouseEnter="UserControl_MouseEnter">
@@ -17,6 +19,12 @@
       </ResourceDictionary.MergedDictionaries>
     </ResourceDictionary>
   </UserControl.Resources>
+
+  <i:Interaction.Behaviors>
+    <core:CadThemeBehavior />
+    <core:SelectionSyncBehavior OnSelectionChanged="{Binding SelectionChangedCommand}" />
+    <!-- 绑定到 ViewModel 的命令 -->
+  </i:Interaction.Behaviors>
 
   <Grid HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Margin="5">
     <!-- 顶部工具栏：使用 StackPanel，背景设为稍暗的颜色区分层次 -->

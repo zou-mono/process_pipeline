@@ -91,6 +91,7 @@
     <Compile Include="Commands\ReversePolyline.cs" />
     <Compile Include="Commands\SelectByHandle.cs" />
     <Compile Include="Core\CadBase.cs" />
+    <Compile Include="Core\CadBehaviors.cs" />
     <Compile Include="Core\ICadCommand.cs" />
     <Compile Include="Core\IPaletteControl.cs" />
     <Compile Include="Forms\DataGridCopyHelper.cs" />
@@ -99,8 +100,8 @@
       <DependentUpon>ucMainCheckWindow.xaml</DependentUpon>
     </Compile>
     <Compile Include="Themes\CadTheme.cs" />
-    <Compile Include="Forms\ucCheckResult.xaml.cs">
-      <DependentUpon>ucCheckResult.xaml</DependentUpon>
+    <Compile Include="Forms\ucMatchArrowResult.xaml.cs">
+      <DependentUpon>ucMatchArrowResult.xaml</DependentUpon>
     </Compile>
     <Compile Include="Forms\CadMessageDialog.xaml.cs">
       <DependentUpon>CadMessageDialog.xaml</DependentUpon>
@@ -164,7 +165,7 @@
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
-    <Page Include="Forms\ucCheckResult.xaml">
+    <Page Include="Forms\ucMatchArrowResult.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>

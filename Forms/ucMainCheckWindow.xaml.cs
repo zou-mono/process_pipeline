@@ -27,7 +27,6 @@ namespace process_pipeline.Forms
     /// <summary>
     /// Interaction logic for ucMainCheckWindow.xaml
     /// </summary>
-    
     // UserControl类，纯View类
     public partial class ucMainCheckWindow : UserControl, IPaletteControl<Dictionary<ObjectId, ProblemItem>>
     {

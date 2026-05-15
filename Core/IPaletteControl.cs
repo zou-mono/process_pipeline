@@ -1,5 +1,6 @@
 ﻿using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.Windows;
+using process_pipeline.Themes;
 using process_pipeline.Utils;
 using System;
 using System.Collections.Generic;
@@ -15,6 +16,78 @@ namespace process_pipeline.Core
     {
         // 统一的更新数据方法，子类 UserControl 需要实现
         void UpdateData(TData data);
+    }
+
+    public abstract class UserControlBase<TData> : UserControl, IPaletteControl<TData> 
+    { 
+        protected bool EnableThemeSync { get; set; } = true;
+        protected bool EnableSelectionSync { get; set; } = true;
+
+        protected UserControlBase()
+        {
+            this.Loaded += UserControl_Loaded;
+            this.Unloaded += UserControl_Unloaded;
+
+            if (EnableThemeSync)
+            {
+                AcadApp.SystemVariableChanged += AcadApp_SystemVariableChanged;
+            }
+
+            if (EnableSelectionSync)
+            {
+                var doc = AcadApp.DocumentManager.MdiActiveDocument;
+                if (doc != null)
+                {
+                    doc.ImpliedSelectionChanged += Editor_ImpliedSelectionChanged;
+                }
+            }
+        }
+
+        private void UserControl_Loaded(object sender, System.Windows.RoutedEventArgs e)
+        {
+
+        }
+
+        private void UserControl_Unloaded(object sender, System.Windows.RoutedEventArgs e)
+        {
+            if (EnableThemeSync)
+            {
+                AcadApp.SystemVariableChanged -= AcadApp_SystemVariableChanged;
+            }
+            if (EnableSelectionSync)
+            {
+                var doc = AcadApp.DocumentManager.MdiActiveDocument;
+                if (doc != null)
+                {
+                    doc.ImpliedSelectionChanged -= Editor_ImpliedSelectionChanged;
+                }
+            }
+        }
+
+        private void AcadApp_SystemVariableChanged(object sender, SystemVariableChangedEventArgs e)
+        {
+            if (e.Name.Equals("COLORTHEME", StringComparison.OrdinalIgnoreCase))
+            {
+                this.Dispatcher.Invoke(() => OnSystemVariableChanged(e));
+            }
+        }
+
+        private void Editor_ImpliedSelectionChanged(object sender, EventArgs e)
+        {
+            this.Dispatcher.Invoke(() => OnImpliedSelectionChanged());
+        }
+
+        protected virtual void OnSystemVariableChanged(SystemVariableChangedEventArgs e)
+        {
+            // 默认：应用主题
+            CadThemes.ApplyCadTheme(this);
+        }
+
+        protected virtual void OnImpliedSelectionChanged()
+        {
+            // 默认：空实现，子类重写
+        }
+        public abstract void UpdateData(TData data);
     }
 
     // 泛型抽象基类：TControl 是 UserControl 类型，TData 是数据类型
