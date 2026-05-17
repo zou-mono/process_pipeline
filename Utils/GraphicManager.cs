@@ -10,6 +10,9 @@ using System.Windows.Media;
 using System.Windows;
 using AcadApp = Autodesk.AutoCAD.ApplicationServices.Application;
 using Autodesk.AutoCAD.Windows;
+using Autodesk.AutoCAD.ApplicationServices;
+using process_pipeline.Commands;
+using process_pipeline.Forms;
 
 namespace process_pipeline.Utils
 {    
@@ -74,6 +77,29 @@ namespace process_pipeline.Utils
                 // auxLine.LineWeight = LineWeight.LineWeight018; 
 
                 AddGraphic(auxLine);
+            }
+        }
+
+        public static void RefreshDataGrid(Document doc, List<ObjectId> idsToProcess)
+        {
+            GraphicManager.ClearAuxiliaryGraphics();
+
+            if (palMatchArrowResult.Instance.IsVisible)
+            {
+                var service = new FlowArrowService(doc.Database, doc.Editor, useEditor: false);
+                service.Run(Properties.Settings.Default.taskFlowArrow, true, idsToProcess);
+
+                foreach (ObjectId oid in idsToProcess)
+                {
+                    if (palMatchArrowResult.Instance.CurrentProblems.ContainsKey(oid))
+                    {
+                        var problem = palMatchArrowResult.Instance.CurrentProblems[oid];
+                        if (problem.Type == ProblemType.OneToMany && !problem.IsFixed)
+                        {
+                            GraphicManager.DrawAuxiliaryLines(problem.PossibleMatches);
+                        }
+                    }
+                }
             }
         }
     }

@@ -9,7 +9,7 @@ using System.Windows.Controls;
 
 namespace process_pipeline.Forms
 {
-    internal class GridColumnCollapseBehavior : Behavior<Grid>
+    public class GridColumnCollapseBehavior : Behavior<Grid>
     {
         private double _lastWidth = 320d;
         private bool _updatingInternally;

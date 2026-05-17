@@ -3,8 +3,10 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:i="http://schemas.microsoft.com/xaml/behaviors"
              xmlns:vm="clr-namespace:process_pipeline.Forms"
              xmlns:sys="clr-namespace:System;assembly=mscorlib"
+             xmlns:behaviors="clr-namespace:process_pipeline.Forms"
              mc:Ignorable="d" 
              d:DesignHeight="450" d:DesignWidth="800" Loaded="UserControl_Loaded">
 
@@ -45,6 +47,7 @@
         <Setter Property="VirtualizingStackPanel.IsVirtualizing" Value="True" />
         <Setter Property="VirtualizingStackPanel.VirtualizationMode" Value="Recycling" />
         <Setter Property="ScrollViewer.CanContentScroll" Value="True" />
+        <Setter Property="FontSize" Value="14"/>
         <Setter Property="Background" Value="{DynamicResource Brush.DataGrid.Panel.BackgroundColor}" />
         <Setter Property="BorderBrush" Value="{DynamicResource Brush.DataGrid.GridLine}" />
         <Setter Property="BorderThickness" Value="0" />
@@ -140,6 +143,14 @@
 
     <!-- 中部 -->
     <Grid Grid.Row="1" Grid.RowSpan="2">
+      <i:Interaction.Behaviors>
+        <behaviors:GridColumnCollapseBehavior
+            TargetColumnIndex="0"
+            IsCollapsed="{Binding IsTreeCollapsed, Mode=TwoWay}"
+            MinExpandedWidth="180"
+            DefaultExpandedWidth="320"/>
+      </i:Interaction.Behaviors>
+
       <Grid.ColumnDefinitions>
         <ColumnDefinition x:Name="LeftCol" Width="320" MinWidth="0"/>
         <ColumnDefinition Width="Auto"/>

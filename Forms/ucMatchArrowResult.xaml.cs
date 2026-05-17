@@ -424,29 +424,6 @@ namespace process_pipeline.Forms
             bool hasCell = _grid.SelectedCells != null && _grid.SelectedCells.Count > 0;
             return (hasCopy, hasRow, hasRow || hasCell);
         }
-
-        public static void RefreshDataGrid(Document doc, List<ObjectId> idsToProcess)
-        {
-            GraphicManager.ClearAuxiliaryGraphics();
-
-            if (palMatchArrowResult.Instance.IsVisible)
-            {
-                var service = new FlowArrowService(doc.Database, doc.Editor, useEditor: false);
-                service.Run(Properties.Settings.Default.taskFlowArrow, true, idsToProcess);
-
-                foreach (ObjectId oid in idsToProcess)
-                {
-                    if (palMatchArrowResult.Instance.CurrentProblems.ContainsKey(oid))
-                    {
-                        var problem = palMatchArrowResult.Instance.CurrentProblems[oid];
-                        if (problem.Type == ProblemType.OneToMany && !problem.IsFixed)
-                        {
-                            GraphicManager.DrawAuxiliaryLines(problem.PossibleMatches);
-                        }
-                    }
-                }
-            }
-        }
     }
 
     public class palMatchArrowResult : PaletteSetBase<ucMatchArrowResult, Dictionary<ObjectId, ProblemItem>>
