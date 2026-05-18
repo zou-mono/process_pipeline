@@ -5,6 +5,7 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:i="http://schemas.microsoft.com/xaml/behaviors"
              xmlns:vm="clr-namespace:process_pipeline.Forms"
+             xmlns:core="clr-namespace:process_pipeline.Core"
              xmlns:sys="clr-namespace:System;assembly=mscorlib"
              xmlns:behaviors="clr-namespace:process_pipeline.Forms"
              mc:Ignorable="d" 
@@ -119,6 +120,11 @@
   <UserControl.DataContext>
     <vm:MainCheckWindowViewModel/>
   </UserControl.DataContext>
+
+  <i:Interaction.Behaviors>
+    <core:CadThemeBehavior />
+    <!-- 绑定到 ViewModel 的命令 -->
+  </i:Interaction.Behaviors>
 
   <Grid>
     <Grid.RowDefinitions>

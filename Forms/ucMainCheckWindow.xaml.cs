@@ -1,4 +1,5 @@
 ﻿using Autodesk.AutoCAD.DatabaseServices;
+using Autodesk.AutoCAD.EditorInput;
 using process_pipeline.Commands;
 using process_pipeline.Core;
 using process_pipeline.Themes;
@@ -32,6 +33,7 @@ namespace process_pipeline.Forms
     {
         // 【移除】：所有属性、命令和逻辑（移到 MainViewModel 中）
         // 例如：TreeNodes、Rows、StatusText、ToggleTreeCommand 等
+        private readonly MainCheckWindowViewModel _vm = new MainCheckWindowViewModel();
 
         public ucMainCheckWindow()
         {
@@ -51,6 +53,11 @@ namespace process_pipeline.Forms
                 // 示例：调用 ViewModel 的方法来更新 Rows（假设你添加了这个方法）
                 viewModel.UpdateFromData(data);
             }
+        }
+
+        private void Doc_ImpliedSelectionChanged(object sender, EventArgs e)
+        {
+            _vm.OnImpliedSelectionChanged();
         }
 
         private void UserControl_Loaded(object sender, RoutedEventArgs e)
@@ -181,6 +188,11 @@ namespace process_pipeline.Forms
         protected void OnPropertyChanged([CallerMemberName] string name = null)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+        }
+
+        public void OnImpliedSelectionChanged()
+        {
+
         }
     }
 

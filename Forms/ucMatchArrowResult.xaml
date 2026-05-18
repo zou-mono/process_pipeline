@@ -22,7 +22,7 @@
 
   <i:Interaction.Behaviors>
     <core:CadThemeBehavior />
-    <core:SelectionSyncBehavior OnSelectionChanged="{Binding SelectionChangedCommand}" />
+    <core:CadSelectionSyncBehavior OnCadSelectionChanged="{Binding CadSelectionChangedCommand}" />
     <!-- 绑定到 ViewModel 的命令 -->
   </i:Interaction.Behaviors>
 

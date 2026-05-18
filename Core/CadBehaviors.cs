@@ -7,6 +7,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using AcadApp = Autodesk.AutoCAD.ApplicationServices.Application;
 
 namespace process_pipeline.Core
@@ -36,16 +37,17 @@ namespace process_pipeline.Core
     }
 
     // Behavior: 处理 CAD 选择同步（可扩展为虚方法或事件）
-    public class SelectionSyncBehavior : Behavior<UserControl>
+    public class CadSelectionSyncBehavior : Behavior<UserControl>
     {
         // 可选：添加属性让 UserControl 自定义逻辑
-        public static readonly DependencyProperty OnSelectionChangedProperty =
-            DependencyProperty.Register("OnSelectionChanged", typeof(Action), typeof(SelectionSyncBehavior), new PropertyMetadata(null));
+        public static readonly DependencyProperty OnCadSelectionChangedProperty =
+                DependencyProperty.Register(nameof(OnCadSelectionChanged), typeof(ICommand),
+                    typeof(CadSelectionSyncBehavior), new PropertyMetadata(null));
 
-        public Action OnSelectionChanged
+        public ICommand OnCadSelectionChanged
         {
-            get => (Action)GetValue(OnSelectionChangedProperty);
-            set => SetValue(OnSelectionChangedProperty, value);
+            get => (ICommand)GetValue(OnCadSelectionChangedProperty);
+            set => SetValue(OnCadSelectionChangedProperty, value);
         }
 
         protected override void OnAttached()
@@ -70,9 +72,24 @@ namespace process_pipeline.Core
 
         private void Editor_ImpliedSelectionChanged(object sender, EventArgs e)
         {
+            // 【关键修复】增加严格的空值保护
+            if (OnCadSelectionChanged == null) 
+                return;
+
             AssociatedObject.Dispatcher.Invoke(() =>
             {
-                OnSelectionChanged?.Invoke();  // 调用自定义逻辑
+                try
+                {
+                    if (OnCadSelectionChanged.CanExecute(null))
+                    {
+                        OnCadSelectionChanged.Execute(null);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // 防止 Behavior 崩溃整个面板
+                    System.Diagnostics.Debug.WriteLine($"CadSelectionSyncBehavior 执行失败: {ex.Message}");
+                }
             });
         }
     }

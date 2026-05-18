@@ -50,6 +50,7 @@ namespace process_pipeline.Forms
 
             // 如需启用 CAD 反向联动，在 Loaded 里订阅更稳妥
             // if (_doc != null) _doc.ImpliedSelectionChanged += Doc_ImpliedSelectionChanged;
+            this.DataContext = _vm;     // ← 关键缺失！
         }
 
         public void UpdateData(Dictionary<ObjectId, ProblemItem> data)
@@ -115,21 +116,12 @@ namespace process_pipeline.Forms
         private void UserControl_Loaded(object sender, RoutedEventArgs e)
         {
             CadThemes.ApplyCadTheme(this);
-
-            _doc = AcadApp.DocumentManager.MdiActiveDocument;
-            if (_doc != null)
-                _doc.ImpliedSelectionChanged += Doc_ImpliedSelectionChanged;
         }
 
         private void UserControl_Unloaded(object sender, RoutedEventArgs e)
         {
-            if (_doc != null)
-                _doc.ImpliedSelectionChanged -= Doc_ImpliedSelectionChanged;
-        }
-
-        private void Doc_ImpliedSelectionChanged(object sender, EventArgs e)
-        {
-            _vm.OnImpliedSelectionChanged();
+            //if (_doc != null)
+            //    _doc.ImpliedSelectionChanged -= Doc_ImpliedSelectionChanged;
         }
 
         private void dgvProblems_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -243,6 +235,8 @@ namespace process_pipeline.Forms
         private readonly ObservableCollection<ProblemItemViewModel> _observableList = new ObservableCollection<ProblemItemViewModel>();
         private readonly Dictionary<ObjectId, ProblemItemViewModel> _idToViewModelMap = new Dictionary<ObjectId, ProblemItemViewModel>();
 
+        public ICommand CadSelectionChangedCommand { get; }
+
         private readonly DataGridCopyOptions _copyOptions = new DataGridCopyOptions
         {
             IncludeHeader = true,
@@ -263,6 +257,16 @@ namespace process_pipeline.Forms
             _grid = grid ?? throw new ArgumentNullException(nameof(grid));
             _doc = AcadApp.DocumentManager.MdiActiveDocument;
             UpdateData(initialData ?? new Dictionary<ObjectId, ProblemItem>());
+        }
+
+        public ucMatchArrowResultViewModel()
+        {
+            CadSelectionChangedCommand = new RelayCommand(OnCadSelectionChangedExecuted);
+        }
+
+        private void OnCadSelectionChangedExecuted(object parameter)
+        {
+            OnImpliedSelectionChanged();     // 调用你真正实现逻辑的方法
         }
 
         public void UpdateData(Dictionary<ObjectId, ProblemItem> data)
