@@ -119,6 +119,21 @@ namespace process_pipeline.Controls
                 typeof(CollapsibleSplitter), new PropertyMetadata(10.0));
         #endregion
 
+        #region DP - ToggleGlyph
+        public string ToggleGlyph
+        {
+            get => (string)GetValue(ToggleGlyphProperty);
+            set => SetValue(ToggleGlyphProperty, value);
+        }
+
+        public static readonly DependencyProperty ToggleGlyphProperty =
+            DependencyProperty.Register(
+                nameof(ToggleGlyph),
+                typeof(string),
+                typeof(CollapsibleSplitter),
+                new PropertyMetadata("◀"));
+        #endregion
+
         public override void OnApplyTemplate()
         {
             base.OnApplyTemplate();

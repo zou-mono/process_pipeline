@@ -214,6 +214,7 @@
                                               VerticalAlignment="Center"
                                               BorderThickness="0"
                                               Cursor="Hand"
+                                              Content="{TemplateBinding ToggleGlyph}"
                                               Background="#E8E8E8"/>
                 </Grid>
 
@@ -255,6 +256,7 @@
     <controls:CollapsibleSplitter 
       Grid.Row="1"
       IsCollapsed="{Binding IsTreeCollapsed, Mode=TwoWay}"
+      ToggleGlyph="{Binding CollapseGlyph}"
       LeftDefaultWidth="320"
       LeftMinExpandedWidth="0"
       RightMinWidth="0"

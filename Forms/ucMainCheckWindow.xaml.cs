@@ -73,7 +73,6 @@ namespace process_pipeline.Forms
         private bool _isTreeCollapsed;
         private string _statusText = "就绪";
         private string _keyword = string.Empty;
-        private string _collapseGlyph = "◀";
         private GridLengthCache _cache = new GridLengthCache();
 
         //private double _leftPanelToggleX;  // GridSplitter距离左侧的偏移值
@@ -120,18 +119,13 @@ namespace process_pipeline.Forms
             {
                 if (Set(ref _isTreeCollapsed, value))
                 {
-                    CollapseGlyph = value ? "▶" : "◀";
-                    StatusText = value ? "目录已折叠" : "目录已展开";
-                    // 这里与 View 层配合设置列宽（建议用行为 Behavior 实现）
+                    OnPropertyChanged(nameof(CollapseGlyph));
                 }
             }
         }
 
-        public string CollapseGlyph
-        {
-            get => _collapseGlyph;
-            set => Set(ref _collapseGlyph, value);
-        }
+        // 折叠时显示向右，展开时显示向左
+        public string CollapseGlyph => IsTreeCollapsed ? "▶" : "◀";
 
         public string StatusText
         {
@@ -177,6 +171,10 @@ namespace process_pipeline.Forms
         }
 
         public event PropertyChangedEventHandler PropertyChanged;
+        protected void OnPropertyChanged([CallerMemberName] string name = null)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+        }
 
         protected bool Set<T>(ref T field, T value, [CallerMemberName] string name = null)
         {
@@ -186,11 +184,6 @@ namespace process_pipeline.Forms
             if (name == nameof(Rows))
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(RowCountText)));
             return true;
-        }
-
-        protected void OnPropertyChanged([CallerMemberName] string name = null)
-        {
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
         }
 
         public void OnImpliedSelectionChanged()
