@@ -32,7 +32,7 @@ namespace process_pipeline.Forms
     // UserControl类，纯View类
     public partial class ucMatchArrowResult : UserControl, IPaletteControl<Dictionary<ObjectId, ProblemItem>>
     {
-        private readonly ucMatchArrowResultViewModel _vm = new ucMatchArrowResultViewModel();
+        private readonly MatchArrowResultViewModel _vm = new MatchArrowResultViewModel();
         private Document _doc;
 
         public IReadOnlyDictionary<ObjectId, ProblemItem> CurrentProblems => _vm.CurrentProblems;
@@ -50,7 +50,7 @@ namespace process_pipeline.Forms
 
             // 如需启用 CAD 反向联动，在 Loaded 里订阅更稳妥
             // if (_doc != null) _doc.ImpliedSelectionChanged += Doc_ImpliedSelectionChanged;
-            this.DataContext = _vm;     // ← 关键缺失！
+            this.DataContext = _vm;
         }
 
         public void UpdateData(Dictionary<ObjectId, ProblemItem> data)
@@ -115,7 +115,7 @@ namespace process_pipeline.Forms
 
         private void UserControl_Loaded(object sender, RoutedEventArgs e)
         {
-            CadThemes.ApplyCadTheme(this);
+            CadThemes.ApplyCadTheme(this);                
         }
 
         private void UserControl_Unloaded(object sender, RoutedEventArgs e)
@@ -229,7 +229,7 @@ namespace process_pipeline.Forms
     /// <summary>
     /// ucMatchArrowResult 的业务逻辑 ViewModel
     /// </summary>
-    public class ucMatchArrowResultViewModel
+    public class MatchArrowResultViewModel
     {
         private Dictionary<ObjectId, ProblemItem> _currentProblems = new Dictionary<ObjectId, ProblemItem>();
         private readonly ObservableCollection<ProblemItemViewModel> _observableList = new ObservableCollection<ProblemItemViewModel>();
@@ -259,7 +259,7 @@ namespace process_pipeline.Forms
             UpdateData(initialData ?? new Dictionary<ObjectId, ProblemItem>());
         }
 
-        public ucMatchArrowResultViewModel()
+        public MatchArrowResultViewModel()
         {
             CadSelectionChangedCommand = new RelayCommand(OnCadSelectionChangedExecuted);
         }

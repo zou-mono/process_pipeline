@@ -7,7 +7,7 @@
              xmlns:vm="clr-namespace:process_pipeline.Forms"
              xmlns:core="clr-namespace:process_pipeline.Core"
              xmlns:sys="clr-namespace:System;assembly=mscorlib"
-             xmlns:behaviors="clr-namespace:process_pipeline.Forms"
+             xmlns:controls="clr-namespace:process_pipeline.Controls"
              mc:Ignorable="d" 
              d:DesignHeight="450" d:DesignWidth="800" Loaded="UserControl_Loaded">
 
@@ -20,8 +20,8 @@
       <!-- 统一尺寸 -->
       <sys:Double x:Key="ToolbarHeight">40</sys:Double>
       <sys:Double x:Key="StatusBarHeight">28</sys:Double>
-      <sys:Double x:Key="SplitterWidth">8</sys:Double>
-      
+      <sys:Double x:Key="SplitterWidth">10</sys:Double>
+
       <!-- Toolbar 样式 -->
       <Style x:Key="ToolBarStyle" TargetType="ToolBar">
         <Setter Property="Height" Value="{StaticResource ToolbarHeight}" />
@@ -39,6 +39,7 @@
         <Setter Property="MinHeight" Value="{StaticResource StatusBarHeight}" />
         <Setter Property="MaxHeight" Value="{StaticResource StatusBarHeight}" />
         <Setter Property="Background" Value="{DynamicResource Brush.DataGrid.Panel.BackgroundColor}" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.DataGrid.Text.Foreground}" />
         <Setter Property="BorderBrush" Value="{DynamicResource Brush.DataGrid.GridLine}" />
         <Setter Property="BorderThickness" Value="1,1,1,0" />
       </Style>
@@ -52,6 +53,100 @@
         <Setter Property="Background" Value="{DynamicResource Brush.DataGrid.Panel.BackgroundColor}" />
         <Setter Property="BorderBrush" Value="{DynamicResource Brush.DataGrid.GridLine}" />
         <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="ItemContainerStyle">
+          <Setter.Value>
+            <Style TargetType="TreeViewItem">
+              <Setter Property="Foreground" Value="{DynamicResource Brush.DataGrid.Text.Foreground}"/>
+              <Setter Property="Background" Value="{DynamicResource Brush.DataGrid.Panel.BackgroundColor}" />
+              <Setter Property="Template">
+                <Setter.Value>
+                  <ControlTemplate TargetType="TreeViewItem">
+                    <Grid>
+                      <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                      </Grid.ColumnDefinitions>
+                      <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                      </Grid.RowDefinitions>
+
+                      <!-- 小三角按钮 -->
+                      <ToggleButton x:Name="Expander" 
+                              Grid.Column="0"
+                              Grid.Row="0"
+                              IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"
+                              ClickMode="Release"
+                              Width="12"
+                              Height="12"
+                              Background="Transparent"
+                              BorderThickness="0">
+                        <ToggleButton.Template>
+                          <ControlTemplate TargetType="ToggleButton">
+                            <Border Background="Transparent" Width="12" Height="12">
+                              <!-- 未展开状态：向右的三角 -->
+                              <Path x:Name="ExpandPath"
+                              Data="M 0 0 L 0 6 L 6 3 Z"
+                              Fill="{DynamicResource Brush.DataGrid.Text.Foreground}"
+                              HorizontalAlignment="Center"
+                              VerticalAlignment="Center"
+                              Stretch="Uniform"
+                              Margin="2"/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                              <!-- 展开状态：向下的三角 -->
+                              <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="ExpandPath" Property="Data" Value="M 0 0 L 6 0 L 3 6 Z"/>
+                              </Trigger>
+                            </ControlTemplate.Triggers>
+                          </ControlTemplate>
+                        </ToggleButton.Template>
+                      </ToggleButton>
+
+                      <!-- 节点内容 - 用 Border 包装 ContentPresenter -->
+                      <Border x:Name="HeaderBorder"
+                        Grid.Column="1"
+                        Grid.Row="0"
+                        Background="{TemplateBinding Background}"
+                        Margin="0">
+                        <ContentPresenter x:Name="PART_Header"
+                                    ContentSource="Header"
+                                    Margin="5,0,0,0"
+                                    VerticalAlignment="Center"/>
+                      </Border>
+
+                      <!-- 子节点容器 -->
+                      <ItemsPresenter x:Name="ItemsHost"
+                                Grid.Column="1"
+                                Grid.Row="1"
+                                Visibility="Collapsed"/>
+                    </Grid>
+
+                    <ControlTemplate.Triggers>
+                      <!-- 展开时显示子节点 -->
+                      <Trigger Property="IsExpanded" Value="True">
+                        <Setter TargetName="ItemsHost" Property="Visibility" Value="Visible"/>
+                      </Trigger>
+
+                      <!-- 没有子节点时隐藏三角 -->
+                      <Trigger Property="HasItems" Value="False">
+                        <Setter TargetName="Expander" Property="Visibility" Value="Hidden"/>
+                      </Trigger>
+                    </ControlTemplate.Triggers>
+                  </ControlTemplate>
+                </Setter.Value>
+              </Setter>
+
+              <Style.Triggers>
+                <!-- 选中时的触发器 -->
+                <Trigger Property="IsSelected" Value="True">
+                  <Setter Property="Background" Value="{DynamicResource Brush.DataGrid.SelectedRow.Background}"/>
+                  <Setter Property="Foreground" Value="{DynamicResource Brush.DataGrid.SelectedText.Foreground}"/>
+                </Trigger>
+              </Style.Triggers>
+            </Style>
+          </Setter.Value>
+        </Setter>
       </Style>
 
       <!-- DataGrid 样式 -->
@@ -84,32 +179,49 @@
         <Setter Property="BorderThickness" Value="0,0,1,1"/>
         <Setter Property="BorderBrush" Value="{DynamicResource Brush.DataGrid.GridLine}"/>
         <Setter Property="HorizontalContentAlignment" Value="Center"/>
-       </Style>
-
-
-        <!-- GridSplitter 样式 -->
-      <Style x:Key="SplitterStyle" TargetType="GridSplitter">
-        <Setter Property="Width" Value="{StaticResource SplitterWidth}" />
-        <Setter Property="Background" Value="{DynamicResource Brush.DataGrid.Panel.BackgroundColor}" />
-        <Setter Property="HorizontalAlignment" Value="Stretch" />
-        <Setter Property="VerticalAlignment" Value="Stretch" />
-        <Setter Property="ShowsPreview" Value="True" />
       </Style>
 
-      <!-- SplitterToggleButton 样式 -->
-      <Style x:Key="SplitterToggleButtonStyle" TargetType="ToggleButton">
-        <Setter Property="Width" Value="18" />
-        <Setter Property="Height" Value="48" />
-        <Setter Property="Background" Value="{DynamicResource Brush.DataGrid.Panel.BackgroundColor}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource Brush.DataGrid.GridLine}" />
-        <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="Foreground" Value="{DynamicResource Brush.DataGrid.Text.Foreground}" />
+      <!-- CollapsibleSplitter 的最小可运行模板 -->
+      <Style TargetType="{x:Type controls:CollapsibleSplitter}">
         <Setter Property="Template">
           <Setter.Value>
-            <ControlTemplate TargetType="ToggleButton">
-              <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="9">
-                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
-              </Border>
+            <ControlTemplate TargetType="{x:Type controls:CollapsibleSplitter}">
+              <Grid ClipToBounds="True">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition x:Name="PART_LeftCol" Width="320"/>
+                  <ColumnDefinition x:Name="PART_SplitterCol" Width="10"/>
+                  <ColumnDefinition x:Name="PART_RightCol" Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <Border Grid.Column="0" BorderThickness="0,0,1,0" BorderBrush="#DDD">
+                  <ContentPresenter x:Name="PART_LeftHost"
+                                                  Content="{TemplateBinding LeftContent}" />
+                </Border>
+
+                <Grid Grid.Column="1" Background="#F3F3F3">
+                  <GridSplitter x:Name="PART_Splitter"
+                                              Background="Transparent"
+                                              ResizeDirection="Columns"
+                                              HorizontalAlignment="Stretch"
+                                              VerticalAlignment="Stretch"
+                                              ResizeBehavior="PreviousAndNext"
+                                              Cursor="SizeWE"
+                                              ShowsPreview="False"/>
+                  <ToggleButton x:Name="PART_Toggle"
+                                              Width="10"
+                                              Height="48"
+                                              HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"
+                                              BorderThickness="0"
+                                              Cursor="Hand"
+                                              Background="#E8E8E8"/>
+                </Grid>
+
+                <Border Grid.Column="2">
+                  <ContentPresenter x:Name="PART_RightHost"
+                                                  Content="{TemplateBinding RightContent}" />
+                </Border>
+              </Grid>
             </ControlTemplate>
           </Setter.Value>
         </Setter>
@@ -117,22 +229,14 @@
     </ResourceDictionary>
   </UserControl.Resources>
 
-  <UserControl.DataContext>
-    <vm:MainCheckWindowViewModel/>
-  </UserControl.DataContext>
-
   <i:Interaction.Behaviors>
     <core:CadThemeBehavior />
-    <!-- 绑定到 ViewModel 的命令 -->
   </i:Interaction.Behaviors>
 
   <Grid>
     <Grid.RowDefinitions>
       <RowDefinition Height="Auto"/>
-      <!-- Toolbar -->
-      <RowDefinition Height="117*"/>
-      <RowDefinition Height="265*"/>
-      <!-- Main -->
+      <RowDefinition Height="*"/>
       <RowDefinition Height="Auto"/>
       <!-- StatusBar -->
     </Grid.RowDefinitions>
@@ -148,52 +252,30 @@
     </ToolBar>
 
     <!-- 中部 -->
-    <Grid Grid.Row="1" Grid.RowSpan="2">
-      <i:Interaction.Behaviors>
-        <behaviors:GridColumnCollapseBehavior
-            TargetColumnIndex="0"
-            IsCollapsed="{Binding IsTreeCollapsed, Mode=TwoWay}"
-            MinExpandedWidth="180"
-            DefaultExpandedWidth="320"/>
-      </i:Interaction.Behaviors>
+    <controls:CollapsibleSplitter 
+      Grid.Row="1"
+      IsCollapsed="{Binding IsTreeCollapsed, Mode=TwoWay}"
+      LeftDefaultWidth="320"
+      LeftMinExpandedWidth="0"
+      RightMinWidth="0"
+      SplitterWidth="10">
 
-      <Grid.ColumnDefinitions>
-        <ColumnDefinition x:Name="LeftCol" Width="320" MinWidth="0"/>
-        <ColumnDefinition Width="Auto"/>
-        <!-- splitter -->
-        <ColumnDefinition Width="*"/>
-      </Grid.ColumnDefinitions>
-
-      <!-- Left Tree -->
-      <Border Grid.Column="0" BorderBrush="#D9DDE3" BorderThickness="0,0,1,0">
-        <TreeView Style="{StaticResource TreeViewStyle}"
-                          ItemsSource="{Binding TreeNodes}">
+      <controls:CollapsibleSplitter.LeftContent>
+        <TreeView ItemsSource="{Binding TreeNodes}">
           <TreeView.ItemTemplate>
             <HierarchicalDataTemplate ItemsSource="{Binding Children}">
               <TextBlock Text="{Binding Name}"/>
             </HierarchicalDataTemplate>
           </TreeView.ItemTemplate>
         </TreeView>
-      </Border>
+      </controls:CollapsibleSplitter.LeftContent>
 
-      <!-- Splitter Area -->
-      <Grid Grid.Column="1" Width="8" Background="#EEF1F5">
-        <GridSplitter Style="{StaticResource SplitterStyle}"
-                              ResizeDirection="Columns"
-                              ResizeBehavior="PreviousAndNext"/>
-        <ToggleButton Style="{StaticResource SplitterToggleButtonStyle}"
-                              HorizontalAlignment="Center"
-                              VerticalAlignment="Center"
-                              IsChecked="{Binding IsTreeCollapsed, Mode=TwoWay}"
-                              Command="{Binding ToggleTreeCommand}">
-          <TextBlock Text="{Binding CollapseGlyph}" FontSize="12" FontWeight="SemiBold"/>
-        </ToggleButton>
-      </Grid>
-
-      <!-- Right DataGrid -->
-      <Border Grid.Column="2">
-        <DataGrid Style="{StaticResource DataGridStyle}"
-                          ItemsSource="{Binding Rows}">
+      <controls:CollapsibleSplitter.RightContent>
+        <DataGrid ItemsSource="{Binding Rows}"
+                  IsReadOnly="True"
+                  HeadersVisibility="Column"
+                  AutoGenerateColumns="False"
+                  RowHeaderWidth="0">
           <DataGrid.Columns>
             <DataGridTextColumn Header="编号" Binding="{Binding Id}" Width="120"/>
             <DataGridTextColumn Header="类型" Binding="{Binding Type}" Width="100"/>
@@ -203,11 +285,11 @@
             <DataGridTextColumn Header="备注" Binding="{Binding Remark}" Width="*"/>
           </DataGrid.Columns>
         </DataGrid>
-      </Border>
-    </Grid>
+      </controls:CollapsibleSplitter.RightContent>
+    </controls:CollapsibleSplitter>
 
     <!-- StatusBar -->
-    <StatusBar Grid.Row="3" Style="{StaticResource StatusBarStyle}">
+    <StatusBar Grid.Row="2" Style="{StaticResource StatusBarStyle}">
       <StatusBarItem Content="{Binding StatusText}"/>
       <Separator/>
       <StatusBarItem Content="{Binding RowCountText}"/>

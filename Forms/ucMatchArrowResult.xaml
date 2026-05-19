@@ -7,6 +7,7 @@
              xmlns:utils="clr-namespace:process_pipeline.Utils"
              xmlns:core="clr-namespace:process_pipeline.Core"
              xmlns:i="http://schemas.microsoft.com/xaml/behaviors"
+             xmlns:vm="clr-namespace:process_pipeline.Forms"
              mc:Ignorable="d" 
              d:DesignHeight="450" d:DesignWidth="800"
              Background="#333333" Foreground="#F0F0F0" SizeChanged="UserControl_SizeChanged" Loaded="UserControl_Loaded" MouseEnter="UserControl_MouseEnter">
@@ -25,6 +26,10 @@
     <core:CadSelectionSyncBehavior OnCadSelectionChanged="{Binding CadSelectionChangedCommand}" />
     <!-- 绑定到 ViewModel 的命令 -->
   </i:Interaction.Behaviors>
+
+  <!--<UserControl.DataContext>
+    <vm:MatchArrowResultViewModel/>
+  </UserControl.DataContext>-->
 
   <Grid HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Margin="5">
     <!-- 顶部工具栏：使用 StackPanel，背景设为稍暗的颜色区分层次 -->

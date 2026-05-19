@@ -70,6 +70,75 @@ namespace process_pipeline.Utils
             if (parentObject is T parent) return parent;
             return FindVisualParent<T>(parentObject);
         }
+
+       /// <summary>
+        /// 向上查找第一个符合类型的祖先（支持包含自身）
+        /// </summary>
+        public static T FindAncestor<T>(DependencyObject start, bool includeSelf = false) where T : DependencyObject
+        {
+            if (start == null) return null;
+
+            DependencyObject current = includeSelf ? start : VisualTreeHelper.GetParent(start);
+            while (current != null)
+            {
+                if (current is T t) return t;
+                current = VisualTreeHelper.GetParent(current);
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// 从某节点向下递归查找指定类型与名称的元素
+        /// name 为空时仅按类型查找
+        /// </summary>
+        public static T FindDescendant<T>(DependencyObject parent, string name = null) where T : FrameworkElement
+        {
+            if (parent == null) return null;
+
+            int count = VisualTreeHelper.GetChildrenCount(parent);
+            for (int i = 0; i < count; i++)
+            {
+                var child = VisualTreeHelper.GetChild(parent, i);
+
+                if (child is T typed &&
+                    (string.IsNullOrWhiteSpace(name) || typed.Name == name))
+                {
+                    return typed;
+                }
+
+                var found = FindDescendant<T>(child, name);
+                if (found != null) return found;
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// 统一入口：优先名字域 FindName，再向下视觉树查找
+        /// </summary>
+        public static T FindByName<T>(DependencyObject start, string name) where T : FrameworkElement
+        {
+            if (start == null || string.IsNullOrWhiteSpace(name)) return null;
+
+            // 1) 先找最近的 FrameworkElement，尝试 FindName（快）
+            var fe = start as FrameworkElement ?? FindAncestor<FrameworkElement>(start, true);
+            if (fe != null)
+            {
+                var fromNameScope = fe.FindName(name) as T;
+                if (fromNameScope != null) return fromNameScope;
+            }
+
+            // 2) 找到最近 UserControl 再尝试一次名字域
+            var uc = FindAncestor<UserControl>(start, true);
+            if (uc != null)
+            {
+                var fromUc = uc.FindName(name) as T;
+                if (fromUc != null) return fromUc;
+            }
+
+            // 3) 视觉树递归兜底
+            return FindDescendant<T>(start, name);
+        }
     }
 
     public static class MenuIconHelper

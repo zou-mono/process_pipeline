@@ -90,12 +90,12 @@
     <Compile Include="Commands\FlowArrow.cs" />
     <Compile Include="Commands\ReversePolyline.cs" />
     <Compile Include="Commands\SelectByHandle.cs" />
+    <Compile Include="Controls\CollapsibleSplitter.cs" />
     <Compile Include="Core\CadBase.cs" />
     <Compile Include="Core\CadBehaviors.cs" />
     <Compile Include="Core\ICadCommand.cs" />
     <Compile Include="Core\IPaletteControl.cs" />
     <Compile Include="Forms\DataGridCopyHelper.cs" />
-    <Compile Include="Forms\GridBehavior.cs" />
     <Compile Include="Forms\ucMainCheckWindow.xaml.cs">
       <DependentUpon>ucMainCheckWindow.xaml</DependentUpon>
     </Compile>

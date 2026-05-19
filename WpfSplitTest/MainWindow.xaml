@@ -1,0 +1,40 @@
+﻿<Window x:Class="WpfSplitTest.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:WpfSplitTest"
+        xmlns:ctrl="clr-namespace:WpfSplitTest.Controls"
+        Title="Split Demo" Width="1100" Height="700">
+
+  <Grid>
+    <ctrl:SplitToggleGrid
+            IsCollapsed="{Binding IsTreeCollapsed, Mode=TwoWay}"
+            LeftDefaultWidth="320"
+            LeftMinExpandedWidth="0"
+            RightMinWidth="0"
+            SplitterWidth="10">
+
+      <ctrl:SplitToggleGrid.LeftContent>
+        <TreeView ItemsSource="{Binding TreeNodes}">
+          <TreeView.ItemTemplate>
+            <HierarchicalDataTemplate ItemsSource="{Binding Children}">
+              <TextBlock Text="{Binding Name}" />
+            </HierarchicalDataTemplate>
+          </TreeView.ItemTemplate>
+        </TreeView>
+      </ctrl:SplitToggleGrid.LeftContent>
+
+      <ctrl:SplitToggleGrid.RightContent>
+        <DataGrid ItemsSource="{Binding Rows}" AutoGenerateColumns="False" IsReadOnly="True">
+          <DataGrid.Columns>
+            <DataGridTextColumn Header="编号" Binding="{Binding Id}" Width="120"/>
+            <DataGridTextColumn Header="类型" Binding="{Binding Type}" Width="100"/>
+            <DataGridTextColumn Header="状态" Binding="{Binding Status}" Width="100"/>
+            <DataGridTextColumn Header="管径" Binding="{Binding Diameter}" Width="100"/>
+            <DataGridTextColumn Header="离地高" Binding="{Binding Height}" Width="100"/>
+            <DataGridTextColumn Header="备注" Binding="{Binding Remark}" Width="*"/>
+          </DataGrid.Columns>
+        </DataGrid>
+      </ctrl:SplitToggleGrid.RightContent>
+    </ctrl:SplitToggleGrid>
+  </Grid>
+</Window>

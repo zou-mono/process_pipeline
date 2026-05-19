@@ -40,7 +40,8 @@ namespace process_pipeline.Forms
             InitializeComponent();
             // 【移除】：mock 数据和命令初始化（现在在 MainViewModel 中）
 
-            CadThemes.ApplyCadTheme(this);
+            //CadThemes.ApplyCadTheme(this);
+            this.DataContext = _vm;
         }
 
         // 【保留】：接口实现，用于外部更新数据
@@ -74,6 +75,8 @@ namespace process_pipeline.Forms
         private string _keyword = string.Empty;
         private string _collapseGlyph = "◀";
         private GridLengthCache _cache = new GridLengthCache();
+
+        //private double _leftPanelToggleX;  // GridSplitter距离左侧的偏移值
 
         public ObservableCollection<TreeNodeVm> TreeNodes { get; } = new ObservableCollection<TreeNodeVm>();
         public ObservableCollection<PipeRowVm> Rows { get; } = new ObservableCollection<PipeRowVm>();
@@ -146,7 +149,7 @@ namespace process_pipeline.Forms
 
         private void ToggleTree()
         {
-            IsTreeCollapsed = !IsTreeCollapsed;
+            //IsTreeCollapsed = !IsTreeCollapsed;
         }
 
         // 【新增】：从外部数据更新 ViewModel（用于 UpdateData 调用）
