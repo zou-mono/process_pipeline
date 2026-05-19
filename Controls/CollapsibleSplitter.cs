@@ -174,6 +174,7 @@ namespace process_pipeline.Controls
         private static void OnIsCollapsedChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
             var c = (CollapsibleSplitter)d;
+            if (c._internalUpdating) return;   // 防止拖拽内部更新时重入
             c.ApplyState((bool)e.NewValue, true);
         }
 
