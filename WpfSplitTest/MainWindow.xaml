@@ -11,7 +11,7 @@
             LeftDefaultWidth="320"
             LeftMinExpandedWidth="0"
             RightMinWidth="0"
-            SplitterWidth="10">
+            SplitterWidth="2">
 
       <ctrl:SplitToggleGrid.LeftContent>
         <TreeView ItemsSource="{Binding TreeNodes}">

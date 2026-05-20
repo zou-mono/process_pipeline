@@ -7,7 +7,7 @@
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="{x:Type local:SplitToggleGrid}">
-          <Grid ClipToBounds="True">
+          <Grid ClipToBounds="false">
             <Grid.ColumnDefinitions>
               <ColumnDefinition x:Name="PART_LeftCol" Width="320" MinWidth="0"/>
               <ColumnDefinition x:Name="PART_SplitterCol" Width="10"/>
@@ -19,28 +19,38 @@
                                               Content="{TemplateBinding LeftContent}" />
             </Border>
 
-            <!-- splitter + handle -->
-            <Grid Grid.Column="1" Background="#F3F3F3">
+            <Grid Grid.Column="1" ClipToBounds="false" Panel.ZIndex="99">
+              <!-- splitter + handle -->
               <GridSplitter x:Name="PART_Splitter"
-                                          Background="Transparent"
-                                          HorizontalAlignment="Stretch"
-                                          VerticalAlignment="Stretch"
-                                          ResizeDirection="Columns"
-                                          ResizeBehavior="PreviousAndNext"
-                                          ShowsPreview="False"
-                                          Cursor="SizeWE"/>
+                            Background="Transparent"
+                            HorizontalAlignment="Stretch"
+                            VerticalAlignment="Stretch"
+                            ResizeDirection="Columns"
+                            ResizeBehavior="PreviousAndNext"
+                            ShowsPreview="False"
+                            Cursor="SizeWE"/>
 
-              <ToggleButton x:Name="PART_Toggle"
-                                          Width="10"
-                                          Height="52"
-                                          HorizontalAlignment="Center"
-                                          VerticalAlignment="Center"
-                                          BorderThickness="0"
-                                          Background="#E8E8E8"
-                                          Foreground="#333"
-                                          Content="◀"
-                                          Cursor="Hand"/>
+              <Canvas HorizontalAlignment="Center" VerticalAlignment="Center">
+                <ToggleButton x:Name="PART_Toggle"
+                    Width="32"
+                    Height="32"
+                    Canvas.Left="-16"
+                    Canvas.Top="-16"
+                    Content="◄►"/>
+              </Canvas>
             </Grid>
+            <!--<ToggleButton x:Name="PART_Toggle"
+                          Grid.Column="1"
+                          Width="16"
+                          Height="52"
+                          HorizontalAlignment="Center"
+                          VerticalAlignment="Center"
+                          BorderThickness="0"
+                          Background="#E8E8E8"
+                          Foreground="#333"
+                          Content="◀"
+                          Margin="-7 0 -7 0"
+                          Cursor="Hand"/>-->
 
             <Border Grid.Column="2">
               <ContentPresenter x:Name="PART_RightHost"

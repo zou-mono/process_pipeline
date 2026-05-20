@@ -106,7 +106,7 @@ namespace WpfSplitTest.Controls
         }
 
         public static readonly DependencyProperty SplitterWidthProperty =
-            DependencyProperty.Register(nameof(SplitterWidth), typeof(double), typeof(SplitToggleGrid), new PropertyMetadata(10.0));
+            DependencyProperty.Register(nameof(SplitterWidth), typeof(double), typeof(SplitToggleGrid), new PropertyMetadata(2.0));
         #endregion
 
         public override void OnApplyTemplate()
