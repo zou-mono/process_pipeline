@@ -79,4 +79,7 @@ fabric.properties
 /obj
 /Packages
 
+**/bin/
+**/obj/
+
 **/__pycache__
