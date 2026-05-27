@@ -8,8 +8,8 @@ namespace WpfCompositeSplitter.Controls
 {
     public enum PaneDisplayState
     {
-        Normal,
-        PrimaryOnly,
-        SecondaryOnly
+        Normal = 0,
+        PrimaryOnly = 1,
+        SecondaryOnly = 2
     }
 }

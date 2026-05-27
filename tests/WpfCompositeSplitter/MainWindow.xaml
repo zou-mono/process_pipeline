@@ -1,45 +1,33 @@
 ﻿<Window x:Class="WpfCompositeSplitter.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:controls="clr-namespace:WpfCompositeSplitter.Controls"
-        mc:Ignorable="d"
-        Title="AdvancedSplitter Demo" Height="600" Width="1000"
-        Background="#252526" Foreground="#EAEAEA">
-  <Grid Margin="8">
-    <Grid.RowDefinitions>
-      <RowDefinition Height="Auto"/>
-      <RowDefinition Height="*"/>
-    </Grid.RowDefinitions>
+        xmlns:layout="clr-namespace:WpfCompositeSplitter.Layout"
+        xmlns:vm="clr-namespace:WpfCompositeSplitter.ViewModels"
+        Title="Splitter Demo" Width="1200" Height="700">
 
-    <!-- 顶部工具条 -->
-    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-      <TextBlock VerticalAlignment="Center" Text="布局方向：" Margin="0,0,6,0"/>
-      <ComboBox Width="120" SelectedValue="{Binding Orientation}" SelectedValuePath="Tag">
-        <ComboBoxItem Content="Horizontal" Tag="{x:Static Orientation.Horizontal}" IsSelected="True"/>
-        <ComboBoxItem Content="Vertical" Tag="{x:Static Orientation.Vertical}"/>
-      </ComboBox>
+  <Window.Resources>
+    <layout:PaneLayoutState x:Key="LeftPaneState"
+                                DisplayState="Normal"
+                                PrimaryLength="320"
+                                SplitterWidth="10"
+                                PrimaryCollapsedLength="28"
+                                SecondaryCollapsedLength="28"
+                                PrimaryMinExpandedLength="0"
+                                SecondaryMinLength="0"/>
+  </Window.Resources>
 
-      <TextBlock VerticalAlignment="Center" Text="状态：" Margin="16,0,6,0"/>
-      <ComboBox Width="150" SelectedItem="{Binding DisplayState}">
-        <ComboBoxItem Content="{x:Static controls:PaneDisplayState.Normal}"/>
-        <ComboBoxItem Content="{x:Static controls:PaneDisplayState.PrimaryOnly}"/>
-        <ComboBoxItem Content="{x:Static controls:PaneDisplayState.SecondaryOnly}"/>
-      </ComboBox>
-    </StackPanel>
-
-    <controls:AdvancedSplitter Grid.Row="1"
-                                   Orientation="{Binding Orientation}"
-                                   DisplayState="{Binding DisplayState, Mode=TwoWay}"
-                                   PrimaryTitle="图层树"
-                                   SecondaryTitle="检查结果"
-                                   ShowPrimaryHeader="True"
-                                   ShowSecondaryHeader="True"
-                                   PrimaryLength="320">
+  <Grid>
+    <controls:AdvancedSplitter
+            Orientation="Horizontal"
+            DisplayState="{Binding DisplayState, Mode=TwoWay}"
+            PrimaryTitle="图层树"
+            SecondaryTitle="检查结果"
+            ShowPrimaryHeader="True"
+            ShowSecondaryHeader="True">
 
       <controls:AdvancedSplitter.PrimaryContent>
-        <Border Background="#1E1E1E">
+        <Border Background="#252526">
           <ListBox ItemsSource="{Binding LeftItems}" BorderThickness="0"/>
         </Border>
       </controls:AdvancedSplitter.PrimaryContent>

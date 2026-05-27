@@ -6,42 +6,102 @@
 
   <conv:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
 
-  <!-- ========== 公共视觉资源 ========== -->
-  <SolidColorBrush x:Key="SplitterBg" Color="#4A4A4F"/>
-  <SolidColorBrush x:Key="HeaderBg" Color="#3A3A3D"/>
-  <SolidColorBrush x:Key="PaneBorderBrush" Color="#3E3E42"/>
-
+  <!-- ===== 公共样式 ===== -->
   <Style x:Key="PaneBorderStyle" TargetType="Border">
-    <Setter Property="BorderBrush" Value="{StaticResource PaneBorderBrush}"/>
+    <Setter Property="BorderBrush" Value="#3E3E42"/>
     <Setter Property="BorderThickness" Value="1"/>
   </Style>
 
-  <Style x:Key="HeaderDockStyle" TargetType="DockPanel">
+  <Style x:Key="HeaderDockStyle" TargetType="Grid">
     <Setter Property="Height" Value="30"/>
-    <Setter Property="Background" Value="{StaticResource HeaderBg}"/>
+    <Setter Property="Background" Value="#3A3A3D"/>
+    <Setter Property="MinWidth" Value="28"/>
+    <Setter Property="MinHeight" Value="28"/>
   </Style>
 
   <Style x:Key="HeaderTextStyle" TargetType="TextBlock">
     <Setter Property="VerticalAlignment" Value="Center"/>
-    <Setter Property="Margin" Value="8,0,0,0"/>
+    <Setter Property="Margin" Value="0,0,0,0"/>
     <Setter Property="Foreground" Value="#EAEAEA"/>
   </Style>
 
   <Style x:Key="HeaderButtonStyle" TargetType="Button">
-    <Setter Property="Width" Value="22"/>
-    <Setter Property="Height" Value="22"/>
-    <Setter Property="Margin" Value="4,0,4,0"/>
+    <Setter Property="Width" Value="28"/>
+    <Setter Property="Height" Value="28"/>
+    <Setter Property="Margin" Value="0,0,0,0"/>
     <Setter Property="Padding" Value="0"/>
+    <Setter Property="HorizontalAlignment" Value="Right"/>
+    <Setter Property="VerticalAlignment" Value="Center"/>
   </Style>
 
   <Style x:Key="SplitterStyle" TargetType="GridSplitter">
     <Setter Property="ShowsPreview" Value="False"/>
-    <Setter Property="Background" Value="{StaticResource SplitterBg}"/>
+    <Setter Property="Background" Value="#4A4A4F"/>
     <Setter Property="HorizontalAlignment" Value="Stretch"/>
     <Setter Property="VerticalAlignment" Value="Stretch"/>
   </Style>
 
-  <!-- ========== Horizontal Template ========== -->
+  <!-- ===== PaneHost 模板 ===== -->
+  <Style TargetType="{x:Type controls:PaneHost}">
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="{x:Type controls:PaneHost}">
+          <Border Style="{StaticResource PaneBorderStyle}">
+            <Grid>
+              <Grid.RowDefinitions>
+                <RowDefinition Height="30"/>
+                <RowDefinition Height="*"/>
+              </Grid.RowDefinitions>
+
+              <!--<DockPanel Grid.Row="0" Style="{StaticResource HeaderDockStyle}">
+                <TextBlock x:Name="TitleText"
+                                           Style="{StaticResource HeaderTextStyle}"
+                                           Text="{TemplateBinding Title}"
+                                           Visibility="{Binding ShowHeader, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                <Button x:Name="ToggleBtn"
+                                        DockPanel.Dock="Right"
+                                        Style="{StaticResource HeaderButtonStyle}"
+                                        Command="{TemplateBinding ToggleCommand}"
+                                        Content="{TemplateBinding ToggleContent}"/>
+              </DockPanel>-->
+              <Grid Grid.Row="0" Style="{StaticResource HeaderDockStyle}">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="*" />
+                  <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <TextBlock x:Name="TitleText"
+                  Grid.Column="0"
+                  Style="{StaticResource HeaderTextStyle}"
+                  Text="{TemplateBinding Title}"
+                  Visibility="{Binding ShowHeader, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource BoolToVisibilityConverter}}"/>
+
+                <Button x:Name="ToggleBtn"
+                  Grid.Column="1"
+                  Style="{StaticResource HeaderButtonStyle}"
+                  HorizontalAlignment="Right"
+                  VerticalAlignment="Center"
+                  Margin="0,0,0,0"
+                  Command="{TemplateBinding ToggleCommand}"
+                  Content="{TemplateBinding ToggleContent}"/>
+              </Grid>
+
+              <ContentPresenter x:Name="PaneContent" Grid.Row="1" Content="{TemplateBinding Content}"/>
+            </Grid>
+          </Border>
+
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsPaneCollapsed" Value="True">
+              <Setter TargetName="PaneContent" Property="Visibility" Value="Collapsed"/>
+              <Setter TargetName="TitleText" Property="Visibility" Value="Collapsed"/>
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <!-- ===== AdvancedSplitter: Horizontal ===== -->
   <ControlTemplate x:Key="AdvancedSplitterHorizontalTemplate" TargetType="{x:Type controls:AdvancedSplitter}">
     <Grid Background="{TemplateBinding Background}">
       <Grid.ColumnDefinitions>
@@ -50,81 +110,53 @@
         <ColumnDefinition x:Name="PART_SecondaryDef" Width="*" MinWidth="0"/>
       </Grid.ColumnDefinitions>
 
-      <!-- Primary -->
-      <Border Grid.Column="0" Style="{StaticResource PaneBorderStyle}">
-        <Grid>
-          <Grid.RowDefinitions>
-            <RowDefinition Height="30"/>
-            <RowDefinition Height="*"/>
-          </Grid.RowDefinitions>
+      <controls:PaneHost Grid.Column="0"
+                        Title="{TemplateBinding PrimaryTitle}"
+                        ShowHeader="{TemplateBinding ShowPrimaryHeader}"
+                        ToggleCommand="{x:Static controls:AdvancedSplitterCommands.TogglePrimaryOnly}"
+                        Content="{TemplateBinding PrimaryContent}">
+        <controls:PaneHost.Style>
+          <Style TargetType="{x:Type controls:PaneHost}" BasedOn="{StaticResource {x:Type controls:PaneHost}}">
+            <Setter Property="ToggleContent" Value="◀"/>
+            <Setter Property="IsPaneCollapsed" Value="False"/>
+            <Style.Triggers>
+              <DataTrigger Binding="{Binding DisplayState, RelativeSource={RelativeSource AncestorType={x:Type controls:AdvancedSplitter}}}" Value="{x:Static controls:PaneDisplayState.PrimaryOnly}">
+                <Setter Property="IsPaneCollapsed" Value="True"/>
+                <Setter Property="ToggleContent" Value="▶"/>
+              </DataTrigger>
+            </Style.Triggers>
+          </Style>
+        </controls:PaneHost.Style>
+      </controls:PaneHost>
 
-          <DockPanel Grid.Row="0" Style="{StaticResource HeaderDockStyle}">
-            <TextBlock x:Name="PrimaryTitleText"
-                                   Style="{StaticResource HeaderTextStyle}"
-                                   Text="{TemplateBinding PrimaryTitle}"
-                                   Visibility="{Binding ShowPrimaryHeader, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource BoolToVisibilityConverter}}"/>
-            <Button x:Name="PrimaryToggleBtn"
-                                DockPanel.Dock="Right"
-                                Style="{StaticResource HeaderButtonStyle}"
-                                Command="{x:Static controls:AdvancedSplitterCommands.TogglePrimaryOnly}"
-                                Content="◀"/>
-          </DockPanel>
-
-          <ContentPresenter x:Name="PrimaryContentHost" Grid.Row="1" Content="{TemplateBinding PrimaryContent}"/>
-        </Grid>
-      </Border>
-
-      <!-- Splitter -->
       <GridSplitter x:Name="PART_Splitter"
                           Grid.Column="1"
                           Style="{StaticResource SplitterStyle}"
                           ResizeDirection="Columns"
                           ResizeBehavior="PreviousAndNext"/>
 
-      <!-- Secondary -->
-      <Border Grid.Column="2" Style="{StaticResource PaneBorderStyle}">
-        <Grid>
-          <Grid.RowDefinitions>
-            <RowDefinition Height="30"/>
-            <RowDefinition Height="*"/>
-          </Grid.RowDefinitions>
-
-          <DockPanel Grid.Row="0" Style="{StaticResource HeaderDockStyle}">
-            <TextBlock x:Name="SecondaryTitleText"
-                                   Style="{StaticResource HeaderTextStyle}"
-                                   Text="{TemplateBinding SecondaryTitle}"
-                                   Visibility="{Binding ShowSecondaryHeader, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource BoolToVisibilityConverter}}"/>
-            <Button x:Name="SecondaryToggleBtn"
-                                DockPanel.Dock="Right"
-                                Style="{StaticResource HeaderButtonStyle}"
-                                Command="{x:Static controls:AdvancedSplitterCommands.ToggleSecondaryOnly}"
-                                Content="▶"/>
-          </DockPanel>
-
-          <ContentPresenter x:Name="SecondaryContentHost" Grid.Row="1" Content="{TemplateBinding SecondaryContent}"/>
-        </Grid>
-      </Border>
+      <controls:PaneHost Grid.Column="2"
+                               Title="{TemplateBinding SecondaryTitle}"
+                               ShowHeader="{TemplateBinding ShowSecondaryHeader}"
+                               ToggleCommand="{x:Static controls:AdvancedSplitterCommands.ToggleSecondaryOnly}"
+                               Content="{TemplateBinding SecondaryContent}">
+        <controls:PaneHost.Style>
+          <Style TargetType="{x:Type controls:PaneHost}" BasedOn="{StaticResource {x:Type controls:PaneHost}}">
+            <Setter Property="ToggleContent" Value="▶"/>
+            <Setter Property="IsPaneCollapsed" Value="False"/>
+            <Style.Triggers>
+              <DataTrigger Binding="{Binding DisplayState, RelativeSource={RelativeSource AncestorType={x:Type controls:AdvancedSplitter}}}" Value="{x:Static controls:PaneDisplayState.SecondaryOnly}">
+                <Setter Property="IsPaneCollapsed" Value="True"/>
+                <Setter Property="ToggleContent" Value="◀"/>
+              </DataTrigger>
+            </Style.Triggers>
+          </Style>
+        </controls:PaneHost.Style>
+      </controls:PaneHost>
     </Grid>
-
-    <ControlTemplate.Triggers>
-      <Trigger Property="DisplayState" Value="{x:Static controls:PaneDisplayState.PrimaryOnly}">
-        <Setter TargetName="PrimaryContentHost" Property="Visibility" Value="Collapsed"/>
-        <Setter TargetName="PrimaryTitleText" Property="Visibility" Value="Collapsed"/>
-        <Setter TargetName="PrimaryToggleBtn" Property="Content" Value="▶"/>
-      </Trigger>
-      <Trigger Property="DisplayState" Value="{x:Static controls:PaneDisplayState.SecondaryOnly}">
-        <Setter TargetName="SecondaryContentHost" Property="Visibility" Value="Collapsed"/>
-        <Setter TargetName="SecondaryTitleText" Property="Visibility" Value="Collapsed"/>
-        <Setter TargetName="SecondaryToggleBtn" Property="Content" Value="◀"/>
-      </Trigger>
-      <Trigger Property="DisplayState" Value="{x:Static controls:PaneDisplayState.Normal}">
-        <Setter TargetName="PrimaryToggleBtn" Property="Content" Value="◀"/>
-        <Setter TargetName="SecondaryToggleBtn" Property="Content" Value="▶"/>
-      </Trigger>
-    </ControlTemplate.Triggers>
   </ControlTemplate>
 
-  <!-- ========== Vertical Template ========== -->
+  <!-- ===== AdvancedSplitter: Vertical ===== -->
   <ControlTemplate x:Key="AdvancedSplitterVerticalTemplate" TargetType="{x:Type controls:AdvancedSplitter}">
     <Grid Background="{TemplateBinding Background}">
       <Grid.RowDefinitions>
@@ -133,86 +165,56 @@
         <RowDefinition x:Name="PART_SecondaryDef" Height="*" MinHeight="0"/>
       </Grid.RowDefinitions>
 
-      <!-- Primary -->
-      <Border Grid.Row="0" Style="{StaticResource PaneBorderStyle}">
-        <Grid>
-          <Grid.RowDefinitions>
-            <RowDefinition Height="30"/>
-            <RowDefinition Height="*"/>
-          </Grid.RowDefinitions>
+      <controls:PaneHost Grid.Row="0"
+                               Title="{TemplateBinding PrimaryTitle}"
+                               ShowHeader="{TemplateBinding ShowPrimaryHeader}"
+                               ToggleCommand="{x:Static controls:AdvancedSplitterCommands.TogglePrimaryOnly}"
+                               Content="{TemplateBinding PrimaryContent}">
+        <controls:PaneHost.Style>
+          <Style TargetType="{x:Type controls:PaneHost}" BasedOn="{StaticResource {x:Type controls:PaneHost}}">
+            <Setter Property="ToggleContent" Value="▲"/>
+            <Setter Property="IsPaneCollapsed" Value="False"/>
+            <Style.Triggers>
+              <DataTrigger Binding="{Binding DisplayState, RelativeSource={RelativeSource AncestorType={x:Type controls:AdvancedSplitter}}}" Value="{x:Static controls:PaneDisplayState.PrimaryOnly}">
+                <Setter Property="IsPaneCollapsed" Value="True"/>
+                <Setter Property="ToggleContent" Value="▼"/>
+              </DataTrigger>
+            </Style.Triggers>
+          </Style>
+        </controls:PaneHost.Style>
+      </controls:PaneHost>
 
-          <DockPanel Grid.Row="0" Style="{StaticResource HeaderDockStyle}">
-            <TextBlock x:Name="PrimaryTitleText"
-                                   Style="{StaticResource HeaderTextStyle}"
-                                   Text="{TemplateBinding PrimaryTitle}"
-                                   Visibility="{Binding ShowPrimaryHeader, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource BoolToVisibilityConverter}}"/>
-            <Button x:Name="PrimaryToggleBtn"
-                                DockPanel.Dock="Right"
-                                Style="{StaticResource HeaderButtonStyle}"
-                                Command="{x:Static controls:AdvancedSplitterCommands.TogglePrimaryOnly}"
-                                Content="▲"/>
-          </DockPanel>
-
-          <ContentPresenter x:Name="PrimaryContentHost" Grid.Row="1" Content="{TemplateBinding PrimaryContent}"/>
-        </Grid>
-      </Border>
-
-      <!-- Splitter -->
       <GridSplitter x:Name="PART_Splitter"
                           Grid.Row="1"
                           Style="{StaticResource SplitterStyle}"
                           ResizeDirection="Rows"
                           ResizeBehavior="PreviousAndNext"/>
 
-      <!-- Secondary -->
-      <Border Grid.Row="2" Style="{StaticResource PaneBorderStyle}">
-        <Grid>
-          <Grid.RowDefinitions>
-            <RowDefinition Height="30"/>
-            <RowDefinition Height="*"/>
-          </Grid.RowDefinitions>
-
-          <DockPanel Grid.Row="0" Style="{StaticResource HeaderDockStyle}">
-            <TextBlock x:Name="SecondaryTitleText"
-                                   Style="{StaticResource HeaderTextStyle}"
-                                   Text="{TemplateBinding SecondaryTitle}"
-                                   Visibility="{Binding ShowSecondaryHeader, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource BoolToVisibilityConverter}}"/>
-            <Button x:Name="SecondaryToggleBtn"
-                                DockPanel.Dock="Right"
-                                Style="{StaticResource HeaderButtonStyle}"
-                                Command="{x:Static controls:AdvancedSplitterCommands.ToggleSecondaryOnly}"
-                                Content="▼"/>
-          </DockPanel>
-
-          <ContentPresenter x:Name="SecondaryContentHost" Grid.Row="1" Content="{TemplateBinding SecondaryContent}"/>
-        </Grid>
-      </Border>
+      <controls:PaneHost Grid.Row="2"
+                               Title="{TemplateBinding SecondaryTitle}"
+                               ShowHeader="{TemplateBinding ShowSecondaryHeader}"
+                               ToggleCommand="{x:Static controls:AdvancedSplitterCommands.ToggleSecondaryOnly}"
+                               Content="{TemplateBinding SecondaryContent}">
+        <controls:PaneHost.Style>
+          <Style TargetType="{x:Type controls:PaneHost}" BasedOn="{StaticResource {x:Type controls:PaneHost}}">
+            <Setter Property="ToggleContent" Value="▼"/>
+            <Setter Property="IsPaneCollapsed" Value="False"/>
+            <Style.Triggers>
+              <DataTrigger Binding="{Binding DisplayState, RelativeSource={RelativeSource AncestorType={x:Type controls:AdvancedSplitter}}}" Value="{x:Static controls:PaneDisplayState.SecondaryOnly}">
+                <Setter Property="IsPaneCollapsed" Value="True"/>
+                <Setter Property="ToggleContent" Value="▲"/>
+              </DataTrigger>
+            </Style.Triggers>
+          </Style>
+        </controls:PaneHost.Style>
+      </controls:PaneHost>
     </Grid>
-
-    <ControlTemplate.Triggers>
-      <Trigger Property="DisplayState" Value="{x:Static controls:PaneDisplayState.PrimaryOnly}">
-        <Setter TargetName="PrimaryContentHost" Property="Visibility" Value="Collapsed"/>
-        <Setter TargetName="PrimaryTitleText" Property="Visibility" Value="Collapsed"/>
-        <Setter TargetName="PrimaryToggleBtn" Property="Content" Value="▼"/>
-      </Trigger>
-      <Trigger Property="DisplayState" Value="{x:Static controls:PaneDisplayState.SecondaryOnly}">
-        <Setter TargetName="SecondaryContentHost" Property="Visibility" Value="Collapsed"/>
-        <Setter TargetName="SecondaryTitleText" Property="Visibility" Value="Collapsed"/>
-        <Setter TargetName="SecondaryToggleBtn" Property="Content" Value="▲"/>
-      </Trigger>
-      <Trigger Property="DisplayState" Value="{x:Static controls:PaneDisplayState.Normal}">
-        <Setter TargetName="PrimaryToggleBtn" Property="Content" Value="▲"/>
-        <Setter TargetName="SecondaryToggleBtn" Property="Content" Value="▼"/>
-      </Trigger>
-    </ControlTemplate.Triggers>
   </ControlTemplate>
 
-  <!-- ========== 主Style：仅负责切模板 ========== -->
   <Style TargetType="{x:Type controls:AdvancedSplitter}">
     <Setter Property="Background" Value="#2D2D30"/>
     <Setter Property="Foreground" Value="#EAEAEA"/>
     <Setter Property="Template" Value="{StaticResource AdvancedSplitterHorizontalTemplate}"/>
-
     <Style.Triggers>
       <Trigger Property="Orientation" Value="Vertical">
         <Setter Property="Template" Value="{StaticResource AdvancedSplitterVerticalTemplate}"/>

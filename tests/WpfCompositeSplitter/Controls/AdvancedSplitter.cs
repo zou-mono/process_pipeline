@@ -22,7 +22,11 @@ namespace WpfCompositeSplitter.Controls
         private DefinitionBase _splitterDef;
         private GridSplitter _splitter;
 
+        private bool _pendingCollapseToPrimaryOnly;
+        private bool _dragSessionActive;
+
         private double _lastExpandedLength = 280.0;
+        private double _dragStartExpandedLength;
         private bool _internalUpdating;
 
         static AdvancedSplitter()
@@ -61,14 +65,20 @@ namespace WpfCompositeSplitter.Controls
 
         private void AttachHandlers()
         {
-            if (_splitter != null)
+            if (_splitter != null) { 
                 _splitter.DragDelta += OnSplitterDragDelta;
+                _splitter.DragCompleted += OnSplitterDragCompleted;
+                _splitter.LostMouseCapture += OnSplitterLostMouseCapture;
+            }
         }
 
         private void DetachHandlers()
         {
-            if (_splitter != null)
+            if (_splitter != null) { 
                 _splitter.DragDelta -= OnSplitterDragDelta;
+                _splitter.DragCompleted -= OnSplitterDragCompleted;
+                _splitter.LostMouseCapture -= OnSplitterLostMouseCapture;
+            }
 
             Loaded -= OnLoaded;
             SizeChanged -= OnSizeChanged;
@@ -76,8 +86,8 @@ namespace WpfCompositeSplitter.Controls
 
         private void OnLoaded(object sender, RoutedEventArgs e)
         {
-            if (PrimaryLength.IsAbsolute && PrimaryLength.Value > 0)
-                _lastExpandedLength = PrimaryLength.Value;
+            //if (PrimaryLength.IsAbsolute && PrimaryLength.Value > 0)
+            //    _lastExpandedLength = PrimaryLength.Value;
 
             ApplyState(DisplayState);
         }
@@ -131,6 +141,12 @@ namespace WpfCompositeSplitter.Controls
             DisplayState = PaneDisplayState.Normal;
         }
 
+        private void OnSplitterDragCompleted(object sender, DragCompletedEventArgs e)
+        {
+            _dragSessionActive = false;
+            CommitPendingCollapseIfAny();
+        }
+
         private void OnSplitterDragDelta(object sender, DragDeltaEventArgs e)
         {
             if (_primaryDef == null || _secondaryDef == null || _splitterDef == null) return;
@@ -142,10 +158,34 @@ namespace WpfCompositeSplitter.Controls
                 return;
             }
 
+            if (!_dragSessionActive)
+            {
+                _dragSessionActive = true;
+                _dragStartExpandedLength = GetPrimaryActualLength();
+            }
+
             double current = GetPrimaryActualLength();
             double delta = Orientation == Orientation.Horizontal ? e.HorizontalChange : e.VerticalChange;
             double target = current + delta;
             double clamped = ClampToBounds(target, useCollapsedMin: false);
+
+            //// 拖动过程中的有效展开值持续记录
+            //if (clamped >= PrimaryMinExpandedLength + 0.5)
+            //    _lastExpandedLength = clamped;
+
+            // 只记录“本次拖拽曾触边”
+            double edge = Math.Max(PrimaryCollapsedLength, PrimaryMinExpandedLength) + 0.5;
+            //double edge = PrimaryMinExpandedLength;
+            if (target > edge)
+            {
+                RememberExpandedLength(clamped);
+            }
+            else
+            {
+                // 贴边：锁定为“拖拽起点”
+                RememberExpandedLength(_dragStartExpandedLength);
+                _pendingCollapseToPrimaryOnly = true;
+            }
 
             _internalUpdating = true;
             try
@@ -155,7 +195,7 @@ namespace WpfCompositeSplitter.Controls
                 SetSecondaryStar();
 
                 if (clamped >= PrimaryMinExpandedLength)
-                    _lastExpandedLength = clamped;
+                    RememberExpandedLength(clamped);
             }
             finally
             {
@@ -163,6 +203,38 @@ namespace WpfCompositeSplitter.Controls
             }
 
             e.Handled = true;
+        }
+
+        private void CommitPendingCollapseIfAny()
+        {
+            if (!_pendingCollapseToPrimaryOnly) return;
+
+            _pendingCollapseToPrimaryOnly = false;
+
+            // 关键：延迟到Dispatcher，避开GridSplitter当前帧
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                if (DisplayState != PaneDisplayState.PrimaryOnly)
+                    DisplayState = PaneDisplayState.PrimaryOnly;
+                else
+                    ApplyState(PaneDisplayState.PrimaryOnly); // 同值强刷
+            }), System.Windows.Threading.DispatcherPriority.Background);
+        }
+
+        private void RememberExpandedLength(double v)
+        {
+            if (double.IsNaN(v) || double.IsInfinity(v)) return;
+            if (v < PrimaryMinExpandedLength + 0.5) return;
+            _lastExpandedLength = v;
+        }
+
+        // 解决拖出窗口
+        private void OnSplitterLostMouseCapture(object sender, MouseEventArgs e)
+        {
+            if (!_dragSessionActive && !_pendingCollapseToPrimaryOnly) return;
+
+            _dragSessionActive = false;
+            CommitPendingCollapseIfAny();
         }
 
         private void ApplyState(PaneDisplayState state)
@@ -175,8 +247,9 @@ namespace WpfCompositeSplitter.Controls
                 switch (state)
                 {
                     case PaneDisplayState.PrimaryOnly:
-                        if (GetPrimaryActualLength() > PrimaryCollapsedLength)
-                            _lastExpandedLength = Math.Max(GetPrimaryActualLength(), PrimaryMinExpandedLength);
+                        // 展开左侧，折叠右侧（与状态名一致）
+                        //if (GetPrimaryActualLength() > PrimaryCollapsedLength + 0.5)
+                        //    _lastExpandedLength = Math.Max(GetPrimaryActualLength(), PrimaryMinExpandedLength);
 
                         SetPrimaryLength(PrimaryCollapsedLength); // 保留按钮条
                         SetSplitterLength(0);                     // 折叠态隐藏splitter
@@ -200,6 +273,9 @@ namespace WpfCompositeSplitter.Controls
                         SetPrimaryLength(restore);
                         SetSplitterFixed();                       // Normal显示splitter
                         SetSecondaryStar();
+
+                        // 归一化回写，确保下次恢复稳定
+                        RememberExpandedLength(restore);
                         break;
                 }
             }
@@ -229,7 +305,7 @@ namespace WpfCompositeSplitter.Controls
                 SetSecondaryStar();
 
                 if (clamped >= PrimaryMinExpandedLength)
-                    _lastExpandedLength = clamped;
+                    RememberExpandedLength(clamped);
             }
             finally
             {
