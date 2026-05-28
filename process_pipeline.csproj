@@ -90,7 +90,12 @@
     <Compile Include="Commands\FlowArrow.cs" />
     <Compile Include="Commands\ReversePolyline.cs" />
     <Compile Include="Commands\SelectByHandle.cs" />
-    <Compile Include="Controls\CollapsibleSplitter.cs" />
+    <Compile Include="Controls\CompostieSplitter\CompositeSplitter.cs" />
+    <Compile Include="Controls\CompostieSplitter\Layout\LayoutController.cs" />
+    <Compile Include="Controls\CompostieSplitter\Layout\PaneLayoutState.cs" />
+    <Compile Include="Controls\CompostieSplitter\PaneDisplayState.cs" />
+    <Compile Include="Controls\CompostieSplitter\SplitterCommands.cs" />
+    <Compile Include="Controls\TitlePane.cs" />
     <Compile Include="Core\CadBase.cs" />
     <Compile Include="Core\CadBehaviors.cs" />
     <Compile Include="Core\ICadCommand.cs" />
@@ -118,6 +123,7 @@
       <DesignTimeSharedInput>True</DesignTimeSharedInput>
       <DependentUpon>Settings.settings</DependentUpon>
     </Compile>
+    <Compile Include="Utils\Converters.cs" />
     <Compile Include="Utils\Database.cs" />
     <Compile Include="Utils\Geometry.cs" />
     <Compile Include="Utils\GraphicManager.cs" />
@@ -174,6 +180,7 @@
       <Generator>MSBuild:Compile</Generator>
     </Page>
   </ItemGroup>
+  <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
     <UseWPF>true</UseWPF>

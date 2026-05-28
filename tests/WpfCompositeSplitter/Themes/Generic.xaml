@@ -110,24 +110,27 @@
         <ColumnDefinition x:Name="PART_SecondaryDef" Width="*" MinWidth="0"/>
       </Grid.ColumnDefinitions>
 
-      <controls:PaneHost Grid.Column="0"
-                        Title="{TemplateBinding PrimaryTitle}"
-                        ShowHeader="{TemplateBinding ShowPrimaryHeader}"
-                        ToggleCommand="{x:Static controls:AdvancedSplitterCommands.TogglePrimaryOnly}"
-                        Content="{TemplateBinding PrimaryContent}">
-        <controls:PaneHost.Style>
-          <Style TargetType="{x:Type controls:PaneHost}" BasedOn="{StaticResource {x:Type controls:PaneHost}}">
-            <Setter Property="ToggleContent" Value="◀"/>
-            <Setter Property="IsPaneCollapsed" Value="False"/>
-            <Style.Triggers>
-              <DataTrigger Binding="{Binding DisplayState, RelativeSource={RelativeSource AncestorType={x:Type controls:AdvancedSplitter}}}" Value="{x:Static controls:PaneDisplayState.PrimaryOnly}">
-                <Setter Property="IsPaneCollapsed" Value="True"/>
-                <Setter Property="ToggleContent" Value="▶"/>
-              </DataTrigger>
-            </Style.Triggers>
-          </Style>
-        </controls:PaneHost.Style>
-      </controls:PaneHost>
+      <!--<controls:panehost grid.column="0"
+                        title="{templatebinding primarytitle}"
+                        showheader="{templatebinding showprimaryheader}"
+                        togglecommand="{x:static controls:advancedsplittercommands.toggleprimaryonly}"
+                        content="{templatebinding primarycontent}">
+        <controls:panehost.style>
+          <style targettype="{x:type controls:panehost}" basedon="{staticresource {x:type controls:panehost}}">
+            <setter property="togglecontent" value="◀"/>
+            <setter property="ispanecollapsed" value="false"/>
+            <style.triggers>
+              <datatrigger binding="{binding displaystate, relativesource={relativesource ancestortype={x:type controls:advancedsplitter}}}" value="{x:static controls:panedisplaystate.primaryonly}">
+                <setter property="ispanecollapsed" value="true"/>
+                <setter property="togglecontent" value="▶"/>
+              </datatrigger>
+            </style.triggers>
+          </style>
+        </controls:panehost.style>
+      </controls:panehost>-->
+
+      <ContentPresenter Grid.Column="0"
+                  Content="{TemplateBinding PrimaryContent}"/>
 
       <GridSplitter x:Name="PART_Splitter"
                           Grid.Column="1"
@@ -135,7 +138,10 @@
                           ResizeDirection="Columns"
                           ResizeBehavior="PreviousAndNext"/>
 
-      <controls:PaneHost Grid.Column="2"
+      <ContentPresenter Grid.Column="2"
+                  Content="{TemplateBinding SecondaryContent}"/>
+
+      <!--<controls:PaneHost Grid.Column="2"
                                Title="{TemplateBinding SecondaryTitle}"
                                ShowHeader="{TemplateBinding ShowSecondaryHeader}"
                                ToggleCommand="{x:Static controls:AdvancedSplitterCommands.ToggleSecondaryOnly}"
@@ -152,7 +158,7 @@
             </Style.Triggers>
           </Style>
         </controls:PaneHost.Style>
-      </controls:PaneHost>
+      </controls:PaneHost>-->
     </Grid>
   </ControlTemplate>
 
@@ -165,24 +171,8 @@
         <RowDefinition x:Name="PART_SecondaryDef" Height="*" MinHeight="0"/>
       </Grid.RowDefinitions>
 
-      <controls:PaneHost Grid.Row="0"
-                               Title="{TemplateBinding PrimaryTitle}"
-                               ShowHeader="{TemplateBinding ShowPrimaryHeader}"
-                               ToggleCommand="{x:Static controls:AdvancedSplitterCommands.TogglePrimaryOnly}"
-                               Content="{TemplateBinding PrimaryContent}">
-        <controls:PaneHost.Style>
-          <Style TargetType="{x:Type controls:PaneHost}" BasedOn="{StaticResource {x:Type controls:PaneHost}}">
-            <Setter Property="ToggleContent" Value="▲"/>
-            <Setter Property="IsPaneCollapsed" Value="False"/>
-            <Style.Triggers>
-              <DataTrigger Binding="{Binding DisplayState, RelativeSource={RelativeSource AncestorType={x:Type controls:AdvancedSplitter}}}" Value="{x:Static controls:PaneDisplayState.PrimaryOnly}">
-                <Setter Property="IsPaneCollapsed" Value="True"/>
-                <Setter Property="ToggleContent" Value="▼"/>
-              </DataTrigger>
-            </Style.Triggers>
-          </Style>
-        </controls:PaneHost.Style>
-      </controls:PaneHost>
+      <ContentPresenter Grid.Row="0"
+                  Content="{TemplateBinding PrimaryContent}"/>
 
       <GridSplitter x:Name="PART_Splitter"
                           Grid.Row="1"
@@ -190,24 +180,8 @@
                           ResizeDirection="Rows"
                           ResizeBehavior="PreviousAndNext"/>
 
-      <controls:PaneHost Grid.Row="2"
-                               Title="{TemplateBinding SecondaryTitle}"
-                               ShowHeader="{TemplateBinding ShowSecondaryHeader}"
-                               ToggleCommand="{x:Static controls:AdvancedSplitterCommands.ToggleSecondaryOnly}"
-                               Content="{TemplateBinding SecondaryContent}">
-        <controls:PaneHost.Style>
-          <Style TargetType="{x:Type controls:PaneHost}" BasedOn="{StaticResource {x:Type controls:PaneHost}}">
-            <Setter Property="ToggleContent" Value="▼"/>
-            <Setter Property="IsPaneCollapsed" Value="False"/>
-            <Style.Triggers>
-              <DataTrigger Binding="{Binding DisplayState, RelativeSource={RelativeSource AncestorType={x:Type controls:AdvancedSplitter}}}" Value="{x:Static controls:PaneDisplayState.SecondaryOnly}">
-                <Setter Property="IsPaneCollapsed" Value="True"/>
-                <Setter Property="ToggleContent" Value="▲"/>
-              </DataTrigger>
-            </Style.Triggers>
-          </Style>
-        </controls:PaneHost.Style>
-      </controls:PaneHost>
+      <ContentPresenter Grid.Row="2"
+                  Content="{TemplateBinding SecondaryContent}"/>
     </Grid>
   </ControlTemplate>
 

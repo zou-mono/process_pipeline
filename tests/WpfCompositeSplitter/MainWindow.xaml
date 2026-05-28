@@ -24,12 +24,29 @@
             PrimaryTitle="图层树"
             SecondaryTitle="检查结果"
             ShowPrimaryHeader="True"
-            ShowSecondaryHeader="True">
+            ShowSecondaryHeader="False">
 
       <controls:AdvancedSplitter.PrimaryContent>
-        <Border Background="#252526">
-          <ListBox ItemsSource="{Binding LeftItems}" BorderThickness="0"/>
-        </Border>
+        <controls:PaneHost Title="{Binding RelativeSource={RelativeSource AncestorType={x:Type controls:AdvancedSplitter}}, Path=PrimaryTitle}"
+                       ShowHeader="{Binding RelativeSource={RelativeSource AncestorType={x:Type controls:AdvancedSplitter}}, Path=ShowPrimaryHeader}"
+                       ToggleCommand="{x:Static controls:AdvancedSplitterCommands.TogglePrimaryOnly}">
+          <controls:PaneHost.Style>
+            <Style TargetType="{x:Type controls:PaneHost}" BasedOn="{StaticResource {x:Type controls:PaneHost}}">
+              <Setter Property="ToggleContent" Value="◀"/>
+              <Setter Property="IsPaneCollapsed" Value="False"/>
+              <Style.Triggers>
+                <DataTrigger Binding="{Binding DisplayState, RelativeSource={RelativeSource AncestorType={x:Type controls:AdvancedSplitter}}}"
+                         Value="{x:Static controls:PaneDisplayState.PrimaryOnly}">
+                  <Setter Property="IsPaneCollapsed" Value="True"/>
+                  <Setter Property="ToggleContent" Value="▶"/>
+                </DataTrigger>
+              </Style.Triggers>
+            </Style>
+          </controls:PaneHost.Style>
+
+          <!-- 这里放你的真实内容 -->
+          <ListBox ItemsSource="{Binding LeftItems}"/>
+        </controls:PaneHost>
       </controls:AdvancedSplitter.PrimaryContent>
 
       <controls:AdvancedSplitter.SecondaryContent>
