@@ -111,14 +111,14 @@ namespace process_pipeline.Controls.CompositeSplitter
 
             private static void OnDisplayStateChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
             {
-                var c = (AdvancedSplitter)d;
+                var c = (Splitter)d;
                 if (c._internalUpdating) return;
                 c.ApplyState((PaneDisplayState)e.NewValue);
             }
 
             private static void OnOrientationChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
             {
-                var c = (AdvancedSplitter)d;
+                var c = (Splitter)d;
                 if (c._internalUpdating) return;
 
                 // 双模板切换后，WPF会重套模板并触发OnApplyTemplate

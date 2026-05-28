@@ -53,17 +53,6 @@
                 <RowDefinition Height="*"/>
               </Grid.RowDefinitions>
 
-              <!--<DockPanel Grid.Row="0" Style="{StaticResource HeaderDockStyle}">
-                <TextBlock x:Name="TitleText"
-                                           Style="{StaticResource HeaderTextStyle}"
-                                           Text="{TemplateBinding Title}"
-                                           Visibility="{Binding ShowHeader, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource BoolToVisibilityConverter}}"/>
-                <Button x:Name="ToggleBtn"
-                                        DockPanel.Dock="Right"
-                                        Style="{StaticResource HeaderButtonStyle}"
-                                        Command="{TemplateBinding ToggleCommand}"
-                                        Content="{TemplateBinding ToggleContent}"/>
-              </DockPanel>-->
               <Grid Grid.Row="0" Style="{StaticResource HeaderDockStyle}">
                 <Grid.ColumnDefinitions>
                   <ColumnDefinition Width="*" />
