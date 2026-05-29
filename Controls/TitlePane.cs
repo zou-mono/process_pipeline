@@ -68,5 +68,62 @@ namespace process_pipeline.Controls
         }
         public static readonly DependencyProperty IsPaneCollapsedProperty =
             DependencyProperty.Register(nameof(IsPaneCollapsed), typeof(bool), typeof(TitlePane), new PropertyMetadata(false));
+
+        #region 外部可覆盖样式 DP
+
+        /// <summary>最外层 Border 的样式。</summary>
+        public Style PaneBorderStyle
+        {
+            get => (Style)GetValue(PaneBorderStyleProperty);
+            set => SetValue(PaneBorderStyleProperty, value);
+        }
+        public static readonly DependencyProperty PaneBorderStyleProperty =
+            DependencyProperty.Register(nameof(PaneBorderStyle), typeof(Style), typeof(TitlePane), new PropertyMetadata(null));
+
+        /// <summary>Header 容器 Grid 的样式。</summary>
+        public Style HeaderDockStyle
+        {
+            get => (Style)GetValue(HeaderDockStyleProperty);
+            set => SetValue(HeaderDockStyleProperty, value);
+        }
+        public static readonly DependencyProperty HeaderDockStyleProperty =
+            DependencyProperty.Register(nameof(HeaderDockStyle), typeof(Style), typeof(TitlePane), new PropertyMetadata(null));
+
+        /// <summary>标题 TextBlock 的样式。</summary>
+        public Style HeaderTextStyle
+        {
+            get => (Style)GetValue(HeaderTextStyleProperty);
+            set => SetValue(HeaderTextStyleProperty, value);
+        }
+        public static readonly DependencyProperty HeaderTextStyleProperty =
+            DependencyProperty.Register(nameof(HeaderTextStyle), typeof(Style), typeof(TitlePane), new PropertyMetadata(null));
+
+        /// <summary>折叠按钮 Button 的样式。</summary>
+        public Style HeaderButtonStyle
+        {
+            get => (Style)GetValue(HeaderButtonStyleProperty);
+            set => SetValue(HeaderButtonStyleProperty, value);
+        }
+        public static readonly DependencyProperty HeaderButtonStyleProperty =
+            DependencyProperty.Register(nameof(HeaderButtonStyle), typeof(Style), typeof(TitlePane), new PropertyMetadata(null));
+
+        /// <summary>内容区 ContentPresenter 的样式（可选增强）</summary>
+        public Style PaneContentStyle
+        {
+            get => (Style)GetValue(PaneContentStyleProperty);
+            set => SetValue(PaneContentStyleProperty, value);
+        }
+        public static readonly DependencyProperty PaneContentStyleProperty =
+            DependencyProperty.Register(nameof(PaneContentStyle), typeof(Style), typeof(TitlePane), new PropertyMetadata(null));
+
+        public GridLength HeaderHeight
+        {
+            get => (GridLength)GetValue(HeaderHeightProperty);
+            set => SetValue(HeaderHeightProperty, value);
+        }
+        public static readonly DependencyProperty HeaderHeightProperty =
+            DependencyProperty.Register(nameof(HeaderHeight), typeof(GridLength), typeof(TitlePane), new PropertyMetadata(new GridLength(30.0)));
+
+        #endregion
     }
 }

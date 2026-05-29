@@ -4,12 +4,15 @@
 
   <Color x:Key="Color.DataGrid.Panel.BackgroundColor">#F0F0F0</Color>
   <Color x:Key="Color.DataGrid.Header.Background">#E0E0E0</Color>
+  <Color x:Key="Color.DataGrid.Header.Foreground">#111111</Color>
   <Color x:Key="Color.DataGrid.Row.Background">#FFFFFF</Color>
   <Color x:Key="Color.DataGrid.AltRow.Background">#F8F8F8</Color>
   <Color x:Key="Color.DataGrid.Text.Foreground">#111111</Color>
   <Color x:Key="Color.DataGrid.GridLine">#CCCCCC</Color>
   <Color x:Key="Color.DataGrid.SelectedRow.Background">#CCE8FF</Color>
   <Color x:Key="Color.DataGrid.SelectedText.Foreground">#111111</Color>
+  <Color x:Key="Color.Splitter.Background">#525252</Color>
+  <Color x:Key="Color.Border">#666</Color>
 
   <!-- DataGrid类(深色) -->
   <SolidColorBrush x:Key="Brush.DataGrid.Panel.BackgroundColor" Color="{StaticResource Color.DataGrid.Panel.BackgroundColor}"/>
@@ -20,5 +23,8 @@
   <SolidColorBrush x:Key="Brush.DataGrid.GridLine" Color="{StaticResource Color.DataGrid.GridLine}"/>
   <SolidColorBrush x:Key="Brush.DataGrid.SelectedRow.Background" Color="{StaticResource Color.DataGrid.SelectedRow.Background}"/>
   <SolidColorBrush x:Key="Brush.DataGrid.SelectedText.Foreground" Color="{StaticResource Color.DataGrid.SelectedText.Foreground}"/>
-  
+  <SolidColorBrush x:Key="Brush.Splitter.Background" Color="{StaticResource Color.Splitter.Background}"/>
+  <SolidColorBrush x:Key="Brush.Border" Color="{StaticResource Color.Border}"/>
+  <SolidColorBrush x:Key="Brush.DataGrid.Header.Foreground" Color="{StaticResource Color.DataGrid.Header.Foreground}"/>
+
 </ResourceDictionary>

@@ -8,6 +8,8 @@
              xmlns:core="clr-namespace:process_pipeline.Core"
              xmlns:sys="clr-namespace:System;assembly=mscorlib"
              xmlns:controls="clr-namespace:process_pipeline.Controls"
+             xmlns:layout="clr-namespace:process_pipeline.Controls.CompositeSplitter.Layout"
+             xmlns:splitter="clr-namespace:process_pipeline.Controls.CompositeSplitter"
              mc:Ignorable="d" 
              d:DesignHeight="450" d:DesignWidth="800" Loaded="UserControl_Loaded">
 
@@ -15,13 +17,24 @@
     <ResourceDictionary>
       <ResourceDictionary.MergedDictionaries>
         <ResourceDictionary Source="/process_pipeline;component/Themes/App.xaml"/>
+        <ResourceDictionary Source="/process_pipeline;component/Controls/CompositeSplitter/Styles.xaml"/>
       </ResourceDictionary.MergedDictionaries>
 
       <!-- 统一尺寸 -->
       <sys:Double x:Key="ToolbarHeight">40</sys:Double>
       <sys:Double x:Key="StatusBarHeight">28</sys:Double>
-      <sys:Double x:Key="SplitterWidth">10</sys:Double>
+      <sys:Double x:Key="SplitterWidth">2</sys:Double>
+      <sys:Double x:Key="CollapseButtonWidth">20</sys:Double>
 
+      <layout:PaneLayoutState x:Key="LeftPaneState"
+                              DisplayState="Normal"
+                              PrimaryLength="320"
+                              SplitterWidth="{StaticResource SplitterWidth}"
+                              PrimaryCollapsedLength="{StaticResource CollapseButtonWidth}"
+                              SecondaryCollapsedLength="28"
+                              PrimaryMinExpandedLength="0"
+                              SecondaryMinLength="0"/>
+      
       <!-- Toolbar 样式 -->
       <Style x:Key="ToolBarStyle" TargetType="ToolBar">
         <Setter Property="Height" Value="{StaticResource ToolbarHeight}" />
@@ -182,80 +195,30 @@
       </Style>
 
       <!-- GridSplitter 样式 -->
-      <Style x:Key="SplitterStyle" TargetType="GridSplitter">
-        <Setter Property="Width" Value="{StaticResource SplitterWidth}" />
+      <Style x:Key="CompositeSplitterStyle" TargetType="GridSplitter">
         <Setter Property="Background" Value="{DynamicResource Brush.DataGrid.Panel.BackgroundColor}" />
         <Setter Property="HorizontalAlignment" Value="Stretch" />
         <Setter Property="VerticalAlignment" Value="Stretch" />
-        <Setter Property="ShowsPreview" Value="True" />
+        <Setter Property="ShowsPreview" Value="False" />
       </Style>
 
       <!-- SplitterToggleButton 样式 -->
-      <Style x:Key="SplitterToggleButtonStyle" TargetType="ToggleButton">
-        <Setter Property="Width" Value="{StaticResource SplitterWidth}" />
-        <Setter Property="Height" Value="40" />
+      <Style x:Key="SplitterButtonStyle" TargetType="Button">
+        <Setter Property="Width" Value="{StaticResource CollapseButtonWidth}" />
+        <Setter Property="Height" Value="{StaticResource CollapseButtonWidth}" />
         <Setter Property="Background" Value="{DynamicResource Brush.DataGrid.Panel.BackgroundColor}" />
         <Setter Property="BorderBrush" Value="Transparent" />
         <Setter Property="BorderThickness" Value="0" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.DataGrid.Text.Foreground}" />
-        <Setter Property="Template">
+        <!--<Setter Property="Template">
           <Setter.Value>
-            <ControlTemplate TargetType="ToggleButton">
+            <ControlTemplate TargetType="Button">
               <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="5">
                 <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
               </Border>
             </ControlTemplate>
           </Setter.Value>
-        </Setter>
-      </Style>
-      
-      <!-- CollapsibleSplitter 的最小可运行模板 -->
-      <Style TargetType="{x:Type controls:CollapsibleSplitter}">
-        <Setter Property="Background" Value="{DynamicResource Brush.DataGrid.Panel.BackgroundColor}" />
-        <Setter Property="Foreground" Value="{DynamicResource Brush.DataGrid.Text.Foreground}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource Brush.DataGrid.GridLine}" />
-        <Setter Property="Template">
-          <Setter.Value>
-            <ControlTemplate TargetType="{x:Type controls:CollapsibleSplitter}">
-              <Grid ClipToBounds="false" Background="{TemplateBinding Background}">
-                <Grid.ColumnDefinitions>
-                  <ColumnDefinition x:Name="PART_LeftCol" Width="320"/>
-                  <ColumnDefinition x:Name="PART_SplitterCol" Width="{Binding Source={StaticResource SplitterWidth}}"/>
-                  <ColumnDefinition x:Name="PART_RightCol" Width="*"/>
-                </Grid.ColumnDefinitions>
-
-                <Border Grid.Column="0" >
-                  <ContentPresenter x:Name="PART_LeftHost"
-                                    Content="{TemplateBinding LeftContent}" />
-                </Border>
-
-                <Grid Grid.Column="1" ClipToBounds="false">
-                  <GridSplitter x:Name="PART_Splitter"
-                                ResizeDirection="Columns"
-                                HorizontalAlignment="Stretch"
-                                VerticalAlignment="Stretch"
-                                ResizeBehavior="PreviousAndNext"
-                                Cursor="SizeWE"
-                                Style="{StaticResource SplitterStyle}"
-                                ShowsPreview="False"/>
-                  <ToggleButton x:Name="PART_Toggle"
-                                Style="{StaticResource SplitterToggleButtonStyle}"
-                                Panel.ZIndex="10"
-                                HorizontalAlignment="Center"
-                                VerticalAlignment="Center"
-                                Cursor="Hand"
-                                Content="{TemplateBinding ToggleGlyph}"/>
-
-                </Grid>
-
-                <Border Grid.Column="2" Background="{TemplateBinding Background}">
-                  <ContentPresenter x:Name="PART_RightHost"
-                                    Content="{TemplateBinding RightContent}" />
-                </Border>
-              </Grid>
-            </ControlTemplate>
-          </Setter.Value>
-        </Setter>
+        </Setter>-->
       </Style>
     </ResourceDictionary>
   </UserControl.Resources>
@@ -283,44 +246,64 @@
     </ToolBar>
 
     <!-- 中部 -->
-    <controls:CollapsibleSplitter 
-      Grid.Row="1"
-      IsCollapsed="{Binding IsTreeCollapsed, Mode=TwoWay}"
-      ToggleGlyph="{Binding CollapseGlyph}"
-      LeftDefaultWidth="320"
-      LeftMinExpandedWidth="0"
-      RightMinWidth="0"
-      SplitterWidth="{StaticResource SplitterWidth}">
+    <splitter:CompositeSplitter
+            Grid.Row="1"
+            Orientation="Horizontal"
+            SplitterStyle="{StaticResource CompositeSplitterStyle}"
+            SplitterWidth="{StaticResource SplitterWidth}"
+            PrimaryCollapsedLength="{StaticResource CollapseButtonWidth}"
+            DisplayState="{Binding DisplayState, Mode=TwoWay}"
+            PrimaryTitle="图层树"
+            ShowPrimaryHeader="True"
+            ShowSecondaryHeader="False">
 
-      <controls:CollapsibleSplitter.LeftContent>
-        <TreeView ItemsSource="{Binding TreeNodes}"
-                  Style="{StaticResource TreeViewStyle}">
-          <TreeView.ItemTemplate>
-            <HierarchicalDataTemplate ItemsSource="{Binding Children}">
-              <TextBlock Text="{Binding Name}"/>
-            </HierarchicalDataTemplate>
-          </TreeView.ItemTemplate>
-        </TreeView>
-      </controls:CollapsibleSplitter.LeftContent>
+      <splitter:CompositeSplitter.PrimaryContent>
+        <controls:TitlePane 
+              Title="{Binding RelativeSource={RelativeSource AncestorType={x:Type splitter:CompositeSplitter}}, Path=PrimaryTitle}"
+              ShowHeader="{Binding RelativeSource={RelativeSource AncestorType={x:Type splitter:CompositeSplitter}}, Path=ShowPrimaryHeader}"
+              ToggleCommand="{x:Static splitter:CompositeSplitterCommands.TogglePrimaryOnly}">
+          
+          <controls:TitlePane.Style>
+            <Style TargetType="{x:Type controls:TitlePane}" BasedOn="{StaticResource {x:Type controls:TitlePane}}">
+              <Setter Property="ToggleContent" Value="◀"/>
+              <Setter Property="IsPaneCollapsed" Value="False"/>
+              <Setter Property="HeaderButtonStyle" Value="{StaticResource SplitterButtonStyle}"/>
+              <Style.Triggers>
+                <DataTrigger Binding="{Binding DisplayState, RelativeSource={RelativeSource AncestorType={x:Type splitter:CompositeSplitter}}}"
+                         Value="{x:Static layout:PaneDisplayState.PrimaryOnly}">
+                  <Setter Property="IsPaneCollapsed" Value="True"/>
+                  <Setter Property="ToggleContent" Value="▶"/>
+                  <Setter Property="HeaderButtonStyle" Value="{StaticResource SplitterButtonStyle}"/>
+                </DataTrigger>
+              </Style.Triggers>
+            </Style>
+          </controls:TitlePane.Style>
 
-      <controls:CollapsibleSplitter.RightContent>
-        <DataGrid ItemsSource="{Binding Rows}"
-                  Style="{StaticResource DataGridStyle}"
-                  IsReadOnly="True"
-                  HeadersVisibility="Column"
-                  AutoGenerateColumns="False"
-                  RowHeaderWidth="0">
-          <DataGrid.Columns>
-            <DataGridTextColumn Header="编号" Binding="{Binding Id}" Width="120"/>
-            <DataGridTextColumn Header="类型" Binding="{Binding Type}" Width="100"/>
-            <DataGridTextColumn Header="状态" Binding="{Binding Status}" Width="100"/>
-            <DataGridTextColumn Header="管径" Binding="{Binding Diameter}" Width="100"/>
-            <DataGridTextColumn Header="离地高" Binding="{Binding Height}" Width="100"/>
-            <DataGridTextColumn Header="备注" Binding="{Binding Remark}" Width="*"/>
-          </DataGrid.Columns>
-        </DataGrid>
-      </controls:CollapsibleSplitter.RightContent>
-    </controls:CollapsibleSplitter>
+          <!-- 这里放你的真实内容 -->
+          <ListBox ItemsSource="{Binding LeftItems}"/>
+        </controls:TitlePane>
+      </splitter:CompositeSplitter.PrimaryContent>
+
+      <splitter:CompositeSplitter.SecondaryContent>
+        <Border Background="{DynamicResource Brush.Border}">
+          <DataGrid ItemsSource="{Binding Rows}"
+                              AutoGenerateColumns="False"
+                              IsReadOnly="True"
+                              HeadersVisibility="Column"
+                              GridLinesVisibility="Horizontal"
+                              BorderThickness="0">
+            <DataGrid.Columns>
+              <DataGridTextColumn Header="编号" Binding="{Binding Id}" Width="120"/>
+              <DataGridTextColumn Header="类型" Binding="{Binding Type}" Width="100"/>
+              <DataGridTextColumn Header="状态" Binding="{Binding Status}" Width="100"/>
+              <DataGridTextColumn Header="管径" Binding="{Binding Diameter}" Width="100"/>
+              <DataGridTextColumn Header="离地高" Binding="{Binding Height}" Width="100"/>
+              <DataGridTextColumn Header="备注" Binding="{Binding Remark}" Width="*"/>
+            </DataGrid.Columns>
+          </DataGrid>
+        </Border>
+      </splitter:CompositeSplitter.SecondaryContent>
+    </splitter:CompositeSplitter>
 
     <!-- StatusBar -->
     <StatusBar Grid.Row="2" Style="{StaticResource StatusBarStyle}">

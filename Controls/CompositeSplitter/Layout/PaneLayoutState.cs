@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 using System.Windows;
 
 
-namespace process_pipeline.Controls.CompostieSplitter.Layout
+namespace process_pipeline.Controls.CompositeSplitter.Layout
 {
     /// <summary>
     /// PaneLayoutState = “布局状态快照”

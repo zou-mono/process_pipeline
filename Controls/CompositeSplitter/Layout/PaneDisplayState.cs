@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace process_pipeline.Controls.CompostieSplitter
+namespace process_pipeline.Controls.CompositeSplitter.Layout
 {
     public enum PaneDisplayState
     {

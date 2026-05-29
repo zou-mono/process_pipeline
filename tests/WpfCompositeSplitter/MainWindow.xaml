@@ -8,13 +8,13 @@
 
   <Window.Resources>
     <layout:PaneLayoutState x:Key="LeftPaneState"
-                                DisplayState="Normal"
-                                PrimaryLength="320"
-                                SplitterWidth="10"
-                                PrimaryCollapsedLength="28"
-                                SecondaryCollapsedLength="28"
-                                PrimaryMinExpandedLength="0"
-                                SecondaryMinLength="0"/>
+                      DisplayState="Normal"
+                      PrimaryLength="320"
+                      SplitterWidth="2"
+                      PrimaryCollapsedLength="28"
+                      SecondaryCollapsedLength="28"
+                      PrimaryMinExpandedLength="0"
+                      SecondaryMinLength="0"/>
   </Window.Resources>
 
   <Grid>
@@ -22,6 +22,7 @@
             Orientation="Horizontal"
             DisplayState="{Binding DisplayState, Mode=TwoWay}"
             PrimaryTitle="图层树"
+            SplitterWidth="{Binding Source={StaticResource LeftPaneState}, Path=SplitterWidth}"
             SecondaryTitle="检查结果"
             ShowPrimaryHeader="True"
             ShowSecondaryHeader="False">
@@ -34,6 +35,7 @@
             <Style TargetType="{x:Type controls:PaneHost}" BasedOn="{StaticResource {x:Type controls:PaneHost}}">
               <Setter Property="ToggleContent" Value="◀"/>
               <Setter Property="IsPaneCollapsed" Value="False"/>
+              <Setter Property="HeaderHeight" Value="50" />
               <Style.Triggers>
                 <DataTrigger Binding="{Binding DisplayState, RelativeSource={RelativeSource AncestorType={x:Type controls:AdvancedSplitter}}}"
                          Value="{x:Static controls:PaneDisplayState.PrimaryOnly}">

@@ -90,11 +90,11 @@
     <Compile Include="Commands\FlowArrow.cs" />
     <Compile Include="Commands\ReversePolyline.cs" />
     <Compile Include="Commands\SelectByHandle.cs" />
-    <Compile Include="Controls\CompostieSplitter\CompositeSplitter.cs" />
-    <Compile Include="Controls\CompostieSplitter\Layout\LayoutController.cs" />
-    <Compile Include="Controls\CompostieSplitter\Layout\PaneLayoutState.cs" />
-    <Compile Include="Controls\CompostieSplitter\PaneDisplayState.cs" />
-    <Compile Include="Controls\CompostieSplitter\SplitterCommands.cs" />
+    <Compile Include="Controls\CompositeSplitter\CompositeSplitter.cs" />
+    <Compile Include="Controls\CompositeSplitter\Layout\LayoutController.cs" />
+    <Compile Include="Controls\CompositeSplitter\Layout\PaneLayoutState.cs" />
+    <Compile Include="Controls\CompositeSplitter\Layout\PaneDisplayState.cs" />
+    <Compile Include="Controls\CompositeSplitter\CompositeSplitterCommands.cs" />
     <Compile Include="Controls\TitlePane.cs" />
     <Compile Include="Core\CadBase.cs" />
     <Compile Include="Core\CadBehaviors.cs" />
@@ -146,6 +146,9 @@
     </None>
   </ItemGroup>
   <ItemGroup>
+    <Page Include="Controls\CompositeSplitter\Styles.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
     <Page Include="Forms\ucMainCheckWindow.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
