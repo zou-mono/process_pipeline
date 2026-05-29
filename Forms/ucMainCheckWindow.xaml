@@ -25,6 +25,8 @@
       <sys:Double x:Key="StatusBarHeight">28</sys:Double>
       <sys:Double x:Key="SplitterWidth">2</sys:Double>
       <sys:Double x:Key="CollapseButtonWidth">20</sys:Double>
+      <sys:Double x:Key="TitlePane.DockHeight">20</sys:Double>
+      <GridLength x:Key="TitlePane.HeaderHeight">30</GridLength>
 
       <layout:PaneLayoutState x:Key="LeftPaneState"
                               DisplayState="Normal"
@@ -178,7 +180,7 @@
         <Setter Property="AlternatingRowBackground" Value="{DynamicResource Brush.DataGrid.AltRow.Background}" />
         <Setter Property="BorderBrush" Value="{DynamicResource Brush.DataGrid.GridLine}" />
         <Setter Property="RowBackground" Value="{DynamicResource Brush.DataGrid.Row.Background}" />
-        <Setter Property="Foreground" Value="{DynamicResource Brush.DataGrid.Text.Foreground}" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.DataGrid.Header.Foreground}" />
         <Setter Property="BorderThickness" Value="0" />
       </Style>
 
@@ -195,7 +197,7 @@
       </Style>
 
       <!-- GridSplitter 样式 -->
-      <Style x:Key="CompositeSplitterStyle" TargetType="GridSplitter">
+      <Style x:Key="CompositeSplitter.SplitterStyle" TargetType="GridSplitter">
         <Setter Property="Background" Value="{DynamicResource Brush.DataGrid.Panel.BackgroundColor}" />
         <Setter Property="HorizontalAlignment" Value="Stretch" />
         <Setter Property="VerticalAlignment" Value="Stretch" />
@@ -203,10 +205,10 @@
       </Style>
 
       <!-- SplitterToggleButton 样式 -->
-      <Style x:Key="SplitterButtonStyle" TargetType="Button">
+      <Style x:Key="TilePane.ButtonStyle" TargetType="Button">
         <Setter Property="Width" Value="{StaticResource CollapseButtonWidth}" />
         <Setter Property="Height" Value="{StaticResource CollapseButtonWidth}" />
-        <Setter Property="Background" Value="{DynamicResource Brush.DataGrid.Panel.BackgroundColor}" />
+        <Setter Property="Background" Value="{DynamicResource Brush.DataGrid.Header.Background}" />
         <Setter Property="BorderBrush" Value="Transparent" />
         <Setter Property="BorderThickness" Value="0" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.DataGrid.Text.Foreground}" />
@@ -219,6 +221,11 @@
             </ControlTemplate>
           </Setter.Value>
         </Setter>-->
+      </Style>
+
+      <Style x:Key="TitlePane.HeaderDockStyle" TargetType="Grid">
+        <Setter Property="Height" Value="{StaticResource TitlePane.DockHeight}"/>
+        <Setter Property="Background" Value="{DynamicResource Brush.DataGrid.Header.Background}"/>
       </Style>
     </ResourceDictionary>
   </UserControl.Resources>
@@ -249,7 +256,7 @@
     <splitter:CompositeSplitter
             Grid.Row="1"
             Orientation="Horizontal"
-            SplitterStyle="{StaticResource CompositeSplitterStyle}"
+            SplitterStyle="{StaticResource CompositeSplitter.SplitterStyle}"
             SplitterWidth="{StaticResource SplitterWidth}"
             PrimaryCollapsedLength="{StaticResource CollapseButtonWidth}"
             DisplayState="{Binding DisplayState, Mode=TwoWay}"
@@ -267,13 +274,17 @@
             <Style TargetType="{x:Type controls:TitlePane}" BasedOn="{StaticResource {x:Type controls:TitlePane}}">
               <Setter Property="ToggleContent" Value="◀"/>
               <Setter Property="IsPaneCollapsed" Value="False"/>
-              <Setter Property="HeaderButtonStyle" Value="{StaticResource SplitterButtonStyle}"/>
+              <Setter Property="HeaderButtonStyle" Value="{StaticResource TilePane.ButtonStyle}"/>
+              <Setter Property="HeaderDockStyle" Value="{StaticResource TitlePane.HeaderDockStyle}"/>
+              <Setter Property="HeaderHeight" Value="{StaticResource TitlePane.HeaderHeight}"/>
+              
               <Style.Triggers>
                 <DataTrigger Binding="{Binding DisplayState, RelativeSource={RelativeSource AncestorType={x:Type splitter:CompositeSplitter}}}"
                          Value="{x:Static layout:PaneDisplayState.PrimaryOnly}">
                   <Setter Property="IsPaneCollapsed" Value="True"/>
                   <Setter Property="ToggleContent" Value="▶"/>
-                  <Setter Property="HeaderButtonStyle" Value="{StaticResource SplitterButtonStyle}"/>
+                  <Setter Property="HeaderButtonStyle" Value="{StaticResource TilePane.ButtonStyle}"/>
+                  <Setter Property="HeaderDockStyle" Value="{StaticResource TitlePane.HeaderDockStyle}"/>
                 </DataTrigger>
               </Style.Triggers>
             </Style>

@@ -18,7 +18,7 @@
   </Style>
 
   <Style x:Key="HeaderDockStyle" TargetType="Grid">
-    <Setter Property="Height" Value="30"/>
+    <Setter Property="Height" Value="20"/>
     <Setter Property="Background" Value="{DynamicResource Brush.DataGrid.Header.Background}"/>
     <Setter Property="MinWidth" Value="10"/>
     <Setter Property="MinHeight" Value="10"/>
@@ -26,11 +26,13 @@
 
   <Style x:Key="HeaderTextStyle" TargetType="TextBlock">
     <Setter Property="VerticalAlignment" Value="Center"/>
-    <Setter Property="Margin" Value="8,0,0,0"/>
-    <Setter Property="Foreground" Value="{DynamicResource Brush.DataGrid.Text.Foreground}"/>
+    <Setter Property="Margin" Value="5,0,0,0"/>
+    <Setter Property="Foreground" Value="{DynamicResource Brush.DataGrid.Header.Foreground}"/>
   </Style>
 
   <Style x:Key="HeaderButtonStyle" TargetType="Button">
+    <Setter Property="Background" Value="{DynamicResource Brush.DataGrid.Header.Background}"/>
+    <Setter Property="Foreground" Value="{DynamicResource Brush.DataGrid.Header.Foreground}"/>
     <Setter Property="Width" Value="28"/>
     <Setter Property="Height" Value="28"/>
     <Setter Property="Margin" Value="0,0,0,0"/>
@@ -64,7 +66,7 @@
       <Setter.Value>
         <ControlTemplate TargetType="{x:Type controls:TitlePane}">
           <Border Style="{TemplateBinding PaneBorderStyle}">
-            <Grid>
+            <Grid Background="{DynamicResource Brush.DataGrid.Header.Background}">
               <Grid.RowDefinitions>
                 <RowDefinition Height="{TemplateBinding HeaderHeight}"/>
                 <!--<RowDefinition Height="30"/>-->
@@ -79,6 +81,7 @@
 
                 <TextBlock x:Name="TitleText"
                   Grid.Column="0"
+                  VerticalAlignment="Center"
                   Style="{TemplateBinding HeaderTextStyle}"         
                   Text="{TemplateBinding Title}"
                   Visibility="{Binding ShowHeader, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource BoolToVisibilityConverter}}"/>
@@ -86,7 +89,7 @@
                 <Button x:Name="ToggleBtn"
                   Grid.Column="1"
                   Style="{TemplateBinding HeaderButtonStyle}"
-                  HorizontalAlignment="Right"
+                  HorizontalAlignment="Center"
                   VerticalAlignment="Center"
                   Margin="0,0,0,0"
                   Command="{TemplateBinding ToggleCommand}"
