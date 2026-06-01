@@ -27,7 +27,7 @@
   <Style x:Key="HeaderTextStyle" TargetType="TextBlock">
     <Setter Property="VerticalAlignment" Value="Center"/>
     <Setter Property="Margin" Value="5,0,0,0"/>
-    <Setter Property="Foreground" Value="{DynamicResource Brush.DataGrid.Header.Foreground}"/>
+    <Setter Property="Foreground" Value="{DynamicResource Brush.DataGrid.Text.Foreground}"/>
   </Style>
 
   <Style x:Key="HeaderButtonStyle" TargetType="Button">

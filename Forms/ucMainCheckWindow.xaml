@@ -64,7 +64,7 @@
         <Setter Property="VirtualizingStackPanel.IsVirtualizing" Value="True" />
         <Setter Property="VirtualizingStackPanel.VirtualizationMode" Value="Recycling" />
         <Setter Property="ScrollViewer.CanContentScroll" Value="True" />
-        <Setter Property="FontSize" Value="14"/>
+        <Setter Property="FontSize" Value="12"/>
         <Setter Property="Background" Value="{DynamicResource Brush.DataGrid.Panel.BackgroundColor}" />
         <Setter Property="BorderBrush" Value="{DynamicResource Brush.DataGrid.GridLine}" />
         <Setter Property="BorderThickness" Value="0" />
@@ -101,7 +101,7 @@
                             <Border Background="Transparent" Width="12" Height="12">
                               <!-- 未展开状态：向右的三角 -->
                               <Path x:Name="ExpandPath"
-                              Data="M 0 0 L 0 6 L 6 3 Z"
+                              Data="M 0 0 L 5.196 3 L 0 6 Z"
                               Fill="{DynamicResource Brush.DataGrid.Text.Foreground}"
                               HorizontalAlignment="Center"
                               VerticalAlignment="Center"
@@ -111,7 +111,7 @@
                             <ControlTemplate.Triggers>
                               <!-- 展开状态：向下的三角 -->
                               <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="ExpandPath" Property="Data" Value="M 0 0 L 6 0 L 3 6 Z"/>
+                                <Setter TargetName="ExpandPath" Property="Data" Value="M 0 0 L 6 0 L 3 5.196 Z"/>
                               </Trigger>
                             </ControlTemplate.Triggers>
                           </ControlTemplate>
@@ -277,7 +277,7 @@
               <Setter Property="HeaderButtonStyle" Value="{StaticResource TilePane.ButtonStyle}"/>
               <Setter Property="HeaderDockStyle" Value="{StaticResource TitlePane.HeaderDockStyle}"/>
               <Setter Property="HeaderHeight" Value="{StaticResource TitlePane.HeaderHeight}"/>
-              
+
               <Style.Triggers>
                 <DataTrigger Binding="{Binding DisplayState, RelativeSource={RelativeSource AncestorType={x:Type splitter:CompositeSplitter}}}"
                          Value="{x:Static layout:PaneDisplayState.PrimaryOnly}">
@@ -291,18 +291,26 @@
           </controls:TitlePane.Style>
 
           <!-- 这里放你的真实内容 -->
-          <ListBox ItemsSource="{Binding LeftItems}"/>
+          <TreeView ItemsSource="{Binding TreeNodes}"
+                    Style="{StaticResource TreeViewStyle}">
+            <TreeView.ItemTemplate>
+              <HierarchicalDataTemplate ItemsSource="{Binding Children}">
+                <TextBlock Text="{Binding Name}" />
+              </HierarchicalDataTemplate>
+            </TreeView.ItemTemplate>
+          </TreeView>
         </controls:TitlePane>
       </splitter:CompositeSplitter.PrimaryContent>
 
       <splitter:CompositeSplitter.SecondaryContent>
         <Border Background="{DynamicResource Brush.Border}">
           <DataGrid ItemsSource="{Binding Rows}"
-                              AutoGenerateColumns="False"
-                              IsReadOnly="True"
-                              HeadersVisibility="Column"
-                              GridLinesVisibility="Horizontal"
-                              BorderThickness="0">
+                    Style="{StaticResource DataGridStyle}" 
+                    AutoGenerateColumns="False"
+                    IsReadOnly="True"
+                    HeadersVisibility="Column"
+                    GridLinesVisibility="Horizontal"
+                    BorderThickness="0">
             <DataGrid.Columns>
               <DataGridTextColumn Header="编号" Binding="{Binding Id}" Width="120"/>
               <DataGridTextColumn Header="类型" Binding="{Binding Type}" Width="100"/>
