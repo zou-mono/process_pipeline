@@ -199,6 +199,7 @@
       <!-- GridSplitter 样式 -->
       <Style x:Key="CompositeSplitter.SplitterStyle" TargetType="GridSplitter">
         <Setter Property="Background" Value="{DynamicResource Brush.DataGrid.Panel.BackgroundColor}" />
+        <Setter Property="BorderBrush" Value="Transparent"/>
         <Setter Property="HorizontalAlignment" Value="Stretch" />
         <Setter Property="VerticalAlignment" Value="Stretch" />
         <Setter Property="ShowsPreview" Value="False" />
