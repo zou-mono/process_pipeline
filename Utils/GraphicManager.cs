@@ -102,6 +102,18 @@ namespace process_pipeline.Utils
                 }
             }
         }
+
+        public static List<ObjectId> CloneObjectIds(
+            IEnumerable<ObjectId> ids)
+        {
+            if (ids == null)
+                return new List<ObjectId>();
+
+            return ids
+                .Where(x => !x.IsNull)
+                .Distinct()
+                .ToList();
+        }
     }
 
     /// <summary>

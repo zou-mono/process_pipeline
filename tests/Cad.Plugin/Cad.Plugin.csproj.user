@@ -2,7 +2,14 @@
 <Project ToolsVersion="Current" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|AnyCPU'">
     <StartAction>Program</StartAction>
-    <StartProgram>C:\Program Files\Autodesk\AutoCAD 2019\acad.exe</StartProgram>
-    <StartArguments>/b "D:\Codes\Tools\process_pipeline\tests\load.scr"</StartArguments>
+    <StartProgram>C:\Program Files\Autodesk\AutoCAD 2019\accoreconsole.exe</StartProgram>
+    <StartArguments>/i "D:\temp\1.dwg" /s "D:\Codes\Tools\process_pipeline\Tests\Cad.Plugin\load.scr"</StartArguments>
+    <StartWorkingDirectory>D:\Codes\Tools\process_pipeline\Tests\Cad.Plugin\</StartWorkingDirectory>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'">
+    <StartProgram>C:\Program Files\Autodesk\AutoCAD 2019\accoreconsole.exe</StartProgram>
+    <StartWorkingDirectory>D:\Codes\Tools\process_pipeline\Tests\Cad.Plugin\</StartWorkingDirectory>
+    <StartArguments>/i "D:\temp\1.dwg" /s "D:\Codes\Tools\process_pipeline\Tests\Cad.Plugin\load.scr"</StartArguments>
+    <StartAction>Program</StartAction>
   </PropertyGroup>
 </Project>

@@ -1,4 +1,5 @@
 ﻿using Autodesk.AutoCAD.Runtime;
+using NLog;
 
 namespace Cad.Plugin
 {
@@ -6,10 +7,12 @@ namespace Cad.Plugin
     {
         public void Initialize()
         {
+            //LoggerSetup.Configure(); 
         }
 
         public void Terminate()
         {
+            LogManager.Flush();
         }
     }
 }

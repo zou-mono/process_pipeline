@@ -154,7 +154,7 @@ namespace process_pipeline.Forms
 
             // 清空并重新填充 Rows（基于 ProblemItem 字段）
             Rows.Clear();
-            int index = 1;
+            //int index = 1;
             foreach (var kvp in data.Where(p => !p.Value.IsFixed && !p.Value.PipeId.IsErased))
             {
                 var item = kvp.Value;

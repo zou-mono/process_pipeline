@@ -15,6 +15,7 @@ using Autodesk.AutoCAD.Runtime;
 using process_pipeline.Core;           // 命令特性（关键）
 using process_pipeline.Forms;
 using process_pipeline.Utils;
+using process_pipeline.Geometry;
 using AcadDb = Autodesk.AutoCAD.DatabaseServices;
 using System.Runtime.InteropServices;
 using Autodesk.AutoCAD.GraphicsSystem; // 必须引入这个命名空间
@@ -174,7 +175,7 @@ namespace process_pipeline.Commands
                     if (br != null)
                     {
                         //double rotDeg = (br.Rotation * (180.0 / Math.PI) + 180.0) % 360.0;  //默认正西是起始，弧度转度，模360
-                        double rotDeg = Geometry.ArrowAngle(br);
+                        double rotDeg = GeometryHelper.ArrowAngle(br);
                         arrowData[id] = (obj, br.Position, rotDeg);
                     }
                 }
@@ -335,7 +336,7 @@ namespace process_pipeline.Commands
                     DbgLog.Write(_ed, $"\n箭头 {kv.Key.Handle.ToString()}正在调试");
                 }
 
-                if (Geometry.IsIntersection2D(kv.Value.Position, pipe_ent, MaxBufferDistance))
+                if (GeometryHelper.IsIntersection2D(kv.Value.Position, pipe_ent, MaxBufferDistance))
                 { 
                     candidates.Add(kv.Key);
                 }
@@ -349,7 +350,7 @@ namespace process_pipeline.Commands
                     Type = ProblemType.NoAdjacentItems,
                     Level = ProblemLevel.Error,
                     IsFixed = false,
-                    Location = Geometry.RepresentativePoint(pipe_ent),
+                    Location = GeometryHelper.RepresentativePoint(pipe_ent),
                     Description = "无匹配箭头（管线附近无任何箭头）"
                 };
                 return;
@@ -385,7 +386,7 @@ namespace process_pipeline.Commands
                 //string arrow_handle = obj.Handle.ToString(); // 如 "7B2A"
 
                 // 计算到管线的最短距离（遍历段）
-                (dist, pipeSegAngle, closePoint) = Geometry.GetClosestSegmentInfo(pipe_ent, ap);
+                (dist, pipeSegAngle, closePoint) = GeometryHelper.GetClosestSegmentInfo(pipe_ent, ap);
                 //double dist = Geometry.GetMinDistanceToPipe(ent, ap);
 
                 //if (dist > maxBufferDistance || dist >= minDist) continue;
@@ -423,7 +424,7 @@ namespace process_pipeline.Commands
                     Type = ProblemType.NoAdjacentItems,
                     Level = ProblemLevel.Error,
                     IsFixed = false,
-                    Location = Geometry.RepresentativePoint(pipe_ent),
+                    Location = GeometryHelper.RepresentativePoint(pipe_ent),
                     Description = $"无匹配箭头（在管线{MaxBufferDistance}米范围内没有找到符合方向的箭头）"
                 };
                 //return problems;
@@ -453,7 +454,7 @@ namespace process_pipeline.Commands
                             Type = ProblemType.DirectionConflict,
                             Level = ProblemLevel.Warning,
                             IsFixed = false,
-                            Location = Geometry.RepresentativePoint(pipe_ent),
+                            Location = GeometryHelper.RepresentativePoint(pipe_ent),
                             PossibleMatches = possibleMatches,
                             Description = "管线和箭头方向不一致"
                         };
@@ -466,7 +467,7 @@ namespace process_pipeline.Commands
                             Type = ProblemType.OneToMany,
                             Level = ProblemLevel.Error,
                             IsFixed = false,
-                            Location = Geometry.RepresentativePoint(pipe_ent),
+                            Location = GeometryHelper.RepresentativePoint(pipe_ent),
                             PossibleMatches = possibleMatches,
                             Description = $"与管线关联的多个箭头方向冲突（同向 {sameCount} 个，反向 {reverseCount} 个）"
                         };
@@ -490,7 +491,7 @@ namespace process_pipeline.Commands
                                 Type = ProblemType.DirectionConflict,
                                 Level = ProblemLevel.Warning,
                                 IsFixed = false,
-                                Location = Geometry.RepresentativePoint(pipe_ent),
+                                Location = GeometryHelper.RepresentativePoint(pipe_ent),
                                 PossibleMatches = possibleMatches,
                                 Description = "管线和箭头方向不一致"
                             };
@@ -616,7 +617,7 @@ namespace process_pipeline.Commands
                             //    ;
                             //}
 
-                            double rotDeg = Geometry.ArrowAngle(br);
+                            double rotDeg = GeometryHelper.ArrowAngle(br);
                             _arrowCache[id] = new ArrowCacheInfo { Position = br.Position, Rotation = rotDeg };
                         }
                     }
@@ -659,7 +660,7 @@ namespace process_pipeline.Commands
             {
                 if (CadConfig.ArrowLayers.Contains(br.Layer))
                 {
-                    double rotDeg = Geometry.ArrowAngle(br);
+                    double rotDeg = GeometryHelper.ArrowAngle(br);
                     _arrowCache[br.Id] = new ArrowCacheInfo { Position = br.Position, Rotation = rotDeg };
                 }
                 else

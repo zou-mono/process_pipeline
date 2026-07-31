@@ -1,7 +1,6 @@
 ﻿using System.IO;
 using Newtonsoft.Json;
 using Autodesk.AutoCAD.Runtime;
-using Cad.Tests.Shared;
 
 namespace Cad.Plugin
 {

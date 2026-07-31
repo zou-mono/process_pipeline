@@ -5,6 +5,7 @@ using Autodesk.AutoCAD.Geometry;
 using Autodesk.AutoCAD.Runtime;
 using process_pipeline.Core;
 using process_pipeline.Utils;
+using process_pipeline.Geometry;
 using System;
 using System.Collections.Generic;
 using System.Globalization;

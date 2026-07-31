@@ -1,2 +1,10 @@
-﻿NETLOAD
-D:\Codes\Tools\process_pipeline\tests\Cad.Plugin\bin\Debug\Cad.Plugin.dll
+CMDECHO
+1
+FILEDIA
+0
+SECURELOAD
+0
+_.NETLOAD
+"D:\Codes\Tools\process_pipeline\Tests\Cad.Plugin\bin\x64\Debug\Cad.Plugin.dll"
+Test_Merge_Polylines
+_.QUIT

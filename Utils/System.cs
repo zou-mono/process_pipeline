@@ -2,6 +2,7 @@
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Runtime;
+using NLog;
 using process_pipeline.Commands;
 using process_pipeline.Core;
 using process_pipeline.Forms;
@@ -201,6 +202,9 @@ namespace process_pipeline.Utils
 
                 // 强制唤醒配置类，立刻读取 Config.ini 并检查错误
                 CadConfig.EnsureLoaded();
+
+                // ⭐ 1. 配置 NLog（仅执行一次，整个插件生命周期有效）
+                LoggerSetup.Configure(); 
             }
             catch
             {
@@ -215,6 +219,9 @@ namespace process_pipeline.Utils
         {
             // 这里可以写一些清理资源的逻辑，比如关闭数据库连接、停止监听等
             // 如果没有，空着就行
+
+            // 插件卸载前的清理（可选）
+            LogManager.Flush();
         }
     }
 }

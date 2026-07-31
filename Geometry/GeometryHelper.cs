@@ -7,12 +7,14 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using NetTopologySuite.Geometries;
+using process_pipeline.Models;
+using NLog;
 
-namespace process_pipeline.Utils
+namespace process_pipeline.Geometry
 {
-    public static class Geometry
+    public static class GeometryHelper
     {
         // 获取管线整体方向（度）：用首尾点向量
         public static double GetPipeDirection(Entity ent)
@@ -39,7 +41,8 @@ namespace process_pipeline.Utils
         }
 
         //矢量的角度，从正东开始，范围【0.360】
-        public static double VectorAngle(Vector3d vec) {
+        public static double VectorAngle(Vector3d vec)
+        {
             double SegAngle = 0.0;
             if (!vec.IsZeroLength())
             {
@@ -50,7 +53,8 @@ namespace process_pipeline.Utils
             return SegAngle;
         }
 
-        public static double ArrowAngle(BlockReference br) { 
+        public static double ArrowAngle(BlockReference br)
+        {
             return (br.Rotation * (180.0 / Math.PI) + 180.0) % 360.0;
         }
 
@@ -166,15 +170,15 @@ namespace process_pipeline.Utils
         public static void ZoomToExtents(this Editor ed, Extents3d ext, double margin = 1.15)
         {
             bool isValidExtents = !(ext.MinPoint == ext.MaxPoint);
-            
+
             if (!isValidExtents) return;
             var view = ed.GetCurrentView();
             view.CenterPoint = new Point2d(
-                (ext.MinPoint.X + ext.MaxPoint.X)/2,
-                (ext.MinPoint.Y + ext.MaxPoint.Y)/2);
-            view.Width  = (ext.MaxPoint.X - ext.MinPoint.X) * margin;
+                (ext.MinPoint.X + ext.MaxPoint.X) / 2,
+                (ext.MinPoint.Y + ext.MaxPoint.Y) / 2);
+            view.Width = (ext.MaxPoint.X - ext.MinPoint.X) * margin;
             view.Height = (ext.MaxPoint.Y - ext.MinPoint.Y) * margin;
-            if (view.Width  < 1e-6) view.Width  = 1;
+            if (view.Width < 1e-6) view.Width = 1;
             if (view.Height < 1e-6) view.Height = 1;
             ed.SetCurrentView(view);
         }
@@ -182,7 +186,7 @@ namespace process_pipeline.Utils
         public static Point3d RepresentativePoint(Entity entity)
         {
             if (entity is BlockReference br) return br.Position;
-            if (entity is Line line) 
+            if (entity is Line line)
                 return new Point3d(
                     (line.StartPoint.X + line.EndPoint.X) / 2,
                     (line.StartPoint.Y + line.EndPoint.Y) / 2,
@@ -233,7 +237,7 @@ namespace process_pipeline.Utils
             // 如果 ext1 的左边界 > ext2 的右边界，说明 ext1 在 ext2 右侧，不可能相交
             // 同理判断上下边界。
             // 只有当这四个“不相交”的条件都不满足时，它们才是相交（或包含）的。
-        
+
             bool isOutside = (maxX1 < minX2) || // 1在2左边
                              (minX1 > maxX2) || // 1在2右边
                              (maxY1 < minY2) || // 1在2下边
@@ -306,7 +310,7 @@ namespace process_pipeline.Utils
                 else if (originalEntity is Polyline originalPline)  // 支持 Polyline 和 LWPOLYLINE
                 {
                     int numVerts = originalPline.NumberOfVertices;
-                    if (numVerts < 2) 
+                    if (numVerts < 2)
                     {
                         tr.Commit();
                         return false;
@@ -368,6 +372,277 @@ namespace process_pipeline.Utils
                 tr.Abort();
                 return false;
             }
+        }
+
+        /// <summary>
+        /// 从指定图层收集 AutoCAD Polyline，并转换为 CadPolyline。
+        /// </summary>
+        public static List<CadPolyline> CollectPolylinesFromLayer(
+            Database db,
+            string layerName,
+            GeometryFactory geometryFactory,
+            string datasetName = null)
+        {
+            var result = new List<CadPolyline>();
+
+            using (var tr = db.TransactionManager.StartTransaction())
+            {
+                DBDictionary groupDict =
+                    tr.GetObject(db.GroupDictionaryId, OpenMode.ForRead) as DBDictionary;
+
+                if (groupDict == null)
+                {
+                    BlockTable bt = (BlockTable)tr.GetObject(
+                                        db.BlockTableId,
+                                        OpenMode.ForRead);
+
+                    BlockTableRecord modelSpace =
+                        (BlockTableRecord)tr.GetObject(
+                            bt[BlockTableRecord.ModelSpace],
+                            OpenMode.ForRead);
+
+                    foreach (ObjectId id in modelSpace)
+                    {
+                        Entity ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
+
+                        if (ent == null)
+                            continue;
+
+                        if (!string.Equals(ent.Layer, layerName, StringComparison.OrdinalIgnoreCase))
+                            continue;
+
+                        if (ent is Polyline pl)
+                        {
+                            var cadPolyline = ConvertAutoCadPolylineToPolyline(
+                                pl,
+                                id,
+                                geometryFactory,
+                                datasetName);
+
+                            if (cadPolyline != null &&
+                                cadPolyline.Geometry != null &&
+                                cadPolyline.Geometry.Length > 0)
+                            {
+                                result.Add(cadPolyline);
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    foreach (DBDictionaryEntry entry in groupDict)
+                    {
+                        Group group = tr.GetObject(entry.Value, OpenMode.ForRead) as Group;
+
+                        if (group == null)
+                            continue;
+
+                        ObjectId[] entityIds = group.GetAllEntityIds();
+
+                        ObjectId polylineId = ObjectId.Null;
+                        ObjectId blockRefId = ObjectId.Null;
+
+                        foreach (ObjectId id in entityIds)
+                        {
+                            Entity ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
+
+                            if (ent == null)
+                                continue;
+
+                            if (ent is BlockReference)
+                            {
+                                blockRefId = id;
+                                continue;
+                            }
+
+                            if (ent is Polyline)
+                            {
+                                polylineId = id;
+                                continue;
+                            }
+
+                            // 如果后面要支持 Polyline2d / Polyline3d，可以在这里扩展
+                            // if (ent is Polyline2d || ent is Polyline3d) ...
+                        }
+
+                        if (polylineId.IsNull)
+                            continue;
+
+                        Polyline pl = tr.GetObject(polylineId, OpenMode.ForRead) as Polyline;
+
+                        if (pl == null)
+                            continue;
+
+                        if (!string.Equals(pl.Layer, layerName, StringComparison.OrdinalIgnoreCase))
+                            continue;
+
+                        Dictionary<string, object> attributes = null;
+
+                        if (!blockRefId.IsNull)
+                        {
+                            BlockReference br =
+                                tr.GetObject(blockRefId, OpenMode.ForRead) as BlockReference;
+
+                            attributes = CollectAttributeDefinitionsFromBlockReference(
+                                br,
+                                tr);
+                        }
+
+                        var cadPolyline = ConvertAutoCadPolylineToPolyline(
+                            pl,
+                            polylineId,
+                            geometryFactory,
+                            datasetName,
+                            attributes);
+
+                        if (cadPolyline != null &&
+                            cadPolyline.Geometry != null &&
+                            cadPolyline.Geometry.Length > 0)
+                        {
+                            result.Add(cadPolyline);
+                        }
+                    }
+                }
+
+                tr.Commit();
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// 将 AutoCAD Polyline 转为 CadPolyline。
+        /// 
+        /// 注意：
+        /// 这版按 polyline 顶点直连处理。
+        /// 如果 polyline 有 bulge 圆弧，后续建议先离散圆弧。
+        /// </summary>
+        public static CadPolyline ConvertAutoCadPolylineToPolyline(
+            Polyline pl,
+            ObjectId objectId,
+            GeometryFactory geometryFactory,
+            string datasetName = null,
+            Dictionary<string, object> attributes = null)
+        {
+            if (pl == null || pl.NumberOfVertices < 2)
+                return null;
+
+            var coordinates = new List<Coordinate>();
+
+            for (int i = 0; i < pl.NumberOfVertices; i++)
+            {
+                var p = pl.GetPoint2dAt(i);
+                coordinates.Add(new Coordinate(p.X, p.Y));
+            }
+
+            if (pl.Closed && coordinates.Count > 0)
+            {
+                var first = coordinates[0];
+                var last = coordinates[coordinates.Count - 1];
+
+                if (!first.Equals2D(last))
+                {
+                    coordinates.Add(new Coordinate(first.X, first.Y));
+                }
+            }
+
+            if (coordinates.Count < 2)
+                return null;
+
+            var line = geometryFactory.CreateLineString(coordinates.ToArray());
+
+            var cadPolyline = new CadPolyline
+            {
+                SourceObjectIds = new List<ObjectId> { objectId },
+                LayerName = pl.Layer,
+                DatasetName = datasetName,
+                Geometry = line
+            };
+
+            if (attributes != null)
+            {
+                foreach (var kv in attributes)
+                {
+                    if (string.IsNullOrWhiteSpace(kv.Key))
+                        continue;
+
+                    cadPolyline.Attributes[kv.Key] = kv.Value;
+                }
+            }
+
+            // 兼容旧逻辑：如果没有 WIDTH，则退回使用 Polyline.ConstantWidth。
+            if (!cadPolyline.Attributes.ContainsKey("WIDTH") && pl.ConstantWidth > 0)
+            {
+                cadPolyline.Attributes["WIDTH"] = pl.ConstantWidth;
+            }
+
+            for (int i = 0; i < coordinates.Count - 1; i++)
+            {
+                Coordinate s = coordinates[i];
+                Coordinate e = coordinates[i + 1];
+
+                if (s.Distance(e) <= 0)
+                    continue;
+
+                var seg = new CadSegment
+                {
+                    Start = s,
+                    End = e,
+                    Geometry = geometryFactory.CreateLineString(new[] { s, e }),
+                    SourceObjectIds = new List<ObjectId> { objectId },
+                    SourceSegmentIndex = i,
+                    LayerName = pl.Layer,
+                    DatasetName = datasetName
+                };
+
+                cadPolyline.Segments.Add(seg);
+            }
+
+            return cadPolyline;
+        }
+
+        public static Dictionary<string, object> CollectAttributeDefinitionsFromBlockReference(
+            BlockReference br,
+            Transaction tr)
+        {
+            var attributes = new Dictionary<string, object>(
+                StringComparer.OrdinalIgnoreCase);
+
+            if (br == null)
+                return attributes;
+
+            BlockTableRecord btr =
+                tr.GetObject(br.BlockTableRecord, OpenMode.ForRead) as BlockTableRecord;
+
+            if (btr == null)
+                return attributes;
+
+            foreach (ObjectId id in btr)
+            {
+                AttributeDefinition attDef =
+                    tr.GetObject(id, OpenMode.ForRead) as AttributeDefinition;
+
+                if (attDef == null)
+                    continue;
+
+                string tag = attDef.Tag;
+
+                if (string.IsNullOrWhiteSpace(tag))
+                    continue;
+
+                object value = attDef.TextString;
+
+                attributes[tag.Trim()] = value;
+            }
+
+            return attributes;
+        }
+        public static bool IsValidPolylineGeometry(CadPolyline polyline)
+        {
+            return polyline != null &&
+                   polyline.Geometry != null &&
+                   !polyline.Geometry.IsEmpty &&
+                   polyline.Geometry.Length > 0;
         }
     }
 }

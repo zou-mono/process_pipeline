@@ -14,6 +14,7 @@ using System.Reflection;
 using Autodesk.AutoCAD.Geometry;
 using process_pipeline.Forms;
 using process_pipeline.Commands;
+using process_pipeline.Geometry;
 
 namespace process_pipeline.Utils
 {
@@ -177,7 +178,7 @@ namespace process_pipeline.Utils
 
                                         // 内存级别的包围盒相交测试 (AABB 碰撞检测)
                                         // 如果管线的包围盒在搜索框之外，则跳过
-                                        if (Geometry.IsIntersection2D(ent, _ent, MaxBufferDistance)) { 
+                                        if (GeometryHelper.IsIntersection2D(ent, _ent, MaxBufferDistance)) { 
                                             _changedObjectIds.Add(_ent.Id);
                                         }
                                     }
