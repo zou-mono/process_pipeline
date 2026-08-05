@@ -6,5 +6,5 @@ SECURELOAD
 0
 _.NETLOAD
 "D:\Codes\Tools\process_pipeline\Tests\Cad.Plugin\bin\x64\Debug\Cad.Plugin.dll"
-Test_Merge_Polylines
+test_match_pipe
 _.QUIT

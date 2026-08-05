@@ -25,7 +25,7 @@ namespace process_pipeline.Models
         /// 对合并后的 CadPolyline：
         ///     这里保存所有参与合并的原始 ObjectId。
         /// </summary>
-        public List<ObjectId> SourceObjectIds { get; set; } = new List<ObjectId>();
+        public List<string> SourceHandles { get; set; } = new List<string> ();
 
         /// <summary>
         /// CAD 图层名。

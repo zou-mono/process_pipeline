@@ -120,18 +120,18 @@ namespace process_pipeline.Commands
                         continue;
 
                     // 第一步：判断是否近似共线。
-                    if (!Geometry.Math.IsCollinear(baseSeg, targetSeg, tolerance))
+                    if (!Geometry.CadMath.IsCollinear(baseSeg, targetSeg, tolerance))
                         continue;
 
                     // 第二步：把 targetSeg 投影到 baseSeg 参数轴上。
-                    var interval = Geometry.Math.ProjectSegmentToBase(baseSeg, targetSeg);
+                    var interval = Geometry.CadMath.ProjectSegmentToBase(baseSeg, targetSeg);
 
                     // 第三步：判断投影区间是否和 [0,1] 有重叠。
-                    if (!Geometry.Math.HasOverlapWithUnitInterval(interval, tolerance))
+                    if (!Geometry.CadMath.HasOverlapWithUnitInterval(interval, tolerance))
                         continue;
 
                     // 第四步：裁剪到 [0,1]。
-                    var clipped = Geometry.Math.ClipToUnitInterval(interval);
+                    var clipped = Geometry.CadMath.ClipToUnitInterval(interval);
 
                     // 避免极小区间。
                     if (System.Math.Abs(clipped.End - clipped.Start) <= 1e-12)
@@ -146,7 +146,7 @@ namespace process_pipeline.Commands
                 // 这一段是新增的：把已覆盖区间转成实际重叠线段。
                 foreach (var coveredInterval in mergedCovered)
                 {
-                    var coveredSeg = Geometry.Math.CreateSubSegment(
+                    var coveredSeg = Geometry.CadMath.CreateSubSegment(
                         baseSeg,
                         coveredInterval,
                         _geometryFactory);
@@ -163,7 +163,7 @@ namespace process_pipeline.Commands
                 // 把缺失区间转成实际线段。
                 foreach (var missingInterval in missingIntervals)
                 {
-                    var missingSeg = Geometry.Math.CreateSubSegment(
+                    var missingSeg = Geometry.CadMath.CreateSubSegment(
                         baseSeg,
                         missingInterval,
                         _geometryFactory);

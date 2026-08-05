@@ -82,7 +82,7 @@ namespace process_pipeline.Geometry
         /// <summary>
         /// 空间容差。
         /// </summary>
-        public double Tolerance { get; set; } = 0.5;
+        public double Tolerance { get; set; } = 5;
 
         /// <summary>
         /// STRtree 查询扩张距离。
@@ -104,13 +104,13 @@ namespace process_pipeline.Geometry
         /// <summary>
         /// 平均距离上限。
         /// </summary>
-        public double MaxAverageDistance { get; set; } = 0.5;
+        public double MaxAverageDistance { get; set; } = 5;
 
         /// <summary>
         /// 最大距离上限。
         /// 可选控制。
         /// </summary>
-        public double MaxDistance { get; set; } = 1.5;
+        public double MaxDistance { get; set; } = 5;
 
         /// <summary>
         /// 最小投影区间长度。
@@ -120,7 +120,7 @@ namespace process_pipeline.Geometry
         /// <summary>
         /// Buffer 粗筛的最小重叠比例。
         /// </summary>
-        public double MinBufferOverlapRatio { get; set; } = 0.1;
+        public double MinBufferOverlapRatio { get; set; } = 0.3;
 
         /// <summary>
         /// 是否启用 Buffer 粗筛。

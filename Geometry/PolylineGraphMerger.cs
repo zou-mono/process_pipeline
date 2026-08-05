@@ -521,13 +521,13 @@ namespace process_pipeline.Geometry
 
             var firstSource = sourcePolylines[0];
 
-            var sourceObjectIds = GraphicManager.CloneObjectIds(
+            var sourceHandles = GraphicManager.CloneHandles(
                 sourcePolylines.SelectMany(x =>
-                    x.SourceObjectIds ?? Enumerable.Empty<ObjectId>()));
+                    x.SourceHandles ?? Enumerable.Empty<string>()));
 
             var merged = new CadPolyline
             {
-                SourceObjectIds = sourceObjectIds,
+                SourceHandles = sourceHandles,
                 LayerName = firstSource.LayerName,
                 DatasetName = firstSource.DatasetName,
                 Geometry = line,
@@ -548,11 +548,11 @@ namespace process_pipeline.Geometry
         {
             var source = edge.Polyline;
 
-            var sourceObjectIds = GraphicManager.CloneObjectIds(source.SourceObjectIds);
+            var sourceHandles = GraphicManager.CloneHandles(source.SourceHandles);
 
             var copied = new CadPolyline
             {
-                SourceObjectIds = sourceObjectIds,
+                SourceHandles = sourceHandles,
                 LayerName = source.LayerName,
                 DatasetName = source.DatasetName,
                 Geometry = source.Geometry,
@@ -624,7 +624,7 @@ namespace process_pipeline.Geometry
                     Start = s,
                     End = e,
                     Geometry = _geometryFactory.CreateLineString(new[] { s, e }),
-                    SourceObjectIds = GraphicManager.CloneObjectIds(polyline.SourceObjectIds),
+                    SourceHandles = GraphicManager.CloneHandles(polyline.SourceHandles),
                     SourceSegmentIndex = i,
                     LayerName = polyline.LayerName,
                     DatasetName = polyline.DatasetName

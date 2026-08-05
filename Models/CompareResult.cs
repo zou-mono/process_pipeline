@@ -62,6 +62,19 @@ namespace process_pipeline.Models
         public SegmentInterval CoveredIntervalOnBase { get; set; }
 
         /// <summary>
+        /// 当前匹配结果覆盖到 TargetPolyline 上的里程区间。
+        /// 
+        /// 重要说明：
+        /// 以前的算法是一条 target 只匹配一个 base，
+        /// 所以只记录 CoveredIntervalOnBase 还勉强够用。
+        /// 
+        /// 现在为了支持：
+        /// target 比 base 长时，target 被拆成多个区间分别匹配不同 base，
+        /// 必须记录当前 base 覆盖的是 target 上的哪一段。
+        /// </summary>
+        public SegmentInterval CoveredIntervalOnTarget { get; set; }
+
+        /// <summary>
         /// 是否找到有效匹配。
         /// </summary>
         public bool IsMatched => BestBasePolyline != null;

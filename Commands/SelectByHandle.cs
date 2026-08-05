@@ -45,6 +45,7 @@ namespace process_pipeline.Commands
                 // 1. 提示用户输入句柄值
                 PromptStringOptions pso = new PromptStringOptions("\n请输入要素的句柄值: ");
                 pso.AllowSpaces = false; // 句柄无空格，禁止输入空格
+                pso.AppendKeywordsToMessage = false; 
                 PromptResult pr = Ed.GetString(pso);
 
                 if (pr.Status != PromptStatus.OK || string.IsNullOrEmpty(pr.StringResult))

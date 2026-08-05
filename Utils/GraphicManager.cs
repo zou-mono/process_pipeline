@@ -114,6 +114,19 @@ namespace process_pipeline.Utils
                 .Distinct()
                 .ToList();
         }
+
+        public static List<string> CloneHandles(
+            IEnumerable<string> handles)
+        {
+            if (handles == null)
+                return new List<string>();
+
+            return handles
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Select(x => x.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
     }
 
     /// <summary>

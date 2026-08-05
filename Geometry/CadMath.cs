@@ -23,7 +23,7 @@ namespace process_pipeline.Geometry
     /// 这样可以更好地保留 CAD 原始对象的从属关系，
     /// 也更容易调试和解释结果。
     /// </summary>
-    public static class SegmentMath
+    public static class CadMath
     {
         /// <summary>
         /// 判断两个线段是否近似共线。
@@ -148,7 +148,7 @@ namespace process_pipeline.Geometry
                 Start = s,
                 End = e,
                 Geometry = geometryFactory.CreateLineString(new[] { s, e }),
-                SourceObjectIds = GraphicManager.CloneObjectIds(baseSeg.SourceObjectIds),
+                SourceHandles = GraphicManager.CloneHandles(baseSeg.SourceHandles),
                 SourceSegmentIndex = baseSeg.SourceSegmentIndex,
                 LayerName = baseSeg.LayerName,
                 DatasetName = baseSeg.DatasetName

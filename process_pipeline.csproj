@@ -130,7 +130,7 @@
     <Compile Include="Geometry\Options.cs" />
     <Compile Include="Geometry\PolylineExtractor.cs" />
     <Compile Include="Geometry\PolylineGraphMerger.cs" />
-    <Compile Include="Geometry\SegmentMath.cs" />
+    <Compile Include="Geometry\CadMath.cs" />
     <Compile Include="Models\CadPolyline.cs" />
     <Compile Include="Models\CadSegment.cs" />
     <Compile Include="Models\CompareResult.cs" />

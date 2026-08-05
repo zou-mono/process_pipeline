@@ -42,7 +42,7 @@ namespace process_pipeline.Commands
             throw new NotImplementedException();
         }
 
-        public static List<CompareResult> MatchTargetPolylinesToMergedBaseLayer(
+        public static List<CompareResult> PipeMatcher(
             List<CadPolyline> baseLayerPolylines,
             List<CadPolyline> targetLayerPolylines,
             GeometryFactory geometryFactory,
@@ -84,7 +84,7 @@ namespace process_pipeline.Commands
                     continue;
 
                 CompareResult matchResult =
-                    FindBestMergedBaseForTargetPolyline(
+                    FindBestMergedBase(
                         targetPolyline,
                         mergedBaseIndex,
                         geometryFactory,
@@ -96,6 +96,7 @@ namespace process_pipeline.Commands
             return results;
         }
 
+        // 建 base 的空间索引
         private static STRtree<CadPolyline> BuildPolylineIndex(
             IEnumerable<CadPolyline> polylines)
         {
@@ -122,7 +123,8 @@ namespace process_pipeline.Commands
             return index;
         }
 
-        private static CompareResult FindBestMergedBaseForTargetPolyline(
+        // 为当前这条 target 多段线，寻找最匹配的 merged base 多段线
+        private static CompareResult FindBestMergedBase(
             CadPolyline targetPolyline,
             STRtree<CadPolyline> mergedBaseIndex,
             GeometryFactory geometryFactory,
@@ -133,11 +135,15 @@ namespace process_pipeline.Commands
                 TargetPolyline = targetPolyline
             };
 
+            if (targetPolyline.SourceHandles[0] == "520B") {
+                Console.WriteLine("debug");
+            }
+
             if (!GeometryHelper.IsValidPolylineGeometry(targetPolyline))
                 return emptyResult;
 
             List<CadPolyline> candidates =
-                QueryBaseCandidatesForTarget(
+                QueryCandidateBases(
                     mergedBaseIndex,
                     targetPolyline,
                     options);
@@ -161,7 +167,7 @@ namespace process_pipeline.Commands
                 }
 
                 CompareResult current =
-                    EvaluateTargetAgainstBase(
+                    ScoreMatch(
                         targetPolyline,
                         candidateBase,
                         geometryFactory,
@@ -180,7 +186,7 @@ namespace process_pipeline.Commands
             return best ?? emptyResult;
         }
 
-        private static List<CadPolyline> QueryBaseCandidatesForTarget(
+        private static List<CadPolyline> QueryCandidateBases(
             STRtree<CadPolyline> mergedBaseIndex,
             CadPolyline targetPolyline,
             PolylineMatchOptions options)
@@ -219,6 +225,7 @@ namespace process_pipeline.Commands
             return result;
         }
 
+        // 是否通过 Buffer 粗筛
         private static bool PassBufferRoughFilter(
             CadPolyline basePolyline,
             CadPolyline targetPolyline,
@@ -256,7 +263,8 @@ namespace process_pipeline.Commands
             return overlapRatio >= options.MinBufferOverlapRatio;
         }
 
-        private static CompareResult EvaluateTargetAgainstBase(
+        // 评估当前 B 和某条候选 A 的匹配程度
+        private static CompareResult ScoreMatch(
             CadPolyline targetPolyline,
             CadPolyline candidateBasePolyline,
             GeometryFactory geometryFactory,
@@ -333,11 +341,11 @@ namespace process_pipeline.Commands
             if (badPointRatio > options.MaxBadPointRatio)
                 return null;
 
-            if (averageDistance > options.MaxAverageDistance)
-                return null;
+            //if (averageDistance > options.MaxAverageDistance)
+            //    return null;
 
-            if (maxDistance > options.MaxDistance)
-                return null;
+            //if (maxDistance > options.MaxDistance)
+            //    return null;
 
             if (minMeasure == double.MaxValue ||
                 maxMeasure == double.MinValue)
@@ -545,7 +553,7 @@ namespace process_pipeline.Commands
                     continue;
 
                 ProjectionResultOnSegment segProjection =
-                    ProjectPointToSegment(point, a, b);
+                    CadMath.ProjectPointToSegment(point, a, b);
 
                 double measure =
                     accumulated + segProjection.T * segLen;
@@ -565,49 +573,6 @@ namespace process_pipeline.Commands
                 Measure = bestMeasure,
                 Distance = bestDistance,
                 Coordinate = bestCoordinate
-            };
-        }
-
-        private static ProjectionResultOnSegment ProjectPointToSegment(
-            Coordinate p,
-            Coordinate a,
-            Coordinate b)
-        {
-            double dx = b.X - a.X;
-            double dy = b.Y - a.Y;
-
-            double len2 = dx * dx + dy * dy;
-
-            if (len2 <= 0)
-            {
-                double d0 = p.Distance(a);
-
-                return new ProjectionResultOnSegment
-                {
-                    T = 0,
-                    Distance = d0,
-                    Coordinate = new Coordinate(a)
-                };
-            }
-
-            double t =
-                ((p.X - a.X) * dx + (p.Y - a.Y) * dy) / len2;
-
-            if (t < 0)
-                t = 0;
-
-            if (t > 1)
-                t = 1;
-
-            Coordinate projected = new Coordinate(
-                a.X + t * dx,
-                a.Y + t * dy);
-
-            return new ProjectionResultOnSegment
-            {
-                T = t,
-                Distance = p.Distance(projected),
-                Coordinate = projected
             };
         }
     }

@@ -52,13 +52,13 @@ namespace process_pipeline.Models
         /// 对合并、截取、比较结果生成的 segment：
         ///     可能包含多个 ObjectId。
         /// </summary>
-        public List<ObjectId> SourceObjectIds { get; set; } = new List<ObjectId>();
+        //public List<ObjectId> SourceObjectIds { get; set; } = new List<ObjectId>();
 
         /// <summary>
         /// 来源实体的 Handle 字符串。
         /// 对 side database 更有用。
         /// </summary>
-        public string SourceHandle { get; set; }
+        public List<string> SourceHandles { get; set; } = new List<string>();
 
         /// <summary>
         /// 来源 DWG 文件路径。
