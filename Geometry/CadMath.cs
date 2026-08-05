@@ -211,5 +211,202 @@ namespace process_pipeline.Geometry
                 Coordinate = projected
             };
         }
+
+        /// <summary>
+        /// 判断 target 和 base 在指定里程位置处的方向是否兼容。
+        /// 
+        /// 注意：
+        /// 管线匹配通常不关心绘制方向。
+        /// 所以这里使用无向夹角：
+        /// 同向和反向都认为是 0 度差异。
+        /// </summary>
+        public static bool IsDirectionCompatibleAtMeasures(
+            LineString targetLine,
+            double targetMeasure,
+            LineString baseLine,
+            double baseMeasure,
+            double maxAngleDegrees)
+        {
+            if (targetLine == null || baseLine == null)
+                return false;
+
+            if (targetLine.Length <= 0 || baseLine.Length <= 0)
+                return false;
+
+            if (maxAngleDegrees < 0)
+                return false;
+
+            Coordinate targetDir =
+                GetDirectionAtMeasure(
+                    targetLine,
+                    targetMeasure);
+
+            Coordinate baseDir =
+                GetDirectionAtMeasure(
+                    baseLine,
+                    baseMeasure);
+
+            if (targetDir == null || baseDir == null)
+                return false;
+
+            double targetLen =
+                Math.Sqrt(targetDir.X * targetDir.X + targetDir.Y * targetDir.Y);
+
+            double baseLen =
+                Math.Sqrt(baseDir.X * baseDir.X + baseDir.Y * baseDir.Y);
+
+            if (targetLen <= 0 || baseLen <= 0)
+                return false;
+
+            double dot =
+                (targetDir.X * baseDir.X + targetDir.Y * baseDir.Y) /
+                (targetLen * baseLen);
+
+            /*
+             * 数值保护，避免 acos 因为浮点误差出现 NaN。
+             */
+            dot = Math.Max(-1.0, Math.Min(1.0, dot));
+
+            /*
+             * 使用 Math.Abs(dot) 的原因：
+             * 
+             * CAD polyline 的绘制方向不一定一致。
+             * 同一条管线可能一个是 A->B，另一个是 B->A。
+             * 
+             * 如果不取 abs，反向会被认为是 180 度，
+             * 从而被错误剔除。
+             * 
+             * 取 abs 后：
+             * 同向：dot = 1，angle = 0
+             * 反向：dot = -1，abs(dot)=1，angle = 0
+             * 垂直：dot = 0，angle = 90
+             */
+            double unsignedDot = Math.Abs(dot);
+
+            unsignedDot = Math.Max(-1.0, Math.Min(1.0, unsignedDot));
+
+            double angleRadians = Math.Acos(unsignedDot);
+            double angleDegrees = angleRadians * 180.0 / Math.PI;
+
+            return angleDegrees <= maxAngleDegrees;
+        }
+
+        /// <summary>
+        /// 获取 LineString 在指定 measure 位置附近的切向方向。
+        /// 
+        /// 返回值是一个方向向量，不要求单位化。
+        /// 
+        /// 处理方式：
+        /// 找到 measure 所在的线段，返回该线段方向。
+        /// 如果 measure 在起点附近，返回第一段方向；
+        /// 如果 measure 在终点附近，返回最后一段方向。
+        /// </summary>
+        private static Coordinate GetDirectionAtMeasure(
+            LineString line,
+            double measure)
+        {
+            if (line == null)
+                return null;
+
+            Coordinate[] coords = line.Coordinates;
+
+            if (coords == null || coords.Length < 2)
+                return null;
+
+            double totalLength = line.Length;
+
+            if (totalLength <= 0)
+                return null;
+
+            if (measure <= 0)
+            {
+                return GetFirstValidSegmentDirection(coords);
+            }
+
+            if (measure >= totalLength)
+            {
+                return GetLastValidSegmentDirection(coords);
+            }
+
+            double accumulated = 0.0;
+
+            for (int i = 0; i < coords.Length - 1; i++)
+            {
+                Coordinate a = coords[i];
+                Coordinate b = coords[i + 1];
+
+                double segLen = a.Distance(b);
+
+                if (segLen <= 0)
+                    continue;
+
+                if (accumulated + segLen >= measure)
+                {
+                    return new Coordinate(
+                        b.X - a.X,
+                        b.Y - a.Y);
+                }
+
+                accumulated += segLen;
+            }
+
+            return GetLastValidSegmentDirection(coords);
+        }
+
+    /// <summary>
+    /// 获取第一段有效线段方向。
+    /// 用于 measure 位于起点附近时。
+    /// </summary>
+    private static Coordinate GetFirstValidSegmentDirection(
+        Coordinate[] coords)
+    {
+        if (coords == null || coords.Length < 2)
+            return null;
+
+        for (int i = 0; i < coords.Length - 1; i++)
+        {
+            Coordinate a = coords[i];
+            Coordinate b = coords[i + 1];
+
+            double len = a.Distance(b);
+
+            if (len <= 0)
+                continue;
+
+            return new Coordinate(
+                b.X - a.X,
+                b.Y - a.Y);
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// 获取最后一段有效线段方向。
+    /// 用于 measure 位于终点附近时。
+    /// </summary>
+    private static Coordinate GetLastValidSegmentDirection(
+        Coordinate[] coords)
+    {
+        if (coords == null || coords.Length < 2)
+            return null;
+
+        for (int i = coords.Length - 2; i >= 0; i--)
+        {
+            Coordinate a = coords[i];
+            Coordinate b = coords[i + 1];
+
+            double len = a.Distance(b);
+
+            if (len <= 0)
+                continue;
+
+            return new Coordinate(
+                b.X - a.X,
+                b.Y - a.Y);
+        }
+
+        return null;
+    }
     }
 }

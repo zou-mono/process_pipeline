@@ -193,7 +193,8 @@ namespace process_pipeline.Tests.Cad.Plugin
                         $"AvgDist={result.AverageDistance:F4}, " +
                         $"MaxDist={result.MaxDistance:F4}, " +
                         $"BadRatio={result.BadPointRatio:F2}, " +
-                        $"A区间=[{result.CoveredIntervalOnBase.Start:F3}, {result.CoveredIntervalOnBase.End:F3}]");
+                        $"target区间=[{result.CoveredIntervalOnTarget?.Start:F3}, {result.CoveredIntervalOnTarget?.End:F3}], " +
+                        $"base区间=[{result.CoveredIntervalOnBase?.Start:F3}, {result.CoveredIntervalOnBase?.End:F3}]");
                 }
             }
             catch (System.Exception ex)

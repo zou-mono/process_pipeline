@@ -127,6 +127,24 @@ namespace process_pipeline.Geometry
         /// </summary>
         public bool UseBufferRoughFilter { get; set; } = true;
 
-        public double MinProjectedLength { get; set; } = 0.01;
+        public double MinProjectedLength { get; set; } = 10;
+
+        // 一条target多段线匹配上两条base，被分割为两部分，这两部分target的重叠长度在较短长度中的占比
+        public double overlapRatio { get; set; } = 0.5;
+
+        /// <summary>
+        /// 最大允许方向夹角，单位：度。
+        /// 
+        /// 用于防止两条线只是共点、相交或靠得很近，
+        /// 但实际走向明显不同的情况被误判为匹配。
+        /// 
+        /// 注意：这里比较的是无向夹角，
+        /// 即 target 与 base 同向或反向都认为是 0 度差异。
+        /// 
+        /// 推荐值：
+        /// 10~15 度：比较严格；
+        /// 20~30 度：比较宽松。
+        /// </summary>
+        public double MaxDirectionAngleDegrees { get; set; } = 20.0;
     }
 }
