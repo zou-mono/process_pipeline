@@ -192,7 +192,7 @@ namespace process_pipeline.Tests.Cad.Plugin
                         $"Score={result.Score:F4}, " +
                         $"AvgDist={result.AverageDistance:F4}, " +
                         $"MaxDist={result.MaxDistance:F4}, " +
-                        $"BadRatio={result.BadPointRatio:F2}, " +
+                        //$"BadRatio={result.BadPointRatio:F2}, " +
                         $"target区间=[{result.CoveredIntervalOnTarget?.Start:F3}, {result.CoveredIntervalOnTarget?.End:F3}], " +
                         $"base区间=[{result.CoveredIntervalOnBase?.Start:F3}, {result.CoveredIntervalOnBase?.End:F3}]");
                 }

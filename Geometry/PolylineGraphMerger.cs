@@ -12,16 +12,16 @@ using System.Threading.Tasks;
 namespace process_pipeline.Geometry
 {
     /// <summary>
-    /// 对 CadPolyline 进行属性感知的拓扑合并。
-    /// 
     /// 合并逻辑：
-    /// 1. 按 LayerName 和指定属性，例如 WIDTH，进行分组；
+    /// 1. 只按不会改变拓扑语义的字段分组，例如 LayerName / DatasetName；
     /// 2. 每组内把 polyline 视为图的边；
     /// 3. polyline 起点和终点视为图节点；
     /// 4. 端点距离小于 NodeTolerance 的点归并成同一节点；
-    /// 5. 沿 degree == 2 的节点继续合并；
-    /// 6. 遇到 degree != 2 的节点停止；
-    /// 7. 保留合并前的 SourcePolylines。
+    /// 5. 先基于完整原始图计算节点 degree；
+    /// 6. 只有原始 degree == 2 的节点才可能被穿过；
+    /// 7. 在建图阶段预计算可合并连接，只有 WIDTH 等合并属性一致时才允许穿过；
+    /// 8. 追踪时只沿可合并连接继续合并；
+    /// 9. 保留合并前的 SourcePolylines。
     /// </summary>
     public class PolylineGraphMerger
     {
@@ -65,11 +65,18 @@ namespace process_pipeline.Geometry
                 .Where(x => x.Geometry.Length >= options.MinPolylineLength)
                 .ToList();
 
-            // 按属性分组。
-            // WIDTH 不同的 polyline 会进入不同组，因此绝不会被合并。
+            // 注意：这里只按不会改变网络拓扑语义的字段分组。
+            // 例如 Layer / Dataset。
+            // 不要按 WIDTH 分组，否则会改变节点 degree。
             var groups = validPolylines
-                .GroupBy(x => BuildMergeGroupKey(x, options))
+                .GroupBy(x => BuildTopologyGroupKey(x, options))
                 .ToList();
+
+            //// 按属性分组。
+            //// WIDTH 不同的 polyline 会进入不同组，因此绝不会被合并。
+            //var groups = validPolylines
+            //    .GroupBy(x => BuildMergeGroupKey(x, options))
+            //    .ToList();
 
             foreach (var group in groups)
             {
@@ -80,6 +87,87 @@ namespace process_pipeline.Geometry
             return result;
         }
 
+        private string BuildTopologyGroupKey(
+            CadPolyline polyline,
+            PolylineMergeOptions options)
+        {
+            var sb = new StringBuilder();
+
+            if (polyline == null)
+                return "<NULL_POLYLINE>";
+
+            if (options == null)
+                options = new PolylineMergeOptions();
+
+            /*
+             * 注意：
+             * 这里不能加入 WIDTH 这类合并属性。
+             * 
+             * 原因：
+             * WIDTH 会改变子图结构，
+             * 导致原始 degree != 2 的节点在子图中变成 degree == 2，
+             * 从而错误穿越分叉节点。
+             */
+
+            if (options.RequireSameLayer)
+            {
+                sb.Append("LAYER=");
+                sb.Append(NormalizeMergeKeyValue(polyline.LayerName));
+                sb.Append("|");
+            }
+
+            /*
+             * 如果 DatasetName 也是网络边界，可以加入。
+             * 如果不是，也可以不加。
+             */
+            if (!string.IsNullOrWhiteSpace(polyline.DatasetName))
+            {
+                sb.Append("DATASET=");
+                sb.Append(NormalizeMergeKeyValue(polyline.DatasetName));
+                sb.Append("|");
+            }
+
+            return sb.ToString();
+        }
+
+        private string NormalizeMergeKeyValue(object value)
+        {
+            if (value == null)
+                return "<NULL>";
+
+            if (value is double d)
+                return d.ToString("0.########");
+
+            if (value is float f)
+                return f.ToString("0.########");
+
+            if (value is decimal m)
+                return m.ToString("0.########");
+
+            if (value is int || value is long || value is short)
+                return value.ToString();
+
+            string text = value.ToString();
+
+            if (string.IsNullOrWhiteSpace(text))
+                return "<EMPTY>";
+
+            text = text.Trim();
+
+            if (double.TryParse(
+                    text,
+                    System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    out double number))
+            {
+                return number.ToString(
+                    "0.########",
+                    System.Globalization.CultureInfo.InvariantCulture);
+            }
+
+            return text.ToUpperInvariant();
+        }
+
         /// <summary>
         /// 构造分组键。
         /// 
@@ -88,35 +176,35 @@ namespace process_pipeline.Geometry
         /// 2. MergeAttributeNames 中指定的属性；
         /// 共同组成。
         /// </summary>
-        private string BuildMergeGroupKey(
-            CadPolyline polyline,
-            PolylineMergeOptions options)
-        {
-            var sb = new StringBuilder();
+        //private string BuildMergeGroupKey(
+        //    CadPolyline polyline,
+        //    PolylineMergeOptions options)
+        //{
+        //    var sb = new StringBuilder();
 
-            if (options.RequireSameLayer)
-            {
-                sb.Append("LAYER=");
-                sb.Append(polyline.LayerName ?? string.Empty);
-                sb.Append("|");
-            }
+        //    if (options.RequireSameLayer)
+        //    {
+        //        sb.Append("LAYER=");
+        //        sb.Append(polyline.LayerName ?? string.Empty);
+        //        sb.Append("|");
+        //    }
 
-            if (options.MergeAttributeNames != null)
-            {
-                foreach (var attrName in options.MergeAttributeNames)
-                {
-                    sb.Append(attrName);
-                    sb.Append("=");
+        //    if (options.MergeAttributeNames != null)
+        //    {
+        //        foreach (var attrName in options.MergeAttributeNames)
+        //        {
+        //            sb.Append(attrName);
+        //            sb.Append("=");
 
-                    object value = polyline.GetAttribute(attrName);
-                    sb.Append(value?.ToString() ?? "<NULL>");
+        //            object value = polyline.GetAttribute(attrName);
+        //            sb.Append(value?.ToString() ?? "<NULL>");
 
-                    sb.Append("|");
-                }
-            }
+        //            sb.Append("|");
+        //        }
+        //    }
 
-            return sb.ToString();
-        }
+        //    return sb.ToString();
+        //}
 
         /// <summary>
         /// 合并一个属性组内的 polyline。
@@ -150,7 +238,8 @@ namespace process_pipeline.Geometry
                         graph,
                         startNodeId: node.Id,
                         startEdgeId: edgeId,
-                        visitedEdges: visitedEdges);
+                        visitedEdges: visitedEdges,
+                        options: options);
 
                     if (chain.EdgeIds.Count > 0)
                     {
@@ -178,7 +267,8 @@ namespace process_pipeline.Geometry
                     var chain = TraceClosedLoop(
                         graph,
                         startEdgeId: edge.Id,
-                        visitedEdges: visitedEdges);
+                        visitedEdges: visitedEdges,
+                        options: options);
 
                     if (chain.EdgeIds.Count > 0)
                     {
@@ -259,7 +349,74 @@ namespace process_pipeline.Geometry
                 endNode.EdgeIds.Add(edge.Id);
             }
 
+            /*
+             * 关键：
+             * graph.EdgeIds 保留原始完整拓扑。
+             * 在完整拓扑建好之后，再根据原始 degree 和属性规则，
+             * 预先计算每个节点处哪些边允许继续合并。
+             */
+            BuildMergeableConnections(graph, options);
             return graph;
+        }
+
+        /// <summary>
+        /// 基于原始拓扑和属性规则，预先建立“可合并连接”。
+        /// 
+        /// 注意：
+        /// 1. 原始拓扑 degree 使用 node.EdgeIds.Count；
+        /// 2. 只有原始 degree == 2 的节点才可能被穿过；
+        /// 3. 如果两条边的合并属性不同，则不允许穿过；
+        /// 4. 不修改 node.EdgeIds，避免破坏原始拓扑。
+        /// </summary>
+        private void BuildMergeableConnections(
+            PolylineGraph graph,
+            PolylineMergeOptions options)
+        {
+            if (graph == null || graph.Nodes == null || graph.Edges == null)
+                return;
+
+            foreach (var node in graph.Nodes.Values)
+            {
+                if (node == null)
+                    continue;
+
+                if (node.NextMergeableEdgeByEdgeId == null)
+                    node.NextMergeableEdgeByEdgeId = new Dictionary<int, int>();
+                else
+                    node.NextMergeableEdgeByEdgeId.Clear();
+
+                /*
+                 * 关键点：
+                 * 必须使用原始完整拓扑的 degree。
+                 * 如果这里不是 2，就绝对不能穿过。
+                 */
+                if (node.EdgeIds == null || node.EdgeIds.Count != 2)
+                    continue;
+
+                int edgeIdA = node.EdgeIds[0];
+                int edgeIdB = node.EdgeIds[1];
+
+                if (!graph.Edges.TryGetValue(edgeIdA, out GraphEdge edgeA))
+                    continue;
+
+                if (!graph.Edges.TryGetValue(edgeIdB, out GraphEdge edgeB))
+                    continue;
+
+                /*
+                 * degree == 2 只是拓扑上允许穿过。
+                 * 合并属性一致才真正允许合并。
+                 */
+                if (!CanMergeEdgesByAttributes(edgeA, edgeB, options))
+                    continue;
+
+                /*
+                 * 建立双向可合并连接。
+                 * 表示从 A 进来可以走到 B；
+                 * 从 B 进来也可以走到 A。
+                 */
+                node.NextMergeableEdgeByEdgeId[edgeIdA] = edgeIdB;
+                node.NextMergeableEdgeByEdgeId[edgeIdB] = edgeIdA;
+            }
         }
 
         /// <summary>
@@ -338,20 +495,19 @@ namespace process_pipeline.Geometry
             return gx + "," + gy;
         }
 
-        /// <summary>
+         /// <summary>
         /// 从指定节点和指定边开始，追踪一条开放链。
         /// 
-        /// 追踪规则：
-        /// 1. 当前边加入链；
-        /// 2. 走到边的另一端节点；
-        /// 3. 如果另一端节点 degree == 2，则继续找下一条未访问边；
-        /// 4. 如果另一端节点 degree != 2，则停止。
+        /// 注意：
+        /// 是否可以穿过某个 degree == 2 节点，已经在 BuildMergeableConnections 中预计算完成。
+        /// 这里不再现场判断 WIDTH 等属性。
         /// </summary>
         private GraphChain TraceChainFromNode(
             PolylineGraph graph,
             int startNodeId,
             int startEdgeId,
-            HashSet<int> visitedEdges)
+            HashSet<int> visitedEdges,
+            PolylineMergeOptions options)
         {
             var chain = new GraphChain
             {
@@ -366,36 +522,40 @@ namespace process_pipeline.Geometry
                 if (visitedEdges.Contains(currentEdgeId))
                     break;
 
-                var edge = graph.Edges[currentEdgeId];
+                var currentEdge = graph.Edges[currentEdgeId];
 
                 visitedEdges.Add(currentEdgeId);
 
                 chain.EdgeIds.Add(currentEdgeId);
                 chain.EdgeStartNodeIds.Add(currentNodeId);
 
-                int nextNodeId = edge.GetOtherNodeId(currentNodeId);
+                int nextNodeId =
+                    currentEdge.GetOtherNodeId(currentNodeId);
+
                 currentNodeId = nextNodeId;
 
                 var nextNode = graph.Nodes[currentNodeId];
 
-                if (nextNode.EdgeIds.Count != 2)
-                    break;
-
-                int nextEdgeId = -1;
-
-                foreach (int id in nextNode.EdgeIds)
+                /*
+                 * 核心逻辑：
+                 * 能否继续合并，已经在 BuildMergeableConnections 中算好了。
+                 * 
+                 * 如果当前节点：
+                 * 1. 原始 degree != 2；
+                 * 2. 或两边 WIDTH 不一致；
+                 * 3. 或其他合并属性不一致；
+                 * 
+                 * 都不会有 NextMergeableEdgeByEdgeId 映射。
+                 */
+                if (nextNode.NextMergeableEdgeByEdgeId == null ||
+                    !nextNode.NextMergeableEdgeByEdgeId.TryGetValue(
+                        currentEdgeId,
+                        out int nextEdgeId))
                 {
-                    if (id == currentEdgeId)
-                        continue;
-
-                    if (visitedEdges.Contains(id))
-                        continue;
-
-                    nextEdgeId = id;
                     break;
                 }
 
-                if (nextEdgeId < 0)
+                if (visitedEdges.Contains(nextEdgeId))
                     break;
 
                 currentEdgeId = nextEdgeId;
@@ -406,17 +566,99 @@ namespace process_pipeline.Geometry
             return chain;
         }
 
+        private bool CanMergeEdgesByAttributes(
+            GraphEdge edgeA,
+            GraphEdge edgeB,
+            PolylineMergeOptions options)
+        {
+            if (edgeA == null || edgeB == null)
+                return false;
+
+            if (edgeA.Polyline == null || edgeB.Polyline == null)
+                return false;
+
+            if (options == null)
+                return true;
+
+            if (options.MergeAttributeNames == null ||
+                options.MergeAttributeNames.Count == 0)
+            {
+                return true;
+            }
+
+            foreach (string attrName in options.MergeAttributeNames)
+            {
+                if (string.IsNullOrWhiteSpace(attrName))
+                    continue;
+
+                object valueA =
+                    GetMergeAttributeValue(
+                        edgeA.Polyline,
+                        attrName);
+
+                object valueB =
+                    GetMergeAttributeValue(
+                        edgeB.Polyline,
+                        attrName);
+
+                string textA =
+                    NormalizeMergeKeyValue(valueA);
+
+                string textB =
+                    NormalizeMergeKeyValue(valueB);
+
+                if (!string.Equals(
+                        textA,
+                        textB,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private object GetMergeAttributeValue(
+            CadPolyline polyline,
+            string attributeName)
+        {
+            if (polyline == null)
+                return null;
+
+            if (string.IsNullOrWhiteSpace(attributeName))
+                return null;
+
+            if (polyline.Attributes == null)
+                return null;
+
+            foreach (var kv in polyline.Attributes)
+            {
+                if (string.Equals(
+                        kv.Key,
+                        attributeName,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    return kv.Value;
+                }
+            }
+
+            return null;
+        }
+
         /// <summary>
-        /// 追踪闭环。
+        /// 追踪剩余未访问边。
         /// 
-        /// 闭环中所有节点 degree == 2。
-        /// 任意选一条未访问边开始，沿着 degree == 2 的节点走，
-        /// 直到回到起点或无路可走。
+        /// 名字虽然叫 TraceClosedLoop，但现在它不仅用于完整闭环，
+        /// 也用于处理第一阶段没有从 degree != 2 节点访问到的剩余边。
+        /// 
+        /// 是否能继续穿过节点，使用 BuildMergeableConnections 预计算的结果。
         /// </summary>
         private GraphChain TraceClosedLoop(
             PolylineGraph graph,
             int startEdgeId,
-            HashSet<int> visitedEdges)
+            HashSet<int> visitedEdges,
+            PolylineMergeOptions options)
         {
             var startEdge = graph.Edges[startEdgeId];
 
@@ -434,38 +676,38 @@ namespace process_pipeline.Geometry
                 if (visitedEdges.Contains(currentEdgeId))
                     break;
 
-                var edge = graph.Edges[currentEdgeId];
+                var currentEdge = graph.Edges[currentEdgeId];
 
                 visitedEdges.Add(currentEdgeId);
 
                 chain.EdgeIds.Add(currentEdgeId);
                 chain.EdgeStartNodeIds.Add(currentNodeId);
 
-                int nextNodeId = edge.GetOtherNodeId(currentNodeId);
+                int nextNodeId =
+                    currentEdge.GetOtherNodeId(currentNodeId);
+
                 currentNodeId = nextNodeId;
 
+                /*
+                 * 如果已经回到起点，说明形成了完整闭环。
+                 */
                 if (currentNodeId == startNodeId)
                     break;
 
                 var nextNode = graph.Nodes[currentNodeId];
 
-                bool found = false;
-                int nextEdgeId = -1;
-
-                foreach (int id in nextNode.EdgeIds)
+                /*
+                 * 是否可以继续走，完全由建图阶段预计算结果决定。
+                 */
+                if (nextNode.NextMergeableEdgeByEdgeId == null ||
+                    !nextNode.NextMergeableEdgeByEdgeId.TryGetValue(
+                        currentEdgeId,
+                        out int nextEdgeId))
                 {
-                    if (id == currentEdgeId)
-                        continue;
-
-                    if (visitedEdges.Contains(id))
-                        continue;
-
-                    nextEdgeId = id;
-                    found = true;
                     break;
                 }
 
-                if (!found)
+                if (visitedEdges.Contains(nextEdgeId))
                     break;
 
                 currentEdgeId = nextEdgeId;

@@ -408,6 +408,10 @@ namespace process_pipeline.Geometry
                         // 一个 group 中，找出 polyline 和 block reference
                         foreach (ObjectId id in entityIds)
                         {
+                            if (id.Handle.ToString() == "97E") {
+                                Console.WriteLine("debug");
+                            }
+
                             Entity ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
                             if (ent == null)
                                 continue;
@@ -440,7 +444,7 @@ namespace process_pipeline.Geometry
                         Dictionary<string, object> attributes = null;
                         if (br != null)
                         {
-                            attributes = CollectAttributeDefinitionsFromBlockReference(br, tr);
+                            attributes = CollectAttributeValuesFromBlockReference(br, tr);
                         }
 
                         var cadPolyline = ConvertAutoCadPolylineToPolyline(
@@ -616,6 +620,55 @@ namespace process_pipeline.Geometry
             }
 
             return cadPolyline;
+        }
+
+        public static Dictionary<string, object> CollectAttributeValuesFromBlockReference(
+            BlockReference br,
+            Transaction tr)
+        {
+            var attributes = new Dictionary<string, object>(
+                StringComparer.OrdinalIgnoreCase);
+
+            if (br == null || tr == null)
+                return attributes;
+
+            /*
+             * 关键点：
+             * 
+             * 不能从 br.BlockTableRecord 里面读取 AttributeDefinition。
+             * AttributeDefinition 是块定义里的默认属性值。
+             * 
+             * 用户在图纸中修改后的属性值，存在 BlockReference.AttributeCollection
+             * 里面的 AttributeReference 上。
+             */
+
+            AttributeCollection attrCollection = br.AttributeCollection;
+
+            if (attrCollection == null || attrCollection.Count == 0)
+                return attributes;
+
+            foreach (ObjectId attrId in attrCollection)
+            {
+                if (attrId.IsNull || attrId.IsErased)
+                    continue;
+
+                AttributeReference attrRef =
+                    tr.GetObject(attrId, OpenMode.ForRead, false) as AttributeReference;
+
+                if (attrRef == null)
+                    continue;
+
+                string tag = attrRef.Tag;
+
+                if (string.IsNullOrWhiteSpace(tag))
+                    continue;
+
+                object value = attrRef.TextString;
+
+                attributes[tag.Trim()] = value;
+            }
+
+            return attributes;
         }
 
         public static Dictionary<string, object> CollectAttributeDefinitionsFromBlockReference(

@@ -28,6 +28,21 @@ namespace process_pipeline.Models
             /// EdgeIds.Count 就是 degree。
             /// </summary>
             public List<int> EdgeIds { get; } = new List<int>();
+
+            /// <summary>
+            /// 当前节点处允许穿过的可合并边映射。
+            /// 
+            /// Key：从哪条边进入当前节点；
+            /// Value：可以继续走向哪条边。
+            /// 
+            /// 只有当：
+            /// 1. 当前节点原始 degree == 2；
+            /// 2. 两条边的合并属性一致，比如 WIDTH 一致；
+            /// 
+            /// 才建立这个映射。
+            /// </summary>
+            public Dictionary<int, int> NextMergeableEdgeByEdgeId { get; set; }
+                = new Dictionary<int, int>();
         }
 
         public class GraphEdge

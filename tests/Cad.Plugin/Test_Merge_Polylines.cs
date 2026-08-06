@@ -89,6 +89,10 @@ namespace Cad.Plugin
                     geometryFactory,
                     "target_raw");
 
+                var result = rawPolylines
+                    .Where(x => x.Attributes?.Count > 0 && x.SourceHandles[0] == "97E")
+                    .ToList();
+
                 ed.WriteMessage($"B 原始 polyline 数量：{rawPolylines.Count}\n");
 
                 var merger = new PolylineGraphMerger(geometryFactory);
