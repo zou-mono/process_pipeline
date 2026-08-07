@@ -511,6 +511,140 @@ namespace process_pipeline.Geometry
             return result;
         }
 
+        public static List<CadPolyline> CollectPolylinesFromLayers(
+            Database db,
+            IEnumerable<string> layerNames,
+            GeometryFactory geometryFactory,
+            string datasetName = null)
+        {
+            var result = new List<CadPolyline>();
+            var addedKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            var layerSet = new HashSet<string>(
+                (layerNames ?? Enumerable.Empty<string>())
+                    .Where(x => !string.IsNullOrWhiteSpace(x))
+                    .Select(x => x.Trim()),
+                StringComparer.OrdinalIgnoreCase);
+
+            if (layerSet.Count == 0)
+                return result;
+
+            using (var tr = db.TransactionManager.StartOpenCloseTransaction())
+            {
+                // 1) 先处理 Group 里的 Polyline
+                DBDictionary groupDict =
+                    tr.GetObject(db.GroupDictionaryId, OpenMode.ForRead) as DBDictionary;
+
+                if (groupDict != null && groupDict.Count > 0)
+                {
+                    foreach (DBDictionaryEntry entry in groupDict)
+                    {
+                        Group group = tr.GetObject(entry.Value, OpenMode.ForRead) as Group;
+                        if (group == null)
+                            continue;
+
+                        ObjectId[] entityIds = group.GetAllEntityIds();
+
+                        Polyline pl = null;
+                        BlockReference br = null;
+
+                        // 一个 group 中，找出 polyline 和 block reference
+                        foreach (ObjectId id in entityIds)
+                        {
+                            Entity ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
+                            if (ent == null)
+                                continue;
+
+                            if (ent is Polyline foundPolyline)
+                            {
+                                if (pl == null)
+                                    pl = foundPolyline;
+                                continue;
+                            }
+
+                            if (ent is BlockReference foundBlockRef)
+                            {
+                                if (br == null)
+                                    br = foundBlockRef;
+                                continue;
+                            }
+                        }
+
+                        if (pl == null)
+                            continue;
+
+                        if (!layerSet.Contains(pl.Layer))
+                            continue;
+
+                        Dictionary<string, object> attributes = null;
+                        if (br != null)
+                        {
+                            attributes = CollectAttributeValuesFromBlockReference(br, tr);
+                        }
+
+                        var cadPolyline = ConvertAutoCadPolylineToPolyline(
+                            pl,
+                            pl.ObjectId,
+                            geometryFactory,
+                            datasetName,
+                            attributes);
+
+                        if (cadPolyline != null &&
+                            cadPolyline.Geometry != null &&
+                            cadPolyline.Geometry.Length > 0)
+                        {
+                            string key = BuildPolylineDedupKey(cadPolyline);
+                            if (addedKeys.Add(key))
+                            {
+                                result.Add(cadPolyline);
+                            }
+                        }
+                    }
+                }
+
+                // 2) 再处理 ModelSpace 里的普通 Polyline
+                BlockTable bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
+                BlockTableRecord modelSpace =
+                    (BlockTableRecord)tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForRead);
+
+                foreach (ObjectId id in modelSpace)
+                {
+                    Entity ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
+                    if (ent == null)
+                        continue;
+
+                    if (!layerSet.Contains(ent.Layer))
+                        continue;
+
+                    if (!(ent is Polyline pl))
+                        continue;
+
+                    string key = BuildPolylineDedupKey(id);
+                    if (addedKeys.Contains(key))
+                        continue;
+
+                    var cadPolyline = ConvertAutoCadPolylineToPolyline(
+                        pl,
+                        id,
+                        geometryFactory,
+                        datasetName);
+
+                    if (cadPolyline != null &&
+                        cadPolyline.Geometry != null &&
+                        cadPolyline.Geometry.Length > 0)
+                    {
+                        string polylineKey = BuildPolylineDedupKey(cadPolyline);
+                        if (addedKeys.Add(polylineKey))
+                        {
+                            result.Add(cadPolyline);
+                        }
+                    }
+                }
+            }
+
+            return result;
+        }
+
         private static string BuildPolylineDedupKey(ObjectId id)
         {
             if (id.IsNull)

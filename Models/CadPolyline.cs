@@ -88,8 +88,19 @@ namespace process_pipeline.Models
         /// </summary>
         public object GetAttribute(string name)
         {
-            if (Attributes != null && Attributes.TryGetValue(name, out var value))
-                return value;
+            if (Attributes == null || string.IsNullOrWhiteSpace(name))
+                return null;
+
+            foreach (var kv in Attributes)
+            {
+                if (string.Equals(
+                        kv.Key,
+                        name,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    return kv.Value;
+                }
+            }
 
             return null;
         }

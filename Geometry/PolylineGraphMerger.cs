@@ -591,21 +591,11 @@ namespace process_pipeline.Geometry
                 if (string.IsNullOrWhiteSpace(attrName))
                     continue;
 
-                object valueA =
-                    GetMergeAttributeValue(
-                        edgeA.Polyline,
-                        attrName);
+                object valueA = edgeA.Polyline.GetAttribute(attrName);
+                object valueB = edgeB.Polyline.GetAttribute(attrName);
 
-                object valueB =
-                    GetMergeAttributeValue(
-                        edgeB.Polyline,
-                        attrName);
-
-                string textA =
-                    NormalizeMergeKeyValue(valueA);
-
-                string textB =
-                    NormalizeMergeKeyValue(valueB);
+                string textA = NormalizeMergeKeyValue(valueA);
+                string textB = NormalizeMergeKeyValue(valueB);
 
                 if (!string.Equals(
                         textA,
@@ -617,33 +607,6 @@ namespace process_pipeline.Geometry
             }
 
             return true;
-        }
-
-        private object GetMergeAttributeValue(
-            CadPolyline polyline,
-            string attributeName)
-        {
-            if (polyline == null)
-                return null;
-
-            if (string.IsNullOrWhiteSpace(attributeName))
-                return null;
-
-            if (polyline.Attributes == null)
-                return null;
-
-            foreach (var kv in polyline.Attributes)
-            {
-                if (string.Equals(
-                        kv.Key,
-                        attributeName,
-                        StringComparison.OrdinalIgnoreCase))
-                {
-                    return kv.Value;
-                }
-            }
-
-            return null;
         }
 
         /// <summary>

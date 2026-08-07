@@ -39,13 +39,20 @@ namespace process_pipeline.Tests.Cad.Plugin
              */
 
             // A.dwg 文件路径：基准数据所在 DWG。
-            string dwgAPath = @"D:\资料\部门内部文件\小工具\管线CAD\提资\勘测管.dwg";
+            string dwgAPath = @"D:\资料\部门内部文件\小工具\管线CAD\提资\上版数据.dwg";
 
             // B.dwg 文件路径：待比较数据所在 DWG。
             string dwgBPath = @"D:\资料\部门内部文件\小工具\管线CAD\提资\盐田初始.dwg";
 
             // A.dwg 中的基准图层。
-            string baseLayer = "勘测管";
+            //string baseLayer = "勘测管";
+            string[] baseLayers = 
+            {
+                "0污水-规划新建",
+                "0污水-规划改建",
+                "0污水-待补测规划管",
+                "0污水-已核实需新增"
+            };
 
             // B.dwg 中的待比较图层。
             string targetLayer = "3-污水管-现状";
@@ -90,7 +97,7 @@ namespace process_pipeline.Tests.Cad.Plugin
 
                 ed.WriteMessage($"base 文件：{dwgAPath}\n");
                 ed.WriteMessage($"target 文件：{dwgBPath}\n");
-                ed.WriteMessage($"base 图层：{baseLayer}\n");
+                ed.WriteMessage($"base 图层：{baseLayers}\n");
                 ed.WriteMessage($"target 图层：{targetLayer}\n");
 
                 /*
@@ -121,10 +128,17 @@ namespace process_pipeline.Tests.Cad.Plugin
                         true,
                         "");
 
+                    //basePolylines =
+                    //    GeometryHelper.CollectPolylinesFromLayer(
+                    //        sideDb,
+                    //        baseLayer,
+                    //        geometryFactory,
+                    //        "base_raw");
+
                     basePolylines =
-                        GeometryHelper.CollectPolylinesFromLayer(
+                        GeometryHelper.CollectPolylinesFromLayers(
                             sideDb,
-                            baseLayer,
+                            baseLayers,
                             geometryFactory,
                             "base_raw");
 
