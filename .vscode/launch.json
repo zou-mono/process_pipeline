@@ -1,0 +1,41 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "1. 启动 AutoCAD 2019 (调试主插件)",
+            "type": "clr",
+            
+            "request": "launch",
+            "preLaunchTask": "dotnet-build-main",
+            "program": "C:\\Program Files\\Autodesk\\AutoCAD 2019\\acad.exe",
+            "args": [
+                "/b",
+                "${workspaceFolder}\\load.scr"
+            ],
+            "cwd": "${workspaceFolder}\\bin\\x64\\Debug"
+        },
+        {
+            "name": "2. 启动 accoreconsole (无界面极速调试 Cad.Plugin)",
+            "type": "clr",
+            "request": "launch",
+            "preLaunchTask": "build-test-plugin",
+            "program": "C:\\Program Files\\Autodesk\\AutoCAD 2019\\accoreconsole.exe",
+            "args": [
+                "/i",
+                "D:\\temp\\1.dwg",
+                "/s",
+                "${workspaceFolder}\\Tests\\Cad.Plugin\\load.scr"
+            ],
+            "cwd": "${workspaceFolder}\\Tests\\Cad.Plugin"
+        },
+        {
+            "name": "3. 附加到已运行的 AutoCAD (Attach)",
+            "type": "clr",
+            "request": "attach",
+            "processName": "acad"
+        }
+    ]
+}
