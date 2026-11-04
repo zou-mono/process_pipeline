@@ -1,4 +1,4 @@
-﻿using Autodesk.AutoCAD.ApplicationServices;
+using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.Windows;
 using process_pipeline.Themes;
 using process_pipeline.Utils;
@@ -18,37 +18,69 @@ namespace process_pipeline.Core
         void UpdateData(TData data);
     }
 
-    // 泛型抽象基类：TControl 是 UserControl 类型，TData 是数据类型
-    // TControl 必须是 UserControl，实现接口，且有无参构造函数
+    /// <summary>
+    /// 泛型面板抽象基类：TControl 是 UserControl 类型，TData 是数据类型。
+    /// 
+    /// 架构改进说明（Commit 3.1）：
+    /// 1. 将原有的 static PaletteSet _paletteSet 改为实例字段，避免不同泛型子类或多实例间的静态引用隐患。
+    /// 2. 完善多文档（MDI）生命周期管理：
+    ///    - 记录当前正在监听的文档 _listeningDoc；
+    ///    - 当关闭某个后台非当前核查文档时，不再误杀当前打开的 PaletteSet；
+    ///    - 监听 DocumentActivated 事件，当用户在多个 DWG 标签页之间切换时，自动将 _refreshManager
+    ///      平滑切换到新激活的文档并清理残留的瞬态辅助线。
+    /// </summary>
     public abstract class PaletteSetBase<TControl, TData> : IDisposable
-        where TControl : UserControl, IPaletteControl<TData>, new()  
+        where TControl : UserControl, IPaletteControl<TData>, new()
     {
-        protected static PaletteSet _paletteSet = null;
+        protected PaletteSet _paletteSet = null;
         protected TControl _currentControl;
         protected TData _currentData;
         protected PaletteRefreshManager _refreshManager;
-            
-        //protected readonly Guid _paletteGuid = new Guid("7e8d4f9a-5b7c-4890-8a7b-123456789abc");
+        protected Document _listeningDoc;
 
         protected abstract Guid PaletteGuid { get; }
-
-        //// 单例模式（如果需要，可以改为非单例）
-        //private static readonly Lazy<PaletteSetBase<TControl, TData>> _instance =
-        //    new Lazy<PaletteSetBase<TControl, TData>>(() => CreateInstance());
-        //public static PaletteSetBase<TControl, TData> Instance => _instance.Value;
-
-        // 抽象工厂方法，让子类创建具体实例
-        //protected abstract PaletteSetBase<TControl, TData> CreateInstance();
 
         protected PaletteSetBase()
         {
             AcadApp.DocumentManager.DocumentToBeDestroyed += OnDocumentToBeDestroyed;
+            AcadApp.DocumentManager.DocumentActivated += OnDocumentActivated;
             _refreshManager = new PaletteRefreshManager();
         }
 
         private void OnDocumentToBeDestroyed(object sender, DocumentCollectionEventArgs e)
         {
-            Dispose();
+            if (e?.Document == null) return;
+
+            // 清理屏幕上的瞬态辅助图形，防止跨文档残留
+            GraphicManager.ClearAuxiliaryGraphics();
+
+            if (_listeningDoc == e.Document)
+            {
+                _refreshManager?.StopListening(e.Document);
+                _listeningDoc = null;
+            }
+
+            // 仅当最后一个文档也要关闭时才彻底销毁面板
+            if (AcadApp.DocumentManager.Count <= 1)
+            {
+                Dispose();
+            }
+        }
+
+        private void OnDocumentActivated(object sender, DocumentCollectionEventArgs e)
+        {
+            if (e?.Document == null || !IsVisible) return;
+            if (_listeningDoc == e.Document) return;
+
+            GraphicManager.ClearAuxiliaryGraphics();
+
+            if (_listeningDoc != null)
+            {
+                _refreshManager?.StopListening(_listeningDoc);
+            }
+
+            _listeningDoc = e.Document;
+            _refreshManager?.StartListening(_listeningDoc);
         }
 
         // 抽象方法：子类提供 PaletteSet 的标题和名称
@@ -64,8 +96,6 @@ namespace process_pipeline.Core
             var currentDoc = AcadApp.DocumentManager.MdiActiveDocument;
             if (currentDoc == null) return;
 
-            //UpdateData(initialData != null ? initialData : GetInitialData());
-
             if (_paletteSet == null || _paletteSet.IsDisposed)
             {
                 _paletteSet = new PaletteSet(GetPaletteTitle(), GetPaletteName(), PaletteGuid)
@@ -79,15 +109,19 @@ namespace process_pipeline.Core
                 _currentControl = new TControl();  // 创建泛型控件
                 _paletteSet.AddVisual("内容", _currentControl);  // 嵌入控件
 
+                _listeningDoc = currentDoc;
                 _refreshManager.StartListening(currentDoc);
             }
-            //else
-            //{
-            //    if (_currentControl != null)
-            //    {
-            //        UpdateControlData();
-            //    }
-            //}
+            else if (_listeningDoc != currentDoc)
+            {
+                if (_listeningDoc != null)
+                {
+                    _refreshManager.StopListening(_listeningDoc);
+                }
+                _listeningDoc = currentDoc;
+                _refreshManager.StartListening(currentDoc);
+            }
+
             UpdateData(initialData != null ? initialData : GetInitialData());
 
             _paletteSet.Visible = true;
@@ -137,6 +171,8 @@ namespace process_pipeline.Core
         {
             try
             {
+                GraphicManager.ClearAuxiliaryGraphics();
+
                 _currentControl = null;
                 if (_paletteSet != null && !_paletteSet.IsDisposed)
                 {
@@ -146,11 +182,12 @@ namespace process_pipeline.Core
                 }
                 _paletteSet = null;
 
-                var currentDoc = AcadApp.DocumentManager.MdiActiveDocument;
-                if (currentDoc != null && _refreshManager != null)
+                var docToStop = _listeningDoc ?? AcadApp.DocumentManager.MdiActiveDocument;
+                if (docToStop != null && _refreshManager != null)
                 {
-                    _refreshManager.StopListening(currentDoc);
+                    _refreshManager.StopListening(docToStop);
                 }
+                _listeningDoc = null;
             }
             catch (Exception ex)
             {
