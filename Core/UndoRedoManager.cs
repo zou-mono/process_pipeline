@@ -1,6 +1,9 @@
+using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
+using process_pipeline.Models;
 using System;
 using System.Collections.Generic;
+using AcadApp = Autodesk.AutoCAD.ApplicationServices.Application;
 
 namespace process_pipeline.Core
 {
@@ -170,5 +173,151 @@ namespace process_pipeline.Core
             StateChanged?.Invoke(this, EventArgs.Empty);
         }
     }
-}
 
+    /// <summary>
+    /// 人工核查状态与属性修改操作（Commit 4.2）。
+    /// 
+    /// 架构设计说明：
+    /// 1. 针对纯 UI 内存层面的判读操作（如：将存疑管线标记为“已修改/待复核/已忽略”、修改管径/高程/备注），
+    ///    由于不触发 CAD 数据库事务，原生 UNDO 无法撤销此类动作。
+    /// 2. 本操作在构造时通过 <see cref="CheckIssueItem.CloneSnapshot"/> 保存修改前的完整问题快照与修改后的目标快照，
+    ///    在 Execute() 与 Undo() 时通过委托回调触发对应表格行的单行就地刷新（不重建整个表格）。
+    /// </summary>
+    public class ChangeIssueStatusOperation : IUserOperation
+    {
+        private readonly CheckIssueItem _beforeSnapshot;
+        private readonly CheckIssueItem _afterSnapshot;
+        private readonly Action<CheckIssueItem> _applyIssueAction;
+
+        public string Description { get; }
+        public bool TouchesCadDatabase => false;
+        public ObjectId TargetObjectId => _afterSnapshot != null ? _afterSnapshot.TargetObjectId : ObjectId.Null;
+
+        public ChangeIssueStatusOperation(
+            CheckIssueItem beforeSnapshot,
+            CheckIssueItem afterSnapshot,
+            Action<CheckIssueItem> applyIssueAction,
+            string description = null)
+        {
+            if (beforeSnapshot == null) throw new ArgumentNullException(nameof(beforeSnapshot));
+            if (afterSnapshot == null) throw new ArgumentNullException(nameof(afterSnapshot));
+            if (applyIssueAction == null) throw new ArgumentNullException(nameof(applyIssueAction));
+
+            _beforeSnapshot = beforeSnapshot.CloneSnapshot();
+            _afterSnapshot = afterSnapshot.CloneSnapshot();
+            _applyIssueAction = applyIssueAction;
+
+            string handleText = !string.IsNullOrWhiteSpace(_afterSnapshot.TargetHandle)
+                ? _afterSnapshot.TargetHandle
+                : _afterSnapshot.IssueId;
+            Description = !string.IsNullOrWhiteSpace(description)
+                ? description
+                : $"修改 {handleText} 状态为“{_afterSnapshot.GetStatusDisplayText()}”";
+        }
+
+        public void Execute()
+        {
+            _applyIssueAction(_afterSnapshot.CloneSnapshot());
+        }
+
+        public void Undo()
+        {
+            _applyIssueAction(_beforeSnapshot.CloneSnapshot());
+        }
+    }
+
+    /// <summary>
+    /// 翻转 CAD 管线（Curve/Polyline/Line）流向并联动更新 UI 核查状态的复合可逆操作（Commit 4.2）。
+    /// 
+    /// 架构设计说明：
+    /// 1. 结合了 CAD 数据库实体修改（Curve.ReverseCurve）与 UI 核查状态回滚。
+    /// 2. 由于 Curve.ReverseCurve() 具有自反性（连续翻转两次即恢复原方向），
+    ///    Execute() 与 Undo() 均可在 DocumentLock + Transaction 中安全地反转目标管线顶点顺序：
+    ///    - Execute() 翻转图元后，将核查项状态更新为“已修改（Modified）”或触发局部重算；
+    ///    - Undo() 再次翻转图元恢复原始几何流向，并将主窗口中该行的核查项精确回滚为翻转前的快照。
+    /// </summary>
+    public class ReverseCurveOperation : IUserOperation
+    {
+        private readonly ObjectId _curveId;
+        private readonly CheckIssueItem _beforeSnapshot;
+        private readonly Action<ObjectId, CheckIssueItem, bool> _onStateRestoredOrChanged;
+
+        public string Description { get; }
+        public bool TouchesCadDatabase => true;
+        public ObjectId TargetObjectId => _curveId;
+
+        public ReverseCurveOperation(
+            ObjectId curveId,
+            CheckIssueItem beforeSnapshot,
+            Action<ObjectId, CheckIssueItem, bool> onStateRestoredOrChanged)
+        {
+            _curveId = curveId;
+            _beforeSnapshot = beforeSnapshot?.CloneSnapshot();
+            _onStateRestoredOrChanged = onStateRestoredOrChanged;
+
+            string handleText = !string.IsNullOrWhiteSpace(_beforeSnapshot?.TargetHandle)
+                ? _beforeSnapshot.TargetHandle
+                : (!curveId.IsNull ? curveId.Handle.ToString() : "未知管线");
+            Description = $"翻转管线 {handleText} 流向";
+        }
+
+        public void Execute()
+        {
+            if (!TryReverseCurveInCad(_curveId))
+                return;
+
+            CheckIssueItem afterSnapshot = _beforeSnapshot?.CloneSnapshot();
+            if (afterSnapshot != null)
+            {
+                afterSnapshot.Status = IssueReviewStatus.Modified;
+                afterSnapshot.Remark = "已翻转管线流向";
+            }
+
+            _onStateRestoredOrChanged?.Invoke(_curveId, afterSnapshot, false);
+        }
+
+        public void Undo()
+        {
+            if (!TryReverseCurveInCad(_curveId))
+                return;
+
+            _onStateRestoredOrChanged?.Invoke(_curveId, _beforeSnapshot?.CloneSnapshot(), true);
+        }
+
+        /// <summary>
+        /// 在文档锁与事务保护下安全反转目标 Curve（Line / Polyline 等）的起点与终点方向。
+        /// </summary>
+        private static bool TryReverseCurveInCad(ObjectId curveId)
+        {
+            if (curveId.IsNull || !curveId.IsValid || curveId.IsErased)
+                return false;
+
+            Document doc = AcadApp.DocumentManager.MdiActiveDocument;
+            if (doc == null)
+                return false;
+
+            using (DocumentLock docLock = doc.LockDocument())
+            {
+                using (Transaction tr = doc.Database.TransactionManager.StartTransaction())
+                {
+                    try
+                    {
+                        Curve cv = tr.GetObject(curveId, OpenMode.ForWrite) as Curve;
+                        if (cv == null)
+                            return false;
+
+                        cv.ReverseCurve();
+                        tr.Commit();
+                        doc.Editor.Regen();
+                        return true;
+                    }
+                    catch
+                    {
+                        tr.Abort();
+                        return false;
+                    }
+                }
+            }
+        }
+    }
+}
