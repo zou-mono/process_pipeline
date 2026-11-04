@@ -808,8 +808,8 @@ namespace process_pipeline.Forms
                 TreeNodes.Add(ruleNode);
             }
 
-            // 2. 构建底部【按管线图层辅助筛选】节点
-            var layerRoot = new TreeNodeVm("按管线图层辅助筛选")
+            // 2. 构建底部【图层】节点
+            var layerRoot = new TreeNodeVm("图层")
             {
                 FilterKind = TreeFilterKind.LayerRoot,
                 IsExpanded = false
