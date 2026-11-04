@@ -1,8 +1,9 @@
-﻿using Autodesk.AutoCAD.DatabaseServices;
+using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Runtime;
 using process_pipeline.Core;
 using process_pipeline.Forms;
+using process_pipeline.Models;
 using process_pipeline.Utils;
 using System;
 using System.Collections.Generic;
@@ -31,42 +32,51 @@ namespace process_pipeline.Commands
         }
     }
 
-    public class CheckPipeService : CadBase<Dictionary<ObjectId, ProblemItem>>
+    /// <summary>
+    /// 管线综合核查服务（Commit 2.3）。
+    /// 
+    /// 架构设计说明：
+    /// 1. 升级泛型返回值为 Dictionary<ObjectId, CheckIssueItem>，直接对接统一领域模型。
+    /// 2. 内部通过统一的 ICheckRule 接口调度核查规则（默认挂载 FlowArrowService，后续可扩展多规则聚合），
+    ///    实现命令执行引擎与具体算法实现的解耦。
+    /// </summary>
+    public class CheckPipeService : CadBase<Dictionary<ObjectId, CheckIssueItem>>
     {
         private readonly AcadDb.Database _db;
         private readonly Editor _ed;
+        private readonly ICheckRule _rule;
 
-        public CheckPipeService(AcadDb.Database db, Editor ed) : base(db, ed)
+        public CheckPipeService(AcadDb.Database db, Editor ed, ICheckRule rule = null) : base(db, ed)
         {
             _ed = ed;
             _db = db;
+            _rule = rule ?? new FlowArrowService(db, ed, false);
         }
 
-        protected override Dictionary<ObjectId, ProblemItem> Execute(ProgressContext context) 
+        protected override Dictionary<ObjectId, CheckIssueItem> Execute(ProgressContext context)
         {
-            return new Dictionary<ObjectId, ProblemItem>();
+            return _rule.CheckAll(context);
         }
 
-        protected override Dictionary<ObjectId, ProblemItem> Execute(ProgressContext context, List<ObjectId> pipeIds)
+        protected override Dictionary<ObjectId, CheckIssueItem> Execute(ProgressContext context, List<ObjectId> pipeIds)
         {
-            return new Dictionary<ObjectId, ProblemItem>();
+            var currentIssues = palCheckPipe.Instance.CurrentIssues != null
+                ? palCheckPipe.Instance.CurrentIssues.ToDictionary(kvp => kvp.Key, kvp => kvp.Value)
+                : new Dictionary<ObjectId, CheckIssueItem>();
+
+            return _rule.CheckIncremental(pipeIds, currentIssues, context);
         }
 
-        protected override void OnSuccess(Dictionary<ObjectId, ProblemItem> result, bool bOnlyUpdate = false)
+        protected override void OnSuccess(Dictionary<ObjectId, CheckIssueItem> result, bool bOnlyUpdate = false)
         {
-            //if (result == null || result.Count == 0)
-            //{
-            //    Ed.WriteMessage("\n检查通过，无问题。\n");
-            //    return;
-            //}
-
             if (bOnlyUpdate)
             {
-                palCheckPipe.Instance.UpdateData(result);
+                palCheckPipe.Instance.UpdateIncrementalData(result);
             }
-            else { 
-                // 弹窗展示
-                palCheckPipe.Instance.Show(result);    
+            else
+            {
+                // 弹窗展示全量核查结果
+                palCheckPipe.Instance.Show(result);
             }
         }
     }

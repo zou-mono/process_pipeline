@@ -30,7 +30,7 @@ namespace process_pipeline.Forms
     /// Interaction logic for ucMainCheckWindow.xaml
     /// </summary>
     // UserControl类，纯View类
-    public partial class ucMainCheckWindow : UserControl, IPaletteControl<Dictionary<ObjectId, ProblemItem>>
+    public partial class ucMainCheckWindow : UserControl, IPaletteControl<Dictionary<ObjectId, CheckIssueItem>>
     {
         // 【移除】：所有属性、命令和逻辑（移到 MainViewModel 中）
         // 例如：TreeNodes、Rows、StatusText、ToggleTreeCommand 等
@@ -46,6 +46,44 @@ namespace process_pipeline.Forms
         }
 
         // 【保留】：接口实现，用于外部更新数据
+        public IReadOnlyDictionary<ObjectId, CheckIssueItem> CurrentIssues => _vm.CurrentIssues;
+
+        /// <summary>
+        /// IPaletteControl 标准接口实现：接收统一核查问题字典进行全量更新。
+        /// </summary>
+        public void UpdateData(Dictionary<ObjectId, CheckIssueItem> data)
+        {
+            if (this.DataContext is MainCheckWindowViewModel viewModel)
+            {
+                viewModel.UpdateFromIssues(data, isIncremental: false);
+            }
+        }
+
+        /// <summary>
+        /// 接收局部增量核查结果进行单行就地更新（不清空全表）。
+        /// </summary>
+        public void UpdateIncrementalData(Dictionary<ObjectId, CheckIssueItem> data)
+        {
+            if (this.DataContext is MainCheckWindowViewModel viewModel)
+            {
+                viewModel.UpdateFromIssues(data, isIncremental: true);
+            }
+        }
+
+        private void TreeView_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+        {
+            if (e.NewValue is TreeNodeVm node)
+            {
+                _vm.SelectedLayerFilter = node.Name;
+            }
+        }
+
+        private void DataGrid_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+        {
+            _vm.ZoomToSelectedRow(isZoomTo: true);
+        }
+
+        // 【保留兼容】：支持旧版 ProblemItem 字典更新
         public void UpdateData(Dictionary<ObjectId, ProblemItem> data)
         {
             // 由于 DataContext 是 MainViewModel，假设 MainViewModel 有 UpdateData 方法或属性
@@ -85,6 +123,11 @@ namespace process_pipeline.Forms
         private string _selectedLayerFilter = "全部图层";
         private readonly ICollectionView _rowsView;
         private readonly Dictionary<ObjectId, PipeRowVm> _objectIdToRowMap = new Dictionary<ObjectId, PipeRowVm>();
+        private Dictionary<ObjectId, CheckIssueItem> _currentIssues = new Dictionary<ObjectId, CheckIssueItem>();
+        private PipeRowVm _selectedRow;
+        private bool _isSyncingSelection;
+
+        public IReadOnlyDictionary<ObjectId, CheckIssueItem> CurrentIssues => _currentIssues;
 
         //private double _leftPanelToggleX;  // GridSplitter距离左侧的偏移值
 
@@ -95,13 +138,24 @@ namespace process_pipeline.Forms
         public ICommand RefreshCommand { get; }
         public ICommand ZoomToCommand { get; }
         public ICommand ExportCommand { get; }
+        public ICommand MarkModifiedCommand { get; }
+        public ICommand MarkToRecheckCommand { get; }
+        public ICommand MarkIgnoredCommand { get; }
+        public ICommand CadSelectionChangedCommand { get; }
 
         public MainCheckWindowViewModel()
         {
             ToggleTreeCommand = new RelayCommand(_ => ToggleTree());
-            RefreshCommand = new RelayCommand(_ => StatusText = "已刷新");
-            ZoomToCommand = new RelayCommand(_ => StatusText = "已定位");
+
+
+            ToggleTreeCommand = new RelayCommand(_ => ToggleTree());
+            RefreshCommand = new RelayCommand(_ => RefreshByRule());
+            ZoomToCommand = new RelayCommand(_ => ZoomToSelectedRow(isZoomTo: true));
             ExportCommand = new RelayCommand(_ => StatusText = "已导出");
+            MarkModifiedCommand = new RelayCommand(_ => ChangeSelectedRowStatus(IssueReviewStatus.Modified), _ => SelectedRow != null);
+            MarkToRecheckCommand = new RelayCommand(_ => ChangeSelectedRowStatus(IssueReviewStatus.ToRecheck), _ => SelectedRow != null);
+            MarkIgnoredCommand = new RelayCommand(_ => ChangeSelectedRowStatus(IssueReviewStatus.Ignored), _ => SelectedRow != null);
+            CadSelectionChangedCommand = new RelayCommand(_ => OnImpliedSelectionChanged());
 
             // 挂载默认集合视图过滤器（WPF DataGrid 绑定 Rows 时会自动使用此 DefaultView）
             _rowsView = CollectionViewSource.GetDefaultView(Rows);
@@ -174,6 +228,25 @@ namespace process_pipeline.Forms
                 if (Set(ref _selectedLayerFilter, value ?? "全部图层"))
                 {
                     RefreshFilter();
+                }
+            }
+        }
+
+        /// <summary>
+        /// 当前表格选中的问题行（Commit 2.3）。
+        /// 切换选中行时自动在 CAD 图面高亮对应管线，若是一对多箭头冲突则绘制瞬态辅助红线。
+        /// </summary>
+        public PipeRowVm SelectedRow
+        {
+            get => _selectedRow;
+            set
+            {
+                if (Set(ref _selectedRow, value))
+                {
+                    if (!_isSyncingSelection && value != null)
+                    {
+                        ZoomToSelectedRow(isZoomTo: false);
+                    }
                 }
             }
         }
@@ -283,6 +356,7 @@ namespace process_pipeline.Forms
 
             if (!isIncremental)
             {
+                _currentIssues = new Dictionary<ObjectId, CheckIssueItem>(issues);
                 Rows.Clear();
                 _objectIdToRowMap.Clear();
 
@@ -309,6 +383,8 @@ namespace process_pipeline.Forms
                     ObjectId targetId = kvp.Key;
                     CheckIssueItem issue = kvp.Value;
                     if (issue == null) continue;
+
+                    _currentIssues[targetId] = issue;
 
                     bool isResolvedOrErased = issue.Status == IssueReviewStatus.Resolved || targetId.IsErased;
 
@@ -377,7 +453,99 @@ namespace process_pipeline.Forms
             return true;
         }
 
+        /// <summary>
+        /// 人工判读状态修改（Commit 2.3）：就地更新当前选中行的状态，不重建列表。
+        /// </summary>
+        public void ChangeSelectedRowStatus(IssueReviewStatus newStatus)
+        {
+            if (SelectedRow == null) return;
+
+            SelectedRow.UpdateReviewStatus(newStatus);
+            StatusText = $"已将管线 [{SelectedRow.Id}] 标记为：{SelectedRow.Status}";
+        }
+
+        /// <summary>
+        /// 选中或缩放定位到当前选中行对应的 CAD 实体，并按需绘制一对多瞬态辅助线。
+        /// </summary>
+        public void ZoomToSelectedRow(bool isZoomTo)
+        {
+            if (_isSyncingSelection || SelectedRow == null) return;
+
+            var doc = AcadApp.DocumentManager.MdiActiveDocument;
+            if (doc == null) return;
+
+            ObjectId targetId = SelectedRow.TargetObjectId;
+            if (targetId.IsNull || !targetId.IsValid || targetId.IsErased)
+            {
+                StatusText = $"管线 [{SelectedRow.Id}] 为示例数据或未关联有效图元";
+                return;
+            }
+
+            _isSyncingSelection = true;
+            try
+            {
+                var selector = new SelectByHandleService(doc.Database, doc.Editor);
+                selector.SelectByHandles(new[] { targetId }, isZoomTo);
+
+                GraphicManager.ClearAuxiliaryGraphics();
+                var issue = SelectedRow.SourceIssue;
+                if (issue != null &&
+                    issue.Type == ProblemType.OneToMany &&
+                    issue.PossibleMatches != null &&
+                    issue.PossibleMatches.Count > 0)
+                {
+                    GraphicManager.DrawAuxiliaryLines(issue.PossibleMatches);
+                }
+
+                StatusText = isZoomTo ? $"已定位到管线 [{SelectedRow.Id}]" : $"已选中管线 [{SelectedRow.Id}]";
+            }
+            finally
+            {
+                _isSyncingSelection = false;
+            }
+        }
+
+        /// <summary>
+        /// 重新调用核查规则刷新数据。
+        /// </summary>
+        public void RefreshByRule()
+        {
+            palCheckPipe.Instance.RefreshData();
+        }
+
         public void OnImpliedSelectionChanged()
+        {
+            if (_isSyncingSelection) return;
+            var doc = AcadApp.DocumentManager.MdiActiveDocument;
+            if (doc == null) return;
+
+            _isSyncingSelection = true;
+            try
+            {
+                var psr = doc.Editor.SelectImplied();
+                if (psr.Status == PromptStatus.OK && psr.Value != null)
+                {
+                    foreach (ObjectId id in psr.Value.GetObjectIds())
+                    {
+                        if (_objectIdToRowMap.TryGetValue(id, out PipeRowVm matchedRow))
+                        {
+                            SelectedRow = matchedRow;
+                            break;
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                // 忽略选择集瞬态读取异常
+            }
+            finally
+            {
+                _isSyncingSelection = false;
+            }
+        }
+
+        private void OnImpliedSelectionChangedPlaceholder()
         {
 
         }
@@ -543,7 +711,7 @@ namespace process_pipeline.Forms
         }
     }
 
-    public class palCheckPipe : PaletteSetBase<ucMainCheckWindow, Dictionary<ObjectId, ProblemItem>>
+    public class palCheckPipe : PaletteSetBase<ucMainCheckWindow, Dictionary<ObjectId, CheckIssueItem>>
     {
         // 子类单例（不变）
         private static readonly Lazy<palCheckPipe> _instance = new Lazy<palCheckPipe>(() => new palCheckPipe());
@@ -564,15 +732,36 @@ namespace process_pipeline.Forms
         // 实现其他抽象方法（不变）
         protected override string GetPaletteTitle() => "管线检查";
         protected override string GetPaletteName() => "PipeCheckPalette";
-        protected override Dictionary<ObjectId, ProblemItem> GetInitialData() => new Dictionary<ObjectId, ProblemItem>();
+        public IReadOnlyDictionary<ObjectId, CheckIssueItem> CurrentIssues =>
+            _currentControl?.CurrentIssues ?? new Dictionary<ObjectId, CheckIssueItem>();
+
+        protected override Dictionary<ObjectId, CheckIssueItem> GetInitialData() => new Dictionary<ObjectId, CheckIssueItem>();
+
+        /// <summary>
+        /// 局部增量更新面板数据（单行就地刷新，不清空全表）。
+        /// </summary>
+        public void UpdateIncrementalData(Dictionary<ObjectId, CheckIssueItem> incrementalData)
+        {
+            if (_currentControl == null || incrementalData == null) return;
+
+            if (!_currentControl.Dispatcher.CheckAccess())
+            {
+                _currentControl.Dispatcher.Invoke(() => _currentControl.UpdateIncrementalData(incrementalData));
+            }
+            else
+            {
+                _currentControl.UpdateIncrementalData(incrementalData);
+            }
+        }
 
         public override void RefreshData()
         {
             var doc = AcadApp.DocumentManager.MdiActiveDocument;
             if (doc == null) return;
 
-            var service = new FlowArrowService(doc.Database, doc.Editor);
-            var newProblems = service.RunChecker();
+
+            ICheckRule rule = new FlowArrowService(doc.Database, doc.Editor);
+            var newProblems = rule.CheckAll();
             if (newProblems != null)
             {
                 UpdateData(newProblems);
