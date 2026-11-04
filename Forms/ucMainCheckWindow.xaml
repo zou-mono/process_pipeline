@@ -316,13 +316,26 @@
                     HeadersVisibility="Column"
                     GridLinesVisibility="Horizontal"
                     BorderThickness="0">
+            <DataGrid.InputBindings>
+              <KeyBinding Key="Z" Modifiers="Control" Command="{Binding UndoCommand}" />
+              <KeyBinding Key="Y" Modifiers="Control" Command="{Binding RedoCommand}" />
+            </DataGrid.InputBindings>
+
             <DataGrid.ContextMenu>
               <ContextMenu>
                 <MenuItem Header="定位到CAD图纸" Command="{Binding ZoomToCommand}" />
                 <Separator />
+                <!-- 专属修复区：仅在当前选中行为流向冲突（DirectionConflict / OneToMany）时动态显示 -->
+                <MenuItem Header="一键修复：翻转管线流向"
+                          Command="{Binding ReverseSelectedPipeCommand}"
+                          Visibility="{Binding ReversePipeMenuVisibility}" />
+                <Separator Visibility="{Binding ReversePipeMenuVisibility}" />
                 <MenuItem Header="人工判定：标记为【已修改】" Command="{Binding MarkModifiedCommand}" />
                 <MenuItem Header="人工判定：标记为【待复核】" Command="{Binding MarkToRecheckCommand}" />
                 <MenuItem Header="人工判定：标记为【已忽略】" Command="{Binding MarkIgnoredCommand}" />
+                <Separator />
+                <MenuItem Header="{Binding UndoMenuHeader}" Command="{Binding UndoCommand}" InputGestureText="Ctrl+Z" />
+                <MenuItem Header="{Binding RedoMenuHeader}" Command="{Binding RedoCommand}" InputGestureText="Ctrl+Y" />
                 <Separator />
                 <MenuItem Header="刷新核查列表" Command="{Binding RefreshCommand}" />
               </ContextMenu>

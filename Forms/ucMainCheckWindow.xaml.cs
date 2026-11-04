@@ -126,6 +126,13 @@ namespace process_pipeline.Forms
         private Dictionary<ObjectId, CheckIssueItem> _currentIssues = new Dictionary<ObjectId, CheckIssueItem>();
         private PipeRowVm _selectedRow;
         private bool _isSyncingSelection;
+        private readonly HybridUndoRedoManager _fallbackUndoRedoManager = new HybridUndoRedoManager();
+
+        /// <summary>
+        /// 获取当前活动文档会话的混合撤销/重做管理器（若在非活动文档或示例模式下则回退至本地管理器）。
+        /// </summary>
+        public HybridUndoRedoManager ActiveUndoRedoManager =>
+            DocumentSessionManager.GetActiveSession()?.UndoRedoManager ?? _fallbackUndoRedoManager;
 
         public IReadOnlyDictionary<ObjectId, CheckIssueItem> CurrentIssues => _currentIssues;
 
@@ -141,6 +148,9 @@ namespace process_pipeline.Forms
         public ICommand MarkModifiedCommand { get; }
         public ICommand MarkToRecheckCommand { get; }
         public ICommand MarkIgnoredCommand { get; }
+        public ICommand ReverseSelectedPipeCommand { get; }
+        public ICommand UndoCommand { get; }
+        public ICommand RedoCommand { get; }
         public ICommand CadSelectionChangedCommand { get; }
 
         public MainCheckWindowViewModel()
@@ -155,6 +165,9 @@ namespace process_pipeline.Forms
             MarkModifiedCommand = new RelayCommand(_ => ChangeSelectedRowStatus(IssueReviewStatus.Modified), _ => SelectedRow != null);
             MarkToRecheckCommand = new RelayCommand(_ => ChangeSelectedRowStatus(IssueReviewStatus.ToRecheck), _ => SelectedRow != null);
             MarkIgnoredCommand = new RelayCommand(_ => ChangeSelectedRowStatus(IssueReviewStatus.Ignored), _ => SelectedRow != null);
+            ReverseSelectedPipeCommand = new RelayCommand(_ => ReverseSelectedPipe(), _ => CanReverseSelectedPipe());
+            UndoCommand = new RelayCommand(_ => ExecuteUndo(), _ => ActiveUndoRedoManager.CanUndo);
+            RedoCommand = new RelayCommand(_ => ExecuteRedo(), _ => ActiveUndoRedoManager.CanRedo);
             CadSelectionChangedCommand = new RelayCommand(_ => OnImpliedSelectionChanged());
 
             // 挂载默认集合视图过滤器（WPF DataGrid 绑定 Rows 时会自动使用此 DefaultView）
@@ -243,6 +256,8 @@ namespace process_pipeline.Forms
             {
                 if (Set(ref _selectedRow, value))
                 {
+                    OnPropertyChanged(nameof(ReversePipeMenuVisibility));
+                    NotifyUndoRedoStateChanged();
                     if (!_isSyncingSelection && value != null)
                     {
                         ZoomToSelectedRow(isZoomTo: false);
@@ -250,6 +265,30 @@ namespace process_pipeline.Forms
                 }
             }
         }
+
+        /// <summary>
+        /// 上下文感知显隐（Commit 4.3）：
+        /// 仅当当前选中行属于流向冲突问题（DirectionConflict 或 OneToMany）时，
+        /// 右键菜单才显示“一键修复：翻转管线流向”，非此类问题则彻底隐藏（Collapsed）。
+        /// </summary>
+        public System.Windows.Visibility ReversePipeMenuVisibility =>
+            CanReverseSelectedPipe() ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+
+        /// <summary>
+        /// 右键菜单“撤销”项的动态标题（显示下一步即将撤销的具体动作描述）。
+        /// </summary>
+        public string UndoMenuHeader =>
+            ActiveUndoRedoManager.CanUndo
+                ? $"撤销：{ActiveUndoRedoManager.NextUndoDescription}"
+                : "撤销核查操作";
+
+        /// <summary>
+        /// 右键菜单“重做”项的动态标题（显示下一步即将重做的具体动作描述）。
+        /// </summary>
+        public string RedoMenuHeader =>
+            ActiveUndoRedoManager.CanRedo
+                ? $"重做：{ActiveUndoRedoManager.NextRedoDescription}"
+                : "重做核查操作";
 
         public string RowCountText
         {
@@ -462,12 +501,128 @@ namespace process_pipeline.Forms
         /// <summary>
         /// 人工判读状态修改（Commit 2.3）：就地更新当前选中行的状态，不重建列表。
         /// </summary>
+        /// <summary>
+        /// 人工判读状态修改（Commit 4.3）：
+        /// 通过 HybridUndoRedoManager 封装为可逆操作 ChangeIssueStatusOperation，
+        /// 支持单行就地刷新以及 Ctrl+Z / Ctrl+Y 撤销与重做。
+        /// </summary>
         public void ChangeSelectedRowStatus(IssueReviewStatus newStatus)
         {
-            if (SelectedRow == null) return;
+            if (SelectedRow?.SourceIssue == null) return;
 
-            SelectedRow.UpdateReviewStatus(newStatus);
-            StatusText = $"已将管线 [{SelectedRow.Id}] 标记为：{SelectedRow.Status}";
+            CheckIssueItem beforeSnapshot = SelectedRow.SourceIssue.CloneSnapshot();
+            CheckIssueItem afterSnapshot = SelectedRow.SourceIssue.CloneSnapshot();
+            afterSnapshot.Status = newStatus;
+
+            PipeRowVm targetRow = SelectedRow;
+            var op = new ChangeIssueStatusOperation(
+                beforeSnapshot,
+                afterSnapshot,
+                snapshot => ApplyIssueSnapshotToRow(targetRow, snapshot));
+
+            ActiveUndoRedoManager.ExecuteOperation(op);
+            NotifyUndoRedoStateChanged();
+            StatusText = $"已将管线 [{targetRow.Id}] 标记为：{targetRow.Status}";
+        }
+
+        /// <summary>
+        /// 判断当前选中行是否适用“翻转管线流向”修复操作。
+        /// </summary>
+        public bool CanReverseSelectedPipe()
+        {
+            var issue = SelectedRow?.SourceIssue;
+            if (issue == null) return false;
+
+            return issue.Type == ProblemType.DirectionConflict ||
+                   issue.Type == ProblemType.OneToMany;
+        }
+
+        /// <summary>
+        /// 一键翻转当前选中管线的流向（Commit 4.3）：
+        /// 封装为可逆复合操作 ReverseCurveOperation，在翻转 CAD 曲线顶点的同时同步更新表格行状态。
+        /// </summary>
+        public void ReverseSelectedPipe()
+        {
+            if (!CanReverseSelectedPipe() || SelectedRow?.SourceIssue == null)
+                return;
+
+            PipeRowVm targetRow = SelectedRow;
+            ObjectId targetId = targetRow.TargetObjectId;
+            if (targetId.IsNull || !targetId.IsValid || targetId.IsErased)
+            {
+                StatusText = $"管线 [{targetRow.Id}] 未关联有效 CAD 图元，无法翻转";
+                return;
+            }
+
+            CheckIssueItem beforeSnapshot = targetRow.SourceIssue.CloneSnapshot();
+            var op = new ReverseCurveOperation(
+                targetId,
+                beforeSnapshot,
+                (curveId, snapshot, isUndo) =>
+                {
+                    if (snapshot != null)
+                    {
+                        ApplyIssueSnapshotToRow(targetRow, snapshot);
+                    }
+                    PaletteRefreshManager.TriggerPaletteRefreshIfNeeded();
+                });
+
+            ActiveUndoRedoManager.ExecuteOperation(op);
+            NotifyUndoRedoStateChanged();
+            StatusText = $"已翻转管线 [{targetRow.Id}] 流向";
+        }
+
+        /// <summary>
+        /// 执行核查操作撤销（Ctrl+Z 或右键菜单触发）。
+        /// </summary>
+        public void ExecuteUndo()
+        {
+            if (!ActiveUndoRedoManager.CanUndo) return;
+
+            IUserOperation undoneOp = ActiveUndoRedoManager.Undo();
+            NotifyUndoRedoStateChanged();
+            if (undoneOp != null)
+            {
+                StatusText = $"已撤销：{undoneOp.Description}";
+            }
+        }
+
+        /// <summary>
+        /// 执行核查操作重做（Ctrl+Y 或右键菜单触发）。
+        /// </summary>
+        public void ExecuteRedo()
+        {
+            if (!ActiveUndoRedoManager.CanRedo) return;
+
+            IUserOperation redoneOp = ActiveUndoRedoManager.Redo();
+            NotifyUndoRedoStateChanged();
+            if (redoneOp != null)
+            {
+                StatusText = $"已重做：{redoneOp.Description}";
+            }
+        }
+
+        private void ApplyIssueSnapshotToRow(PipeRowVm row, CheckIssueItem snapshot)
+        {
+            if (row == null || snapshot == null) return;
+
+            row.ApplyFromIssue(snapshot);
+            if (!snapshot.TargetObjectId.IsNull)
+            {
+                _currentIssues[snapshot.TargetObjectId] = snapshot;
+                var activeSession = DocumentSessionManager.GetActiveSession();
+                if (activeSession != null)
+                {
+                    activeSession.CurrentIssues[snapshot.TargetObjectId] = snapshot;
+                }
+            }
+        }
+
+        private void NotifyUndoRedoStateChanged()
+        {
+            OnPropertyChanged(nameof(UndoMenuHeader));
+            OnPropertyChanged(nameof(RedoMenuHeader));
+            CommandManager.InvalidateRequerySuggested();
         }
 
         /// <summary>
@@ -714,6 +869,16 @@ namespace process_pipeline.Forms
             Diameter = diameter;
             Height = height;
             Remark = remark;
+            SourceIssue = new CheckIssueItem
+            {
+                IssueId = id,
+                TargetHandle = id,
+                LayerName = type,
+                Diameter = diameter,
+                Height = height,
+                Remark = remark,
+                Description = remark
+            };
         }
     }
 
