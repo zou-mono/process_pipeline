@@ -2,7 +2,7 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
-             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/d/2008"
              xmlns:i="http://schemas.microsoft.com/xaml/behaviors"
              xmlns:vm="clr-namespace:process_pipeline.Forms"
              xmlns:core="clr-namespace:process_pipeline.Core"
@@ -73,6 +73,8 @@
             <Style TargetType="TreeViewItem">
               <Setter Property="Foreground" Value="{DynamicResource Brush.DataGrid.Text.Foreground}"/>
               <Setter Property="Background" Value="{DynamicResource Brush.DataGrid.Panel.BackgroundColor}" />
+              <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
+              <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}" />
               <Setter Property="Template">
                 <Setter.Value>
                   <ControlTemplate TargetType="TreeViewItem">
@@ -123,6 +125,7 @@
                         Grid.Column="1"
                         Grid.Row="0"
                         Background="{TemplateBinding Background}"
+                        Padding="2,2"
                         Margin="0">
                         <ContentPresenter x:Name="PART_Header"
                                     ContentSource="Header"
@@ -164,7 +167,19 @@
         </Setter>
       </Style>
 
-      <!-- DataGrid 样式 -->
+      <!-- 单元格文本对齐样式（吸收自 ucMatchArrowResult.xaml） -->
+      <Style x:Key="CenterText" TargetType="TextBlock">
+        <Setter Property="HorizontalAlignment" Value="Center"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+      </Style>
+
+      <Style x:Key="LeftText" TargetType="TextBlock">
+        <Setter Property="HorizontalAlignment" Value="Left"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+        <Setter Property="Margin" Value="6,0,0,0"/>
+      </Style>
+
+      <!-- DataGrid 样式（融合深色主题网格线与行号列头） -->
       <Style x:Key="DataGridStyle" TargetType="DataGrid">
         <Setter Property="EnableRowVirtualization" Value="True" />
         <Setter Property="EnableColumnVirtualization" Value="True" />
@@ -172,28 +187,161 @@
         <Setter Property="VirtualizingPanel.VirtualizationMode" Value="Recycling" />
         <Setter Property="ScrollViewer.CanContentScroll" Value="True" />
         <Setter Property="AutoGenerateColumns" Value="False" />
+        <Setter Property="CanUserAddRows" Value="False" />
         <Setter Property="IsReadOnly" Value="True" />
-        <Setter Property="HeadersVisibility" Value="Column" />
-        <Setter Property="RowHeaderWidth" Value="0" />
-        <Setter Property="GridLinesVisibility" Value="Horizontal" />
+        <Setter Property="HeadersVisibility" Value="All" />
+        <Setter Property="RowHeaderWidth" Value="35" />
+        <Setter Property="GridLinesVisibility" Value="All" />
+        <Setter Property="HorizontalGridLinesBrush" Value="{DynamicResource Brush.DataGrid.GridLine}" />
+        <Setter Property="VerticalGridLinesBrush" Value="{DynamicResource Brush.DataGrid.GridLine}" />
         <Setter Property="Background" Value="{DynamicResource Brush.DataGrid.Header.Background}" />
         <Setter Property="AlternatingRowBackground" Value="{DynamicResource Brush.DataGrid.AltRow.Background}" />
         <Setter Property="BorderBrush" Value="{DynamicResource Brush.DataGrid.GridLine}" />
         <Setter Property="RowBackground" Value="{DynamicResource Brush.DataGrid.Row.Background}" />
-        <Setter Property="Foreground" Value="{DynamicResource Brush.DataGrid.Header.Foreground}" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.DataGrid.Text.Foreground}" />
         <Setter Property="BorderThickness" Value="0" />
       </Style>
 
+      <!-- DataGrid 左上角全选按钮样式（吸收自 ucMatchArrowResult.xaml） -->
+      <Style x:Key="{ComponentResourceKey ResourceId=DataGridSelectAllButtonStyle, TypeInTargetAssembly={x:Type DataGrid}}"
+             TargetType="{x:Type Button}">
+        <Setter Property="Background" Value="{DynamicResource Brush.DataGrid.Header.Background}" />
+        <Setter Property="Template">
+          <Setter.Value>
+            <ControlTemplate TargetType="{x:Type Button}">
+              <Border Background="{DynamicResource Brush.DataGrid.Header.Background}"
+                      BorderBrush="{DynamicResource Brush.DataGrid.GridLine}"
+                      BorderThickness="0,0,1,1">
+                <Polygon Points="3,10 10,10 10,3"
+                         Fill="{DynamicResource Brush.DataGrid.Text.Foreground}"
+                         Opacity="0.3"
+                         HorizontalAlignment="Right"
+                         VerticalAlignment="Bottom"/>
+              </Border>
+            </ControlTemplate>
+          </Setter.Value>
+        </Setter>
+      </Style>
+
+      <!-- DataGrid 表头样式（吸收自 ucMatchArrowResult.xaml：支持深色主题排序箭头 SortArrow 与列宽拖拽抓手） -->
       <Style TargetType="DataGridColumnHeader">
         <Setter Property="Background" Value="{DynamicResource Brush.DataGrid.Header.Background}"/>
         <Setter Property="Foreground" Value="{DynamicResource Brush.DataGrid.Text.Foreground}"/>
         <Setter Property="FontWeight" Value="Bold"/>
-        <Setter Property="FontSize" Value="14"/>
+        <Setter Property="FontSize" Value="13"/>
         <Setter Property="Height" Value="30"/>
         <Setter Property="Padding" Value="5,0"/>
         <Setter Property="BorderThickness" Value="0,0,1,1"/>
         <Setter Property="BorderBrush" Value="{DynamicResource Brush.DataGrid.GridLine}"/>
         <Setter Property="HorizontalContentAlignment" Value="Center"/>
+        <Setter Property="Template">
+          <Setter.Value>
+            <ControlTemplate TargetType="DataGridColumnHeader">
+              <Grid>
+                <Border x:Name="HeaderBorder"
+                        Background="{TemplateBinding Background}"
+                        BorderThickness="{TemplateBinding BorderThickness}"
+                        BorderBrush="{TemplateBinding BorderBrush}">
+                  <Grid Margin="{TemplateBinding Padding}">
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="*" />
+                      <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <ContentPresenter Grid.Column="0"
+                                      HorizontalAlignment="Center"
+                                      VerticalAlignment="Center"/>
+                    <Path x:Name="SortArrow"
+                          Grid.Column="1"
+                          Visibility="Collapsed"
+                          Data="M 0,4 L 4,0 L 8,4 Z"
+                          Fill="{TemplateBinding Foreground}"
+                          Margin="5,0,2,0"
+                          VerticalAlignment="Center" />
+                  </Grid>
+                </Border>
+                <Thumb x:Name="PART_RightHeaderGripper"
+                       HorizontalAlignment="Right"
+                       Width="8"
+                       Cursor="SizeWE"
+                       Background="Transparent">
+                  <Thumb.Template>
+                    <ControlTemplate TargetType="Thumb">
+                      <Border Background="Transparent" />
+                    </ControlTemplate>
+                  </Thumb.Template>
+                </Thumb>
+              </Grid>
+              <ControlTemplate.Triggers>
+                <Trigger Property="SortDirection" Value="Ascending">
+                  <Setter TargetName="SortArrow" Property="Visibility" Value="Visible"/>
+                  <Setter TargetName="SortArrow" Property="Data" Value="M 0,4 L 4,0 L 8,4 Z"/>
+                </Trigger>
+                <Trigger Property="SortDirection" Value="Descending">
+                  <Setter TargetName="SortArrow" Property="Visibility" Value="Visible"/>
+                  <Setter TargetName="SortArrow" Property="Data" Value="M 0,0 L 4,4 L 8,0 Z"/>
+                </Trigger>
+                <Trigger Property="IsMouseOver" Value="True">
+                  <Setter TargetName="HeaderBorder" Property="Background" Value="#555555"/>
+                </Trigger>
+              </ControlTemplate.Triggers>
+            </ControlTemplate>
+          </Setter.Value>
+        </Setter>
+      </Style>
+
+      <!-- DataGrid 左侧行号列头样式（吸收自 ucMatchArrowResult.xaml） -->
+      <Style TargetType="DataGridRowHeader">
+        <Setter Property="Width" Value="35"/>
+        <Setter Property="MinWidth" Value="35"/>
+        <Setter Property="Background" Value="{DynamicResource Brush.DataGrid.Header.Background}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.DataGrid.GridLine}"/>
+        <Setter Property="BorderThickness" Value="0,0,1,1"/>
+        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+        <Setter Property="Template">
+          <Setter.Value>
+            <ControlTemplate TargetType="DataGridRowHeader">
+              <Grid>
+                <Border x:Name="rowheaderborder"
+                        Background="{TemplateBinding Background}"
+                        BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}">
+                  <TextBlock x:Name="rowheadertext"
+                             Text="{Binding RelativeSource={RelativeSource AncestorType=DataGridRow}, Path=Header}"
+                             VerticalAlignment="Center"
+                             HorizontalAlignment="Center"
+                             Foreground="{DynamicResource Brush.DataGrid.Text.Foreground}"/>
+                </Border>
+              </Grid>
+              <ControlTemplate.Triggers>
+                <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=DataGridRow}}" Value="True">
+                  <Setter TargetName="rowheaderborder" Property="Background" Value="{DynamicResource Brush.DataGrid.SelectedRow.Background}"/>
+                  <Setter TargetName="rowheadertext" Property="Foreground" Value="{DynamicResource Brush.DataGrid.SelectedText.Foreground}"/>
+                </DataTrigger>
+              </ControlTemplate.Triggers>
+            </ControlTemplate>
+          </Setter.Value>
+        </Setter>
+      </Style>
+
+      <!-- 单元格与整行选中颜色（保证失去焦点时依然高亮显著） -->
+      <Style TargetType="DataGridCell">
+        <Setter Property="BorderThickness" Value="0"/>
+        <Style.Triggers>
+          <Trigger Property="IsSelected" Value="True">
+            <Setter Property="Background" Value="{DynamicResource Brush.DataGrid.SelectedRow.Background}"/>
+            <Setter Property="Foreground" Value="{DynamicResource Brush.DataGrid.SelectedText.Foreground}"/>
+          </Trigger>
+        </Style.Triggers>
+      </Style>
+
+      <Style TargetType="DataGridRow">
+        <Setter Property="MinHeight" Value="26" />
+        <Style.Triggers>
+          <Trigger Property="IsSelected" Value="True">
+            <Setter Property="Background" Value="{DynamicResource Brush.DataGrid.SelectedRow.Background}"/>
+            <Setter Property="Foreground" Value="{DynamicResource Brush.DataGrid.SelectedText.Foreground}"/>
+          </Trigger>
+        </Style.Triggers>
       </Style>
 
       <!-- GridSplitter 样式 -->
@@ -213,15 +361,6 @@
         <Setter Property="BorderBrush" Value="Transparent" />
         <Setter Property="BorderThickness" Value="0" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.DataGrid.Text.Foreground}" />
-        <!--<Setter Property="Template">
-          <Setter.Value>
-            <ControlTemplate TargetType="Button">
-              <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="5">
-                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
-              </Border>
-            </ControlTemplate>
-          </Setter.Value>
-        </Setter>-->
       </Style>
 
       <Style x:Key="TitlePane.HeaderDockStyle" TargetType="Grid">
@@ -262,7 +401,7 @@
             SplitterWidth="{StaticResource SplitterWidth}"
             PrimaryCollapsedLength="{StaticResource CollapseButtonWidth}"
             DisplayState="{Binding DisplayState, Mode=TwoWay}"
-            PrimaryTitle="图层树"
+            PrimaryTitle="核查导航"
             ShowPrimaryHeader="True"
             ShowSecondaryHeader="False">
 
@@ -292,13 +431,25 @@
             </Style>
           </controls:TitlePane.Style>
 
-          <!-- 这里放你的真实内容 -->
+          <!-- 左侧“核查类型 -> 核查状态（带彩色矢量圆点）/ 管线图层”导航树 -->
           <TreeView ItemsSource="{Binding TreeNodes}"
                     SelectedItemChanged="TreeView_SelectedItemChanged"
                     Style="{StaticResource TreeViewStyle}">
             <TreeView.ItemTemplate>
               <HierarchicalDataTemplate ItemsSource="{Binding Children}">
-                <TextBlock Text="{Binding Name}" />
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,1">
+                  <Ellipse Width="8"
+                           Height="8"
+                           Fill="{Binding StatusBrush}"
+                           Visibility="{Binding DotVisibility}"
+                           VerticalAlignment="Center"
+                           Margin="0,0,6,0"/>
+                  <TextBlock Text="{Binding Name}" VerticalAlignment="Center" />
+                  <TextBlock Text="{Binding CountText}"
+                             VerticalAlignment="Center"
+                             Margin="5,0,0,0"
+                             Opacity="0.75" />
+                </StackPanel>
               </HierarchicalDataTemplate>
             </TreeView.ItemTemplate>
           </TreeView>
@@ -307,15 +458,20 @@
 
       <splitter:CompositeSplitter.SecondaryContent>
         <Border Background="{DynamicResource Brush.Border}">
-          <DataGrid ItemsSource="{Binding Rows}"
+          <DataGrid x:Name="dgIssues"
+                    ItemsSource="{Binding Rows}"
                     SelectedItem="{Binding SelectedRow, Mode=TwoWay}"
                     MouseDoubleClick="DataGrid_MouseDoubleClick"
+                    LoadingRow="DataGrid_LoadingRow"
+                    ClipboardCopyMode="None"
                     Style="{StaticResource DataGridStyle}" 
                     AutoGenerateColumns="False"
                     IsReadOnly="True"
-                    HeadersVisibility="Column"
-                    GridLinesVisibility="Horizontal"
                     BorderThickness="0">
+            <DataGrid.CommandBindings>
+              <CommandBinding Command="Copy" Executed="DataGrid_ExecuteCopy" />
+            </DataGrid.CommandBindings>
+
             <DataGrid.InputBindings>
               <KeyBinding Key="Z" Modifiers="Control" Command="{Binding UndoCommand}" />
               <KeyBinding Key="Y" Modifiers="Control" Command="{Binding RedoCommand}" />
@@ -324,6 +480,8 @@
             <DataGrid.ContextMenu>
               <ContextMenu>
                 <MenuItem Header="定位到CAD图纸" Command="{Binding ZoomToCommand}" />
+                <MenuItem Header="复制选中内容" Click="CtxCopy_Click" InputGestureText="Ctrl+C" />
+                <MenuItem Header="清空选择" Click="CtxClearSelected_Click" />
                 <Separator />
                 <!-- 专属修复区：仅在当前选中行为流向冲突（DirectionConflict / OneToMany）时动态显示 -->
                 <MenuItem Header="一键修复：翻转管线流向"
@@ -342,12 +500,46 @@
             </DataGrid.ContextMenu>
 
             <DataGrid.Columns>
-              <DataGridTextColumn Header="编号" Binding="{Binding Id}" Width="120"/>
-              <DataGridTextColumn Header="类型" Binding="{Binding Type}" Width="100"/>
-              <DataGridTextColumn Header="状态" Binding="{Binding Status}" Width="100"/>
-              <DataGridTextColumn Header="管径" Binding="{Binding Diameter}" Width="100"/>
-              <DataGridTextColumn Header="离地高" Binding="{Binding Height}" Width="100"/>
-              <DataGridTextColumn Header="备注" Binding="{Binding Remark}" Width="*"/>
+              <DataGridTextColumn Header="编号"
+                                  Binding="{Binding Id}"
+                                  Width="80"
+                                  ElementStyle="{StaticResource CenterText}"/>
+              <DataGridTextColumn Header="核查类型"
+                                  Binding="{Binding RuleName}"
+                                  Width="110"
+                                  ElementStyle="{StaticResource CenterText}"/>
+              <!-- 状态列：渲染与左侧树一致的红/黄/蓝/灰白/翠绿彩色矢量圆点 -->
+              <DataGridTemplateColumn Header="状态"
+                                      Width="95"
+                                      SortMemberPath="Status"
+                                      ClipboardContentBinding="{Binding Status}">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate>
+                    <StackPanel Orientation="Horizontal"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center">
+                      <Ellipse Width="8"
+                               Height="8"
+                               Fill="{Binding StatusBrush}"
+                               VerticalAlignment="Center"
+                               Margin="0,0,6,0"/>
+                      <TextBlock Text="{Binding Status}" VerticalAlignment="Center"/>
+                    </StackPanel>
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <DataGridTextColumn Header="图层"
+                                  Binding="{Binding Type}"
+                                  Width="140"
+                                  ElementStyle="{StaticResource CenterText}"/>
+              <DataGridTextColumn Header="位置坐标"
+                                  Binding="{Binding LocationText}"
+                                  Width="145"
+                                  ElementStyle="{StaticResource CenterText}"/>
+              <DataGridTextColumn Header="问题描述 / 备注"
+                                  Binding="{Binding Remark}"
+                                  Width="*"
+                                  ElementStyle="{StaticResource LeftText}"/>
             </DataGrid.Columns>
           </DataGrid>
         </Border>

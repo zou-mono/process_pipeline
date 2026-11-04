@@ -35,6 +35,13 @@ namespace process_pipeline.Forms
         // 【移除】：所有属性、命令和逻辑（移到 MainViewModel 中）
         // 例如：TreeNodes、Rows、StatusText、ToggleTreeCommand 等
         private readonly MainCheckWindowViewModel _vm = new MainCheckWindowViewModel();
+        private readonly DataGridCopyOptions _copyOptions = new DataGridCopyOptions
+        {
+            IncludeHeader = true,
+            VisibleColumnsOnly = true,
+            KeepDisplayOrder = true,
+            KeepSelectionOrder = true
+        };
 
         public ucMainCheckWindow()
         {
@@ -81,6 +88,45 @@ namespace process_pipeline.Forms
         private void DataGrid_MouseDoubleClick(object sender, MouseButtonEventArgs e)
         {
             _vm.ZoomToSelectedRow(isZoomTo: true);
+        }
+
+        private void DataGrid_LoadingRow(object sender, DataGridRowEventArgs e)
+        {
+            e.Row.Header = (e.Row.GetIndex() + 1).ToString();
+        }
+
+        private void DataGrid_ExecuteCopy(object sender, ExecutedRoutedEventArgs e)
+        {
+            TryCopySelection();
+        }
+
+        private void CtxCopy_Click(object sender, RoutedEventArgs e)
+        {
+            TryCopySelection();
+        }
+
+        private void CtxClearSelected_Click(object sender, RoutedEventArgs e)
+        {
+            if (dgIssues == null) return;
+            dgIssues.SelectedCells.Clear();
+            dgIssues.SelectedItems.Clear();
+            _vm.SelectedRow = null;
+        }
+
+        private void TryCopySelection()
+        {
+            if (dgIssues == null) return;
+            try
+            {
+                if (!DataGridCopyHelper.HasSelection(dgIssues)) return;
+                _copyOptions.IncludeHeader = dgIssues.SelectedItems != null && dgIssues.SelectedItems.Count > 0;
+                DataGridCopyHelper.CopyToClipboard(dgIssues, CopyFormat.Smart, _copyOptions);
+                _vm.StatusText = "已复制选中内容到剪贴板";
+            }
+            catch
+            {
+                // 剪贴板占用时安全忽略
+            }
         }
 
         // 【保留兼容】：支持旧版 ProblemItem 字典更新
