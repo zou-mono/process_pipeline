@@ -173,11 +173,15 @@ namespace process_pipeline.Forms
         private void CtxClearSelected_Click(object sender, RoutedEventArgs e)
         {
             if (dgIssues == null) return;
-            dgIssues.SelectedCells.Clear();
+            if (dgIssues.SelectionUnit != DataGridSelectionUnit.FullRow)
+            {
+                dgIssues.SelectedCells.Clear();
+            }
             dgIssues.SelectedItems.Clear();
             _vm.ContextTargetRow = null;
             _vm.SelectedRow = null;
             _vm.SyncSelectedRowsFromGrid(syncCadSelection: false);
+            _vm.ClearCadSelection();
         }
 
         private void TryCopySelection()
@@ -1144,6 +1148,32 @@ namespace process_pipeline.Forms
                         ? $"已批量定位到 {validIds.Length} 条管线"
                         : $"已批量选中 {validIds.Length} 条管线";
                 }
+            }
+            finally
+            {
+                _isSyncingSelection = false;
+            }
+        }
+
+        /// <summary>
+        /// 清空 CAD 图面当前的预选集与瞬态辅助线。
+        /// </summary>
+        public void ClearCadSelection()
+        {
+            if (_isSyncingSelection) return;
+            var doc = AcadApp.DocumentManager.MdiActiveDocument;
+            if (doc == null) return;
+
+            _isSyncingSelection = true;
+            try
+            {
+                GraphicManager.ClearAuxiliaryGraphics();
+                doc.Editor.SetImpliedSelection(Array.Empty<ObjectId>());
+                StatusText = "已清空选择";
+            }
+            catch
+            {
+                // 忽略选择集清理异常
             }
             finally
             {
