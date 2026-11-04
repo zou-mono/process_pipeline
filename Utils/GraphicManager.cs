@@ -1,4 +1,4 @@
-﻿using Autodesk.AutoCAD.DatabaseServices;
+using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Geometry;
 using Autodesk.AutoCAD.GraphicsInterface;
 using System;
@@ -12,7 +12,9 @@ using AcadApp = Autodesk.AutoCAD.ApplicationServices.Application;
 using Autodesk.AutoCAD.Windows;
 using Autodesk.AutoCAD.ApplicationServices;
 using process_pipeline.Commands;
+using process_pipeline.Core;
 using process_pipeline.Forms;
+using process_pipeline.Models;
 
 namespace process_pipeline.Utils
 {    
@@ -83,6 +85,26 @@ namespace process_pipeline.Utils
         public static void RefreshDataGrid(Document doc, List<ObjectId> idsToProcess)
         {
             GraphicManager.ClearAuxiliaryGraphics();
+
+            // Commit 3.3：当主核查窗口 palCheckPipe 可见时，复用当前文档会话的 ActiveRule 执行局部增量重算与单行就地刷新
+            if (palCheckPipe.Instance.IsVisible)
+            {
+                var session = DocumentSessionManager.GetOrCreateSession(doc.Database);
+                var service = new CheckPipeService(doc.Database, doc.Editor, session?.ActiveRule);
+                service.Run(Properties.Settings.Default.taskFlowArrow, true, idsToProcess);
+
+                foreach (ObjectId oid in idsToProcess)
+                {
+                    if (palCheckPipe.Instance.CurrentIssues.TryGetValue(oid, out var issue) &&
+                        issue != null &&
+                        issue.Type == ProblemType.OneToMany &&
+                        issue.Status != IssueReviewStatus.Resolved &&
+                        issue.PossibleMatches != null)
+                    {
+                        GraphicManager.DrawAuxiliaryLines(issue.PossibleMatches);
+                    }
+                }
+            }
 
             if (palMatchArrowResult.Instance.IsVisible)
             {
