@@ -66,10 +66,14 @@ namespace process_pipeline.Commands
         //private ProgressContext _context;
 
         // 箭头 -> 管线集合 (用途：当箭头移动时，极速查出哪些管线受影响)
-        public static Dictionary<ObjectId, HashSet<ObjectId>> ArrowToPipes = new Dictionary<ObjectId, HashSet<ObjectId>>();
+        // Commit 3.2：将原有的全局 static 字典收拢到按 Database 隔离的 DocumentCheckSession 中，
+        // 静态属性仅作为当前活动文档会话的向下兼容访问入口。
+        public static Dictionary<ObjectId, HashSet<ObjectId>> ArrowToPipes =>
+            DocumentSessionManager.GetActiveSession()?.ArrowToPipes ?? new Dictionary<ObjectId, HashSet<ObjectId>>();
 
         // 管线 -> 箭头集合 (用途：当管线重新核查时，知道它原来绑了哪些箭头，方便解绑)
-        public static Dictionary<ObjectId, HashSet<ObjectId>> PipeToArrows = new Dictionary<ObjectId, HashSet<ObjectId>>();
+        public static Dictionary<ObjectId, HashSet<ObjectId>> PipeToArrows =>
+            DocumentSessionManager.GetActiveSession()?.PipeToArrows ?? new Dictionary<ObjectId, HashSet<ObjectId>>();
 
         // 全局箭头缓存（null 表示还未初始化）
         public static Dictionary<ObjectId, ArrowCacheInfo> ArrowsCache = null;
@@ -511,9 +515,12 @@ namespace process_pipeline.Commands
         public static void UpdatePipeRelation(ObjectId pipeId, IEnumerable<ObjectId> matchedArrowIds)
         {
             HashSet<ObjectId> newArrows = new HashSet<ObjectId>(matchedArrowIds);
+            var session = DocumentSessionManager.GetOrCreateSession(pipeId.Database) ?? DocumentSessionManager.GetActiveSession();
+            var pipeToArrows = session != null ? session.PipeToArrows : PipeToArrows;
+            var arrowToPipes = session != null ? session.ArrowToPipes : ArrowToPipes;
 
             // 1. 获取这根管线【上一次】匹配的箭头
-            if (PipeToArrows.TryGetValue(pipeId, out HashSet<ObjectId> oldArrows))
+            if (pipeToArrows.TryGetValue(pipeId, out HashSet<ObjectId> oldArrows))
             {
                 // 找出被解绑的箭头 (原来有，现在没有了)
                 foreach (ObjectId oldArrowId in oldArrows)
@@ -521,12 +528,12 @@ namespace process_pipeline.Commands
                     if (!newArrows.Contains(oldArrowId))
                     {
                         // 从箭头的反向映射中，把这根管线踢出去
-                        if (ArrowToPipes.ContainsKey(oldArrowId))
+                        if (arrowToPipes.ContainsKey(oldArrowId))
                         {
-                            ArrowToPipes[oldArrowId].Remove(pipeId);
+                            arrowToPipes[oldArrowId].Remove(pipeId);
                             // 如果箭头底下没有管线了，可以顺手清理掉这个 Key
-                            if (ArrowToPipes[oldArrowId].Count == 0)
-                                ArrowToPipes.Remove(oldArrowId);
+                            if (arrowToPipes[oldArrowId].Count == 0)
+                                arrowToPipes.Remove(oldArrowId);
                         }
                     }
                 }
@@ -535,22 +542,22 @@ namespace process_pipeline.Commands
             // 2. 建立新的反向映射 (箭头 -> 管线)
             foreach (ObjectId newArrowId in newArrows)
             {
-                if (!ArrowToPipes.ContainsKey(newArrowId))
+                if (!arrowToPipes.ContainsKey(newArrowId))
                 {
-                    ArrowToPipes[newArrowId] = new HashSet<ObjectId>();
+                    arrowToPipes[newArrowId] = new HashSet<ObjectId>();
                 }
-                ArrowToPipes[newArrowId].Add(pipeId);
+                arrowToPipes[newArrowId].Add(pipeId);
             }
 
             // 3. 更新正向映射 (管线 -> 箭头)
             if (newArrows.Count > 0)
             {
-                PipeToArrows[pipeId] = newArrows;
+                pipeToArrows[pipeId] = newArrows;
             }
             else
             {
                 // 如果这根管线现在一个箭头都匹配不上了，直接从表里删掉
-                PipeToArrows.Remove(pipeId);
+                pipeToArrows.Remove(pipeId);
             }
         }
 
@@ -662,7 +669,8 @@ namespace process_pipeline.Commands
                 else if (ArrowLayerName.Contains(ent.Layer) && ent is BlockReference)
                 {
                     // 2.1 先加入该箭头修改前已经绑定的管线（处理箭头移走或删除后的解绑重算）
-                    if (ArrowToPipes.TryGetValue(ent.ObjectId, out HashSet<ObjectId> boundPipes))
+                    var arrowToPipes = DocumentSessionManager.GetOrCreateSession(_db)?.ArrowToPipes ?? ArrowToPipes;
+                    if (arrowToPipes.TryGetValue(ent.ObjectId, out HashSet<ObjectId> boundPipes))
                     {
                         foreach (ObjectId pipeId in boundPipes)
                         {
@@ -789,14 +797,21 @@ namespace process_pipeline.Commands
         public static Dictionary<ObjectId, ArrowCacheInfo> GetOrBuildCache(AcadDb.Database db)
         {
             // 【核心修复】：如果发现传入的 db 和缓存的 db 不是同一个（说明用户切换了图纸，或者打开了新图纸）
-            if (_currentDb != db)
+            // Commit 3.2：优先从当前图纸对应的 DocumentCheckSession 中读取和构建箭头缓存，
+            // 使多张打开的 DWG 图纸各自保有独立缓存，来回切换标签页时无需清空重扫。
+            var session = DocumentSessionManager.GetOrCreateSession(db);
+            if (session != null && session.IsArrowCacheInitialized)
+                return session.ArrowCache;
+
+            var targetCache = session != null ? session.ArrowCache : _arrowCache;
+            if (session == null && _currentDb != db)
             {
                 _arrowCache.Clear();       // 清空旧图纸的缓存
                 _isInitialized = false;    // 重置初始化状态
                 _currentDb = db;           // 记住新的图纸
             }
 
-            if (_isInitialized) return _arrowCache;
+            if (session == null && _isInitialized) return _arrowCache;
 
             // 第一次调用：全量扫描数据库
             using (Transaction tr = db.TransactionManager.StartOpenCloseTransaction())
@@ -814,12 +829,17 @@ namespace process_pipeline.Commands
                             //}
 
                             double rotDeg = GeometryHelper.ArrowAngle(br);
-                            _arrowCache[id] = new ArrowCacheInfo { Position = br.Position, Rotation = rotDeg };
+                            targetCache[id] = new ArrowCacheInfo { Position = br.Position, Rotation = rotDeg };
                         }
                     }
                 }
             }
 
+            if (session != null)
+            {
+                session.IsArrowCacheInitialized = true;
+                return session.ArrowCache;
+            }
             _isInitialized = true;
             return _arrowCache;
         }
@@ -830,6 +850,13 @@ namespace process_pipeline.Commands
         public static void RemoveArrow(ObjectId id)
         {
             // 如果还没初始化过，说明缓存是空的，不需要移除
+            var session = DocumentSessionManager.GetOrCreateSession(id.Database);
+            if (session != null)
+            {
+                if (session.IsArrowCacheInitialized)
+                    session.ArrowCache.Remove(id);
+                return;
+            }
             if (!_isInitialized) return; 
 
         // 【安全防护】：只处理当前图纸的事件，防止后台其他图纸的修改污染当前缓存
@@ -846,6 +873,25 @@ namespace process_pipeline.Commands
         /// </summary>
         public static void UpdateArrow(DBObject obj)
         {
+            if (obj == null) return;
+            var session = DocumentSessionManager.GetOrCreateSession(obj.Database);
+            if (session != null)
+            {
+                if (!session.IsArrowCacheInitialized) return;
+                if (obj is BlockReference brSession)
+                {
+                    if (CadConfig.ArrowLayers.Contains(brSession.Layer))
+                    {
+                        double rotDeg = GeometryHelper.ArrowAngle(brSession);
+                        session.ArrowCache[brSession.Id] = new ArrowCacheInfo { Position = brSession.Position, Rotation = rotDeg };
+                    }
+                    else
+                    {
+                        session.ArrowCache.Remove(brSession.Id);
+                    }
+                }
+                return;
+            }
             if (!_isInitialized) return;
             if (obj == null) return;
 
@@ -872,6 +918,7 @@ namespace process_pipeline.Commands
         /// </summary>
         public static void ClearCache()
         {
+            DocumentSessionManager.GetActiveSession()?.ClearArrowCache();
             _arrowCache.Clear(); // readonly 允许 Clear
             _isInitialized = false;
             _currentDb = null;

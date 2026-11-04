@@ -51,20 +51,40 @@ namespace process_pipeline.Commands
             _ed = ed;
             _db = db;
             _rule = rule ?? new FlowArrowService(db, ed, false);
+
+            var session = DocumentSessionManager.GetOrCreateSession(db);
+            if (session != null)
+            {
+                session.ActiveRule = _rule;
+            }
         }
 
         protected override Dictionary<ObjectId, CheckIssueItem> Execute(ProgressContext context)
         {
-            return _rule.CheckAll(context);
+            var result = _rule.CheckAll(context);
+            var session = DocumentSessionManager.GetOrCreateSession(_db);
+            if (session != null && result != null)
+            {
+                session.CurrentIssues = new Dictionary<ObjectId, CheckIssueItem>(result);
+            }
+            return result;
         }
 
         protected override Dictionary<ObjectId, CheckIssueItem> Execute(ProgressContext context, List<ObjectId> pipeIds)
         {
-            var currentIssues = palCheckPipe.Instance.CurrentIssues != null
-                ? palCheckPipe.Instance.CurrentIssues.ToDictionary(kvp => kvp.Key, kvp => kvp.Value)
-                : new Dictionary<ObjectId, CheckIssueItem>();
+            var session = DocumentSessionManager.GetOrCreateSession(_db);
+            var currentIssues = session?.CurrentIssues != null && session.CurrentIssues.Count > 0
+                ? new Dictionary<ObjectId, CheckIssueItem>(session.CurrentIssues)
+                : (palCheckPipe.Instance.CurrentIssues != null
+                    ? palCheckPipe.Instance.CurrentIssues.ToDictionary(kvp => kvp.Key, kvp => kvp.Value)
+                    : new Dictionary<ObjectId, CheckIssueItem>());
 
-            return _rule.CheckIncremental(pipeIds, currentIssues, context);
+            var result = _rule.CheckIncremental(pipeIds, currentIssues, context);
+            if (session != null && result != null)
+            {
+                session.CurrentIssues = new Dictionary<ObjectId, CheckIssueItem>(result);
+            }
+            return result;
         }
 
         protected override void OnSuccess(Dictionary<ObjectId, CheckIssueItem> result, bool bOnlyUpdate = false)

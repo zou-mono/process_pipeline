@@ -413,6 +413,12 @@ namespace process_pipeline.Forms
                 }
             }
 
+            var activeSession = DocumentSessionManager.GetActiveSession();
+            if (activeSession != null)
+            {
+                activeSession.CurrentIssues = new Dictionary<ObjectId, CheckIssueItem>(_currentIssues);
+            }
+
             RefreshFilter();
             StatusText = $"已更新 {Rows.Count} 条记录";
         }
@@ -736,6 +742,16 @@ namespace process_pipeline.Forms
             _currentControl?.CurrentIssues ?? new Dictionary<ObjectId, CheckIssueItem>();
 
         protected override Dictionary<ObjectId, CheckIssueItem> GetInitialData() => new Dictionary<ObjectId, CheckIssueItem>();
+
+        /// <summary>
+        /// 当用户在多个 DWG 文档标签页之间切换时，自动从目标文档的 DocumentCheckSession 恢复核查列表。
+        /// </summary>
+        protected override void OnActiveDocumentChanged(Autodesk.AutoCAD.ApplicationServices.Document newDoc)
+        {
+            if (newDoc?.Database == null) return;
+            var session = DocumentSessionManager.GetOrCreateSession(newDoc.Database);
+            UpdateData(session?.CurrentIssues ?? new Dictionary<ObjectId, CheckIssueItem>());
+        }
 
         /// <summary>
         /// 局部增量更新面板数据（单行就地刷新，不清空全表）。

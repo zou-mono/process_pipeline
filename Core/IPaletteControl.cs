@@ -81,6 +81,14 @@ namespace process_pipeline.Core
 
             _listeningDoc = e.Document;
             _refreshManager?.StartListening(_listeningDoc);
+            OnActiveDocumentChanged(e.Document);
+        }
+
+        /// <summary>
+        /// 当 MDI 活动文档切换时的钩子方法，子类可重写以从 DocumentCheckSession 恢复目标文档的数据。
+        /// </summary>
+        protected virtual void OnActiveDocumentChanged(Document newDoc)
+        {
         }
 
         // 抽象方法：子类提供 PaletteSet 的标题和名称
