@@ -269,8 +269,8 @@ namespace process_pipeline.Core
             CheckIssueItem afterSnapshot = _beforeSnapshot?.CloneSnapshot();
             if (afterSnapshot != null)
             {
-                afterSnapshot.Status = IssueReviewStatus.Modified;
-                afterSnapshot.Remark = "已翻转管线流向";
+                afterSnapshot.Status = IssueReviewStatus.Resolved;
+                afterSnapshot.Remark = "已翻转管线流向（已修复归档）";
             }
 
             _onStateRestoredOrChanged?.Invoke(_curveId, afterSnapshot, false);
