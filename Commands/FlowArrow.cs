@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
@@ -14,6 +14,7 @@ using Autodesk.AutoCAD.Geometry;          // 几何对象（点、线）
 using Autodesk.AutoCAD.Runtime;
 using process_pipeline.Core;           // 命令特性（关键）
 using process_pipeline.Forms;
+using process_pipeline.Models;
 using process_pipeline.Utils;
 using process_pipeline.Geometry;
 using AcadDb = Autodesk.AutoCAD.DatabaseServices;
@@ -46,7 +47,7 @@ namespace process_pipeline.Commands
         }
     }
 
-    public class FlowArrowService : CadBase<Dictionary<ObjectId, ProblemItem>>
+    public class FlowArrowService : CadBase<Dictionary<ObjectId, ProblemItem>>, ICheckRule
     {
             // 业务配置项
         public double MaxBufferDistance { get; set; } = CadConfig.MaxBufferDistance;
@@ -551,6 +552,201 @@ namespace process_pipeline.Commands
                 // 如果这根管线现在一个箭头都匹配不上了，直接从表里删掉
                 PipeToArrows.Remove(pipeId);
             }
+        }
+
+        // ============================================================
+        // ICheckRule 接口实现（Commit 1.3）
+        // 将流向箭头核查算法封装为标准规则插件，支持返回统一的 CheckIssueItem 模型，
+        // 同时完整保留原有的 Execute / RunChecker 方法以确保现有功能零破坏。
+        // ============================================================
+
+        /// <summary>
+        /// 规则唯一标识。
+        /// </summary>
+        public string RuleId => "FlowArrow";
+
+        /// <summary>
+        /// 规则中文显示名称。
+        /// </summary>
+        public string RuleName => "管线流向箭头核查";
+
+        /// <summary>
+        /// ICheckRule 全量核查实现：执行全图流向箭头匹配检查并转换为统一的 CheckIssueItem 字典。
+        /// </summary>
+        public Dictionary<ObjectId, CheckIssueItem> CheckAll(ProgressContext context = null)
+        {
+            var rawProblems = Execute(context);
+            return ConvertProblemsToIssues(rawProblems, null);
+        }
+
+        /// <summary>
+        /// ICheckRule 局部增量核查实现：仅对受影响的管线 ID 列表重新核查，
+        /// 并在更新时保留人工已标记为“已忽略（Ignored）”的判读状态。
+        /// </summary>
+        public Dictionary<ObjectId, CheckIssueItem> CheckIncremental(
+            List<ObjectId> targetIds,
+            Dictionary<ObjectId, CheckIssueItem> currentIssues = null,
+            ProgressContext context = null)
+        {
+            var mergedIssues = currentIssues != null
+                ? new Dictionary<ObjectId, CheckIssueItem>(currentIssues)
+                : new Dictionary<ObjectId, CheckIssueItem>();
+
+            if (targetIds == null || targetIds.Count == 0)
+                return mergedIssues;
+
+            Dictionary<ObjectId, ArrowCacheInfo> arrowData = ArrowCacheManager.GetOrBuildCache(_db);
+            if (arrowData == null || arrowData.Count == 0)
+                return mergedIssues;
+
+            // 构造仅针对目标管线的局部 ProblemItem 容器进行重算
+            var localProblems = new Dictionary<ObjectId, ProblemItem>();
+            foreach (ObjectId id in targetIds)
+            {
+                if (mergedIssues.ContainsKey(id))
+                {
+                    localProblems[id] = new ProblemItem
+                    {
+                        PipeId = id,
+                        IsFixed = mergedIssues[id].IsFixed
+                    };
+                }
+            }
+
+            using (OpenCloseTransaction tr = _db.TransactionManager.StartOpenCloseTransaction())
+            {
+                foreach (ObjectId pipeId in targetIds)
+                {
+                    context?.Step();
+                    if (pipeId.IsErased || !pipeId.IsValid)
+                    {
+                        if (mergedIssues.TryGetValue(pipeId, out var erasedIssue))
+                            erasedIssue.Status = IssueReviewStatus.Resolved;
+                        continue;
+                    }
+
+                    Entity pipeEnt = tr.GetObject(pipeId, OpenMode.ForRead) as Entity;
+                    if (pipeEnt == null)
+                        continue;
+
+                    Checker(localProblems, pipeId, pipeEnt, arrowData);
+                }
+            }
+
+            return ConvertProblemsToIssues(localProblems, mergedIssues);
+        }
+
+        /// <summary>
+        /// ICheckRule 变更影响范围追踪实现：
+        /// 当 CAD 图面中的管线或流向箭头发生增、删、改时，计算受影响需要重新核查的管线 ObjectId 集合。
+        /// （将原 PaletteRefreshManager 中的硬编码业务判断收拢到本规则内部）
+        /// </summary>
+        public IEnumerable<ObjectId> GetAffectedTargetIds(DBObject changedObj)
+        {
+            var affectedIds = new HashSet<ObjectId>();
+            Entity ent = changedObj as Entity;
+            if (ent == null)
+                return affectedIds;
+
+            if (!(ent is Polyline || ent is Line || ent is BlockReference))
+                return affectedIds;
+
+            try
+            {
+                // 情况 1：被修改的对象本身就是目标管线图层上的管线
+                if (PipeLayerName.Contains(ent.Layer))
+                {
+                    affectedIds.Add(ent.ObjectId);
+                }
+                // 情况 2：被修改的对象是箭头图层上的块参照（移动、旋转、新增或删除箭头）
+                else if (ArrowLayerName.Contains(ent.Layer) && ent is BlockReference)
+                {
+                    // 2.1 先加入该箭头修改前已经绑定的管线（处理箭头移走或删除后的解绑重算）
+                    if (ArrowToPipes.TryGetValue(ent.ObjectId, out HashSet<ObjectId> boundPipes))
+                    {
+                        foreach (ObjectId pipeId in boundPipes)
+                        {
+                            affectedIds.Add(pipeId);
+                        }
+                    }
+
+                    // 2.2 再通过包围盒粗筛箭头当前位置附近 1.5 倍缓冲距离内的候选管线
+                    double searchBuffer = MaxBufferDistance * 1.5;
+                    using (OpenCloseTransaction tr = _db.TransactionManager.StartOpenCloseTransaction())
+                    {
+                        BlockTableRecord btr = (BlockTableRecord)tr.GetObject(_db.CurrentSpaceId, OpenMode.ForRead);
+                        foreach (ObjectId oid in btr)
+                        {
+                            string dxfName = oid.ObjectClass.DxfName;
+                            if (dxfName == "LINE" || dxfName == "LWPOLYLINE" || dxfName == "POLYLINE")
+                            {
+                                Entity pipeCandidate = tr.GetObject(oid, OpenMode.ForRead) as Entity;
+                                if (pipeCandidate != null && PipeLayerName.Contains(pipeCandidate.Layer))
+                                {
+                                    if (GeometryHelper.IsIntersection2D(ent, pipeCandidate, searchBuffer))
+                                    {
+                                        affectedIds.Add(pipeCandidate.Id);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                // 对象被深度擦除时读取 Layer 可能抛出异常，安全忽略
+            }
+
+            return affectedIds;
+        }
+
+        /// <summary>
+        /// 内部辅助方法：将流向核查产出的 ProblemItem 字典合并转换为统一的 CheckIssueItem 字典，
+        /// 同时补充管线所在图层名称（LayerName）并保护人工“已忽略（Ignored）”状态。
+        /// </summary>
+        private Dictionary<ObjectId, CheckIssueItem> ConvertProblemsToIssues(
+            Dictionary<ObjectId, ProblemItem> rawProblems,
+            Dictionary<ObjectId, CheckIssueItem> targetIssues)
+        {
+            var result = targetIssues ?? new Dictionary<ObjectId, CheckIssueItem>();
+            if (rawProblems == null || rawProblems.Count == 0)
+                return result;
+
+            using (OpenCloseTransaction tr = _db.TransactionManager.StartOpenCloseTransaction())
+            {
+                foreach (var kvp in rawProblems)
+                {
+                    ObjectId pipeId = kvp.Key;
+                    ProblemItem problem = kvp.Value;
+                    if (problem == null)
+                        continue;
+
+                    string layerName = string.Empty;
+                    if (!pipeId.IsNull && pipeId.IsValid && !pipeId.IsErased)
+                    {
+                        Entity ent = tr.GetObject(pipeId, OpenMode.ForRead) as Entity;
+                        if (ent != null)
+                            layerName = ent.Layer;
+                    }
+
+                    CheckIssueItem newIssue = CheckIssueItem.FromProblemItem(problem, RuleId, layerName);
+
+                    // 如果之前已经有人工判读记录，且人工明确标记为“已忽略（Ignored）”，则保留人工忽略状态
+                    if (result.TryGetValue(pipeId, out CheckIssueItem existingIssue) &&
+                        existingIssue != null &&
+                        existingIssue.Status == IssueReviewStatus.Ignored &&
+                        !problem.IsFixed)
+                    {
+                        newIssue.Status = IssueReviewStatus.Ignored;
+                        newIssue.Remark = existingIssue.Remark;
+                    }
+
+                    result[pipeId] = newIssue;
+                }
+            }
+
+            return result;
         }
 
         protected override void OnSuccess(Dictionary<ObjectId, ProblemItem> result, bool bOnlyUpdate = false)
