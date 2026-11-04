@@ -49,6 +49,7 @@ namespace process_pipeline.Forms
             // 【移除】：mock 数据和命令初始化（现在在 MainViewModel 中）
 
             //CadThemes.ApplyCadTheme(this);
+            _vm.AttachGrid(dgIssues);
             this.DataContext = _vm;
         }
 
@@ -85,6 +86,50 @@ namespace process_pipeline.Forms
             }
         }
 
+        private void DataGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            _vm.SyncSelectedRowsFromGrid();
+        }
+
+        private void DataGrid_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (dgIssues == null) return;
+
+            DependencyObject dep = e.OriginalSource as DependencyObject;
+            while (dep != null && !(dep is DataGridRow))
+            {
+                dep = VisualTreeHelper.GetParent(dep);
+            }
+
+            if (dep is DataGridRow row)
+            {
+                dgIssues.Tag = row;
+                _vm.ContextTargetRow = row.Item as PipeRowVm;
+
+                // 当用户已经多选了多行，或者右键点击在已选中的行上时，拦截默认右键行为以保持多选状态不丢失
+                if (row.IsSelected || (dgIssues.SelectedItems != null && dgIssues.SelectedItems.Count > 1))
+                {
+                    e.Handled = true;
+                    _vm.SyncSelectedRowsFromGrid(syncCadSelection: false);
+
+                    var contextMenu = row.ContextMenu ?? dgIssues.ContextMenu;
+                    if (contextMenu != null)
+                    {
+                        contextMenu.PlacementTarget = row;
+                        contextMenu.IsOpen = true;
+                    }
+                }
+                else
+                {
+                    // 单行未选中情况下右键：直接选中该行并同步右键菜单状态
+                    dgIssues.SelectedItems.Clear();
+                    row.IsSelected = true;
+                    _vm.SelectedRow = row.Item as PipeRowVm;
+                    _vm.SyncSelectedRowsFromGrid(syncCadSelection: false);
+                }
+            }
+        }
+
         private void DataGrid_MouseDoubleClick(object sender, MouseButtonEventArgs e)
         {
             _vm.ZoomToSelectedRow(isZoomTo: true);
@@ -105,12 +150,25 @@ namespace process_pipeline.Forms
             TryCopySelection();
         }
 
+        private void CtxSelectRow_Click(object sender, RoutedEventArgs e)
+        {
+            if (dgIssues?.Tag is DataGridRow row)
+            {
+                row.IsSelected = !row.IsSelected;
+                dgIssues.Tag = null;
+                _vm.SyncSelectedRowsFromGrid();
+                dgIssues.Focus();
+            }
+        }
+
         private void CtxClearSelected_Click(object sender, RoutedEventArgs e)
         {
             if (dgIssues == null) return;
             dgIssues.SelectedCells.Clear();
             dgIssues.SelectedItems.Clear();
+            _vm.ContextTargetRow = null;
             _vm.SelectedRow = null;
+            _vm.SyncSelectedRowsFromGrid(syncCadSelection: false);
         }
 
         private void TryCopySelection()
@@ -171,9 +229,21 @@ namespace process_pipeline.Forms
         private readonly ICollectionView _rowsView;
         private readonly Dictionary<ObjectId, PipeRowVm> _objectIdToRowMap = new Dictionary<ObjectId, PipeRowVm>();
         private Dictionary<ObjectId, CheckIssueItem> _currentIssues = new Dictionary<ObjectId, CheckIssueItem>();
+        private DataGrid _grid;
         private PipeRowVm _selectedRow;
+        private readonly List<PipeRowVm> _selectedRows = new List<PipeRowVm>();
         private bool _isSyncingSelection;
         private readonly HybridUndoRedoManager _fallbackUndoRedoManager = new HybridUndoRedoManager();
+
+        /// <summary>
+        /// 右键点击时鼠标落点所在的行（用于未多选时定位右键目标行）。
+        /// </summary>
+        public PipeRowVm ContextTargetRow { get; set; }
+
+        public void AttachGrid(DataGrid grid)
+        {
+            _grid = grid;
+        }
 
         /// <summary>
         /// 获取当前活动文档会话的混合撤销/重做管理器（若在非活动文档或示例模式下则回退至本地管理器）。
@@ -206,9 +276,9 @@ namespace process_pipeline.Forms
             RefreshCommand = new RelayCommand(_ => RefreshByRule());
             ZoomToCommand = new RelayCommand(_ => ZoomToSelectedRow(isZoomTo: true));
             ExportCommand = new RelayCommand(_ => StatusText = "已导出");
-            MarkModifiedCommand = new RelayCommand(_ => ChangeSelectedRowStatus(IssueReviewStatus.Modified), _ => SelectedRow != null);
-            MarkToRecheckCommand = new RelayCommand(_ => ChangeSelectedRowStatus(IssueReviewStatus.ToRecheck), _ => SelectedRow != null);
-            MarkIgnoredCommand = new RelayCommand(_ => ChangeSelectedRowStatus(IssueReviewStatus.Ignored), _ => SelectedRow != null);
+            MarkModifiedCommand = new RelayCommand(_ => ChangeSelectedRowStatus(IssueReviewStatus.Modified), _ => GetActionTargetRows().Count > 0);
+            MarkToRecheckCommand = new RelayCommand(_ => ChangeSelectedRowStatus(IssueReviewStatus.ToRecheck), _ => GetActionTargetRows().Count > 0);
+            MarkIgnoredCommand = new RelayCommand(_ => ChangeSelectedRowStatus(IssueReviewStatus.Ignored), _ => GetActionTargetRows().Count > 0);
             ReverseSelectedPipeCommand = new RelayCommand(_ => ReverseSelectedPipe(), _ => CanReverseSelectedPipe());
             UndoCommand = new RelayCommand(_ => ExecuteUndo(), _ => ActiveUndoRedoManager.CanUndo);
             RedoCommand = new RelayCommand(_ => ExecuteRedo(), _ => ActiveUndoRedoManager.CanRedo);
@@ -337,8 +407,7 @@ namespace process_pipeline.Forms
         }
 
         /// <summary>
-        /// 当前表格选中的问题行（Commit 2.3）。
-        /// 切换选中行时自动在 CAD 图面高亮对应管线，若是一对多箭头冲突则绘制瞬态辅助红线。
+        /// 当前表格选中的主焦点行（Commit 2.3 & Commit 5.5）。
         /// </summary>
         public PipeRowVm SelectedRow
         {
@@ -348,22 +417,88 @@ namespace process_pipeline.Forms
                 if (Set(ref _selectedRow, value))
                 {
                     OnPropertyChanged(nameof(ReversePipeMenuVisibility));
+                    OnPropertyChanged(nameof(ReversePipeMenuHeader));
                     NotifyUndoRedoStateChanged();
-                    if (!_isSyncingSelection && value != null)
-                    {
-                        ZoomToSelectedRow(isZoomTo: false);
-                    }
                 }
             }
         }
 
         /// <summary>
-        /// 上下文感知显隐（Commit 4.3）：
-        /// 仅当当前选中行属于流向冲突问题（DirectionConflict 或 OneToMany）时，
+        /// 从 DataGrid.SelectedItems 同步多选行集合，并按需触发 CAD 预选集批量高亮（Commit 5.5）。
+        /// </summary>
+        public void SyncSelectedRowsFromGrid(bool syncCadSelection = true)
+        {
+            _selectedRows.Clear();
+            if (_grid?.SelectedItems != null && _grid.SelectedItems.Count > 0)
+            {
+                foreach (var item in _grid.SelectedItems)
+                {
+                    if (item is PipeRowVm rowVm && !_selectedRows.Contains(rowVm))
+                    {
+                        _selectedRows.Add(rowVm);
+                    }
+                }
+            }
+
+            if (_selectedRows.Count == 0 && _grid?.SelectedCells != null && _grid.SelectedCells.Count > 0)
+            {
+                foreach (var cell in _grid.SelectedCells)
+                {
+                    if (cell.Item is PipeRowVm rowVm && !_selectedRows.Contains(rowVm))
+                    {
+                        _selectedRows.Add(rowVm);
+                    }
+                }
+            }
+
+            OnPropertyChanged(nameof(ReversePipeMenuVisibility));
+            OnPropertyChanged(nameof(ReversePipeMenuHeader));
+            NotifyUndoRedoStateChanged();
+
+            if (syncCadSelection && !_isSyncingSelection && _selectedRows.Count > 0)
+            {
+                ZoomToSelectedRow(isZoomTo: false);
+            }
+        }
+
+        /// <summary>
+        /// 获取当前右键动作的目标行集合（优先使用表格多选集合，未多选时回退至右键落点行或当前焦点行）。
+        /// </summary>
+        public IReadOnlyList<PipeRowVm> GetActionTargetRows()
+        {
+            if (_selectedRows.Count > 0)
+                return _selectedRows;
+
+            if (ContextTargetRow != null)
+                return new[] { ContextTargetRow };
+
+            if (SelectedRow != null)
+                return new[] { SelectedRow };
+
+            return Array.Empty<PipeRowVm>();
+        }
+
+        /// <summary>
+        /// 上下文感知显隐（Commit 4.3 & Commit 5.5）：
+        /// 仅当当前选中行集合中存在流向冲突问题（DirectionConflict 或 OneToMany）时，
         /// 右键菜单才显示“一键修复：翻转管线流向”，非此类问题则彻底隐藏（Collapsed）。
         /// </summary>
         public System.Windows.Visibility ReversePipeMenuVisibility =>
             CanReverseSelectedPipe() ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+
+        /// <summary>
+        /// 右键菜单“一键翻转”项的动态标题（单选时显示常规标题，多选时显示批量翻转条数）。
+        /// </summary>
+        public string ReversePipeMenuHeader
+        {
+            get
+            {
+                int count = GetReversibleTargetRows().Count;
+                return count > 1
+                    ? $"一键修复：批量翻转管线流向 (共 {count} 条)"
+                    : "一键修复：翻转管线流向";
+            }
+        }
 
         /// <summary>
         /// 右键菜单“撤销”项的动态标题（显示下一步即将撤销的具体动作描述）。
@@ -775,74 +910,119 @@ namespace process_pipeline.Forms
         }
 
         /// <summary>
-        /// 人工判读状态修改（Commit 4.3）：
+        /// 人工判读状态修改（支持单条与多选批量标记，Commit 4.3 & Commit 5.5）：
         /// 通过 HybridUndoRedoManager 封装为可逆操作 ChangeIssueStatusOperation，
-        /// 支持单行就地刷新以及 Ctrl+Z / Ctrl+Y 撤销与重做。
+        /// 支持单行或多行就地刷新以及单步 Ctrl+Z / Ctrl+Y 撤销与重做。
         /// </summary>
         public void ChangeSelectedRowStatus(IssueReviewStatus newStatus)
         {
-            if (SelectedRow?.SourceIssue == null) return;
+            var targetRows = GetActionTargetRows()
+                .Where(r => r?.SourceIssue != null)
+                .ToList();
+            if (targetRows.Count == 0) return;
 
-            CheckIssueItem beforeSnapshot = SelectedRow.SourceIssue.CloneSnapshot();
-            CheckIssueItem afterSnapshot = SelectedRow.SourceIssue.CloneSnapshot();
-            afterSnapshot.Status = newStatus;
+            var batchItems = new List<(CheckIssueItem Before, CheckIssueItem After, Action<CheckIssueItem> ApplyAction)>(targetRows.Count);
+            foreach (PipeRowVm row in targetRows)
+            {
+                PipeRowVm capturedRow = row;
+                CheckIssueItem beforeSnapshot = capturedRow.SourceIssue.CloneSnapshot();
+                CheckIssueItem afterSnapshot = capturedRow.SourceIssue.CloneSnapshot();
+                afterSnapshot.Status = newStatus;
+                batchItems.Add((beforeSnapshot, afterSnapshot, snapshot => ApplyIssueSnapshotToRow(capturedRow, snapshot)));
+            }
 
-            PipeRowVm targetRow = SelectedRow;
-            var op = new ChangeIssueStatusOperation(
-                beforeSnapshot,
-                afterSnapshot,
-                snapshot => ApplyIssueSnapshotToRow(targetRow, snapshot));
-
+            var op = new ChangeIssueStatusOperation(batchItems);
             ActiveUndoRedoManager.ExecuteOperation(op);
             NotifyUndoRedoStateChanged();
-            StatusText = $"已将管线 [{targetRow.Id}] 标记为：{targetRow.Status}";
+
+            if (targetRows.Count == 1)
+            {
+                StatusText = $"已将管线 [{targetRows[0].Id}] 标记为：{targetRows[0].Status}";
+            }
+            else
+            {
+                StatusText = $"已批量将 {targetRows.Count} 条管线标记为：{targetRows[0].Status}";
+            }
         }
 
         /// <summary>
-        /// 判断当前选中行是否适用“翻转管线流向”修复操作。
+        /// 筛选当前目标行集合中所有适用于“翻转管线流向”的记录（DirectionConflict 或 OneToMany）。
+        /// </summary>
+        public IReadOnlyList<PipeRowVm> GetReversibleTargetRows()
+        {
+            return GetActionTargetRows()
+                .Where(r => r?.SourceIssue != null &&
+                            (r.SourceIssue.Type == ProblemType.DirectionConflict ||
+                             r.SourceIssue.Type == ProblemType.OneToMany))
+                .ToList();
+        }
+
+        /// <summary>
+        /// 判断当前选中行集合中是否存在适用“翻转管线流向”修复操作的记录。
         /// </summary>
         public bool CanReverseSelectedPipe()
         {
-            var issue = SelectedRow?.SourceIssue;
-            if (issue == null) return false;
-
-            return issue.Type == ProblemType.DirectionConflict ||
-                   issue.Type == ProblemType.OneToMany;
+            return GetReversibleTargetRows().Count > 0;
         }
 
         /// <summary>
-        /// 一键翻转当前选中管线的流向（Commit 4.3 & Commit 5.2）：
-        /// 封装为可逆复合操作 ReverseCurveOperation，翻转后自动将其归档至“已修复归档”节点下。
+        /// 一键翻转当前选中管线（支持单选与多选批量，Commit 4.3 & Commit 5.5）：
+        /// 封装为单事务可逆复合操作 ReverseCurveOperation，翻转后自动归档，按一次 Ctrl+Z 即可整批撤销。
         /// </summary>
         public void ReverseSelectedPipe()
         {
-            if (!CanReverseSelectedPipe() || SelectedRow?.SourceIssue == null)
+            var reversibleRows = GetReversibleTargetRows();
+            if (reversibleRows.Count == 0)
                 return;
 
-            PipeRowVm targetRow = SelectedRow;
-            ObjectId targetId = targetRow.TargetObjectId;
-            if (targetId.IsNull || !targetId.IsValid || targetId.IsErased)
+            var validRows = reversibleRows
+                .Where(r => !r.TargetObjectId.IsNull && r.TargetObjectId.IsValid && !r.TargetObjectId.IsErased)
+                .ToList();
+
+            if (validRows.Count == 0)
             {
-                StatusText = $"管线 [{targetRow.Id}] 未关联有效 CAD 图元，无法翻转";
+                StatusText = "选中的管线未关联有效 CAD 图元，无法翻转";
                 return;
             }
 
-            CheckIssueItem beforeSnapshot = targetRow.SourceIssue.CloneSnapshot();
+            var rowById = new Dictionary<ObjectId, PipeRowVm>(validRows.Count);
+            var batchItems = new List<(ObjectId CurveId, CheckIssueItem BeforeSnapshot)>(validRows.Count);
+            foreach (PipeRowVm row in validRows)
+            {
+                rowById[row.TargetObjectId] = row;
+                batchItems.Add((row.TargetObjectId, row.SourceIssue.CloneSnapshot()));
+            }
+
             var op = new ReverseCurveOperation(
-                targetId,
-                beforeSnapshot,
-                (curveId, snapshot, isUndo) =>
+                batchItems,
+                (restoredList, isUndo) =>
                 {
-                    if (snapshot != null)
+                    if (restoredList != null)
                     {
-                        ApplyIssueSnapshotToRow(targetRow, snapshot);
+                        foreach (var item in restoredList)
+                        {
+                            if (item.Snapshot != null && rowById.TryGetValue(item.CurveId, out PipeRowVm targetRow))
+                            {
+                                ApplyIssueSnapshotToRow(targetRow, item.Snapshot, refreshTreeAndFilter: false);
+                            }
+                        }
+                        UpdateTreeCounts();
+                        RefreshFilter();
                     }
                     PaletteRefreshManager.TriggerPaletteRefreshIfNeeded();
                 });
 
             ActiveUndoRedoManager.ExecuteOperation(op);
             NotifyUndoRedoStateChanged();
-            StatusText = $"已翻转管线 [{targetRow.Id}] 流向，并归档至【已修复归档】";
+
+            if (validRows.Count == 1)
+            {
+                StatusText = $"已翻转管线 [{validRows[0].Id}] 流向，并归档至【已修复归档】";
+            }
+            else
+            {
+                StatusText = $"已批量翻转 {validRows.Count} 条管线流向，并归档至【已修复归档】";
+            }
         }
 
         /// <summary>
@@ -875,7 +1055,7 @@ namespace process_pipeline.Forms
             }
         }
 
-        private void ApplyIssueSnapshotToRow(PipeRowVm row, CheckIssueItem snapshot)
+        private void ApplyIssueSnapshotToRow(PipeRowVm row, CheckIssueItem snapshot, bool refreshTreeAndFilter = true)
         {
             if (row == null || snapshot == null) return;
 
@@ -890,31 +1070,44 @@ namespace process_pipeline.Forms
                 }
             }
 
-            UpdateTreeCounts();
-            RefreshFilter();
+            if (refreshTreeAndFilter)
+            {
+                UpdateTreeCounts();
+                RefreshFilter();
+            }
         }
 
         private void NotifyUndoRedoStateChanged()
         {
             OnPropertyChanged(nameof(UndoMenuHeader));
             OnPropertyChanged(nameof(RedoMenuHeader));
+            OnPropertyChanged(nameof(ReversePipeMenuVisibility));
+            OnPropertyChanged(nameof(ReversePipeMenuHeader));
             CommandManager.InvalidateRequerySuggested();
         }
 
         /// <summary>
-        /// 选中或缩放定位到当前选中行对应的 CAD 实体，并按需绘制一对多瞬态辅助线。
+        /// 选中或缩放定位到当前选中行（单行或多行）对应的全部 CAD 实体，并按需绘制一对多瞬态辅助线（Commit 5.5）。
         /// </summary>
         public void ZoomToSelectedRow(bool isZoomTo)
         {
-            if (_isSyncingSelection || SelectedRow == null) return;
+            if (_isSyncingSelection) return;
+
+            var targetRows = GetActionTargetRows();
+            if (targetRows.Count == 0) return;
 
             var doc = AcadApp.DocumentManager.MdiActiveDocument;
             if (doc == null) return;
 
-            ObjectId targetId = SelectedRow.TargetObjectId;
-            if (targetId.IsNull || !targetId.IsValid || targetId.IsErased)
+            var validIds = targetRows
+                .Select(r => r.TargetObjectId)
+                .Where(id => !id.IsNull && id.IsValid && !id.IsErased)
+                .Distinct()
+                .ToArray();
+
+            if (validIds.Length == 0)
             {
-                StatusText = $"管线 [{SelectedRow.Id}] 为示例数据或未关联有效图元";
+                StatusText = $"管线 [{targetRows[0].Id}] 为示例数据或未关联有效图元";
                 return;
             }
 
@@ -922,19 +1115,27 @@ namespace process_pipeline.Forms
             try
             {
                 var selector = new SelectByHandleService(doc.Database, doc.Editor);
-                selector.SelectByHandles(new[] { targetId }, isZoomTo);
+                selector.SelectByHandles(validIds, isZoomTo);
 
                 GraphicManager.ClearAuxiliaryGraphics();
-                var issue = SelectedRow.SourceIssue;
-                if (issue != null &&
-                    issue.Type == ProblemType.OneToMany &&
-                    issue.PossibleMatches != null &&
-                    issue.PossibleMatches.Count > 0)
+                if (targetRows.Count == 1)
                 {
-                    GraphicManager.DrawAuxiliaryLines(issue.PossibleMatches);
+                    var issue = targetRows[0].SourceIssue;
+                    if (issue != null &&
+                        issue.Type == ProblemType.OneToMany &&
+                        issue.PossibleMatches != null &&
+                        issue.PossibleMatches.Count > 0)
+                    {
+                        GraphicManager.DrawAuxiliaryLines(issue.PossibleMatches);
+                    }
+                    StatusText = isZoomTo ? $"已定位到管线 [{targetRows[0].Id}]" : $"已选中管线 [{targetRows[0].Id}]";
                 }
-
-                StatusText = isZoomTo ? $"已定位到管线 [{SelectedRow.Id}]" : $"已选中管线 [{SelectedRow.Id}]";
+                else
+                {
+                    StatusText = isZoomTo
+                        ? $"已批量定位到 {validIds.Length} 条管线"
+                        : $"已批量选中 {validIds.Length} 条管线";
+                }
             }
             finally
             {
@@ -960,17 +1161,29 @@ namespace process_pipeline.Forms
             try
             {
                 var psr = doc.Editor.SelectImplied();
+                var matchedRows = new List<PipeRowVm>();
                 if (psr.Status == PromptStatus.OK && psr.Value != null)
                 {
                     foreach (ObjectId id in psr.Value.GetObjectIds())
                     {
                         if (_objectIdToRowMap.TryGetValue(id, out PipeRowVm matchedRow))
                         {
-                            SelectedRow = matchedRow;
-                            break;
+                            matchedRows.Add(matchedRow);
                         }
                     }
                 }
+
+                if (_grid != null)
+                {
+                    _grid.SelectedItems.Clear();
+                    foreach (PipeRowVm row in matchedRows)
+                    {
+                        _grid.SelectedItems.Add(row);
+                    }
+                }
+
+                SelectedRow = matchedRows.FirstOrDefault();
+                SyncSelectedRowsFromGrid(syncCadSelection: false);
             }
             catch
             {

@@ -3,6 +3,7 @@ using Autodesk.AutoCAD.DatabaseServices;
 using process_pipeline.Models;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using AcadApp = Autodesk.AutoCAD.ApplicationServices.Application;
 
 namespace process_pipeline.Core
@@ -13,17 +14,17 @@ namespace process_pipeline.Core
     /// 架构设计说明：
     /// 1. 为什么需要抽象 IUserOperation：
     ///    在管线核查的人机交互（Human-in-the-loop）流程中，人工操作分为两类：
-    ///    - 纯 UI 内存状态判读（如：将某条存疑管线标记为“已忽略/已修改/待复核”、修改核查备注），
+    ///    - 纯 UI 内存状态判读（如：将某条或多条存疑管线标记为“已忽略/待复核/已修复”、修改核查备注），
     ///      此类操作不改动 DWG 数据库，CAD 原生 UNDO 命令无法感知，必须由插件自身的 Undo/Redo 栈管理；
-    ///    - 涉及 CAD 图元修改的复合修复操作（如：在面板中一键翻转多段线流向、修改管径/高程属性），
+    ///    - 涉及 CAD 图元修改的复合修复操作（如：在面板中一键单条或批量翻转多段线流向），
     ///      既修改了 CAD 数据库 Entity，又变更了面板行的核查状态。
     /// 2. 通过统一的 Command 模式接口封装 Execute() 与 Undo()，使 HybridUndoRedoManager 能够以一致的方式
-    ///    执行、回滚和重做任何人工核查动作。
+    ///    执行、回滚和重做任何单条或批量人工核查动作。
     /// </summary>
     public interface IUserOperation
     {
         /// <summary>
-        /// 操作的人类可读描述（用于 UI 状态栏反馈及撤销/重做按钮提示，如“标记 7B2A 为已忽略”）。
+        /// 操作的人类可读描述（用于 UI 状态栏反馈及撤销/重做按钮提示，如“批量翻转 5 条管线流向”）。
         /// </summary>
         string Description { get; }
 
@@ -33,7 +34,7 @@ namespace process_pipeline.Core
         bool TouchesCadDatabase { get; }
 
         /// <summary>
-        /// 关联的目标 CAD 图元 ObjectId（无特定图元时可为 ObjectId.Null）。
+        /// 关联的目标 CAD 图元 ObjectId（批量操作或无特定图元时可为首个图元或 ObjectId.Null）。
         /// </summary>
         ObjectId TargetObjectId { get; }
 
@@ -175,126 +176,188 @@ namespace process_pipeline.Core
     }
 
     /// <summary>
-    /// 人工核查状态与属性修改操作（Commit 4.2）。
-    /// 
-    /// 架构设计说明：
-    /// 1. 针对纯 UI 内存层面的判读操作（如：将存疑管线标记为“已修改/待复核/已忽略”、修改管径/高程/备注），
-    ///    由于不触发 CAD 数据库事务，原生 UNDO 无法撤销此类动作。
-    /// 2. 本操作在构造时通过 <see cref="CheckIssueItem.CloneSnapshot"/> 保存修改前的完整问题快照与修改后的目标快照，
-    ///    在 Execute() 与 Undo() 时通过委托回调触发对应表格行的单行就地刷新（不重建整个表格）。
+    /// 人工核查状态与属性修改操作（支持单条与批量，Commit 4.2 & Commit 5.5）。
     /// </summary>
     public class ChangeIssueStatusOperation : IUserOperation
     {
-        private readonly CheckIssueItem _beforeSnapshot;
-        private readonly CheckIssueItem _afterSnapshot;
-        private readonly Action<CheckIssueItem> _applyIssueAction;
+        private readonly List<(CheckIssueItem Before, CheckIssueItem After, Action<CheckIssueItem> ApplyAction)> _items;
 
         public string Description { get; }
         public bool TouchesCadDatabase => false;
-        public ObjectId TargetObjectId => _afterSnapshot != null ? _afterSnapshot.TargetObjectId : ObjectId.Null;
+        public ObjectId TargetObjectId => _items.Count > 0 && _items[0].After != null ? _items[0].After.TargetObjectId : ObjectId.Null;
 
         public ChangeIssueStatusOperation(
             CheckIssueItem beforeSnapshot,
             CheckIssueItem afterSnapshot,
             Action<CheckIssueItem> applyIssueAction,
             string description = null)
+            : this(new[] { (beforeSnapshot, afterSnapshot, applyIssueAction) }, description)
         {
-            if (beforeSnapshot == null) throw new ArgumentNullException(nameof(beforeSnapshot));
-            if (afterSnapshot == null) throw new ArgumentNullException(nameof(afterSnapshot));
-            if (applyIssueAction == null) throw new ArgumentNullException(nameof(applyIssueAction));
+        }
 
-            _beforeSnapshot = beforeSnapshot.CloneSnapshot();
-            _afterSnapshot = afterSnapshot.CloneSnapshot();
-            _applyIssueAction = applyIssueAction;
+        public ChangeIssueStatusOperation(
+            IList<(CheckIssueItem Before, CheckIssueItem After, Action<CheckIssueItem> ApplyAction)> items,
+            string description = null)
+        {
+            if (items == null || items.Count == 0)
+                throw new ArgumentException("修改项集合不能为空", nameof(items));
 
-            string handleText = !string.IsNullOrWhiteSpace(_afterSnapshot.TargetHandle)
-                ? _afterSnapshot.TargetHandle
-                : _afterSnapshot.IssueId;
-            Description = !string.IsNullOrWhiteSpace(description)
-                ? description
-                : $"修改 {handleText} 状态为“{_afterSnapshot.GetStatusDisplayText()}”";
+            _items = items
+                .Where(x => x.Before != null && x.After != null && x.ApplyAction != null)
+                .Select(x => (x.Before.CloneSnapshot(), x.After.CloneSnapshot(), x.ApplyAction))
+                .ToList();
+
+            if (!string.IsNullOrWhiteSpace(description))
+            {
+                Description = description;
+            }
+            else if (_items.Count == 1)
+            {
+                var first = _items[0].After;
+                string handleText = !string.IsNullOrWhiteSpace(first.TargetHandle) ? first.TargetHandle : first.IssueId;
+                Description = $"修改 {handleText} 状态为“{first.GetStatusDisplayText()}”";
+            }
+            else
+            {
+                var first = _items[0].After;
+                Description = $"批量修改 {_items.Count} 条管线状态为“{first.GetStatusDisplayText()}”";
+            }
         }
 
         public void Execute()
         {
-            _applyIssueAction(_afterSnapshot.CloneSnapshot());
+            foreach (var item in _items)
+            {
+                item.ApplyAction(item.After.CloneSnapshot());
+            }
         }
 
         public void Undo()
         {
-            _applyIssueAction(_beforeSnapshot.CloneSnapshot());
+            foreach (var item in _items)
+            {
+                item.ApplyAction(item.Before.CloneSnapshot());
+            }
         }
     }
 
     /// <summary>
-    /// 翻转 CAD 管线（Curve/Polyline/Line）流向并联动更新 UI 核查状态的复合可逆操作（Commit 4.2）。
+    /// 翻转 CAD 管线（Curve/Polyline/Line）流向并联动更新 UI 核查状态的复合可逆操作（支持单条与批量，Commit 4.2 & Commit 5.5）。
     /// 
     /// 架构设计说明：
-    /// 1. 结合了 CAD 数据库实体修改（Curve.ReverseCurve）与 UI 核查状态回滚。
+    /// 1. 结合了 CAD 数据库实体批量修改（在单次 DocumentLock 与单个 Transaction 内遍历执行 Curve.ReverseCurve）与 UI 核查状态回滚。
     /// 2. 由于 Curve.ReverseCurve() 具有自反性（连续翻转两次即恢复原方向），
-    ///    Execute() 与 Undo() 均可在 DocumentLock + Transaction 中安全地反转目标管线顶点顺序：
-    ///    - Execute() 翻转图元后，将核查项状态更新为“已修改（Modified）”或触发局部重算；
-    ///    - Undo() 再次翻转图元恢复原始几何流向，并将主窗口中该行的核查项精确回滚为翻转前的快照。
+    ///    Execute() 与 Undo() 均可在同一个事务中安全地批量反转所有选中管线的顶点顺序并一次性 Regen()，
+    ///    按一次 Ctrl+Z 即可整批撤销所有反转的管线并恢复各自的原始核查状态。
     /// </summary>
     public class ReverseCurveOperation : IUserOperation
     {
-        private readonly ObjectId _curveId;
-        private readonly CheckIssueItem _beforeSnapshot;
-        private readonly Action<ObjectId, CheckIssueItem, bool> _onStateRestoredOrChanged;
+        private readonly List<(ObjectId CurveId, CheckIssueItem BeforeSnapshot)> _items;
+        private readonly Action<IReadOnlyList<(ObjectId CurveId, CheckIssueItem Snapshot)>, bool> _onBatchStateRestoredOrChanged;
 
         public string Description { get; }
         public bool TouchesCadDatabase => true;
-        public ObjectId TargetObjectId => _curveId;
+        public ObjectId TargetObjectId => _items.Count > 0 ? _items[0].CurveId : ObjectId.Null;
 
         public ReverseCurveOperation(
             ObjectId curveId,
             CheckIssueItem beforeSnapshot,
             Action<ObjectId, CheckIssueItem, bool> onStateRestoredOrChanged)
+            : this(
+                new[] { (curveId, beforeSnapshot) },
+                (batchList, isUndo) =>
+                {
+                    if (onStateRestoredOrChanged != null && batchList.Count > 0)
+                    {
+                        onStateRestoredOrChanged(batchList[0].CurveId, batchList[0].Snapshot, isUndo);
+                    }
+                })
         {
-            _curveId = curveId;
-            _beforeSnapshot = beforeSnapshot?.CloneSnapshot();
-            _onStateRestoredOrChanged = onStateRestoredOrChanged;
+        }
 
-            string handleText = !string.IsNullOrWhiteSpace(_beforeSnapshot?.TargetHandle)
-                ? _beforeSnapshot.TargetHandle
-                : (!curveId.IsNull ? curveId.Handle.ToString() : "未知管线");
-            Description = $"翻转管线 {handleText} 流向";
+        public ReverseCurveOperation(
+            IList<(ObjectId CurveId, CheckIssueItem BeforeSnapshot)> items,
+            Action<IReadOnlyList<(ObjectId CurveId, CheckIssueItem Snapshot)>, bool> onBatchStateRestoredOrChanged)
+        {
+            if (items == null || items.Count == 0)
+                throw new ArgumentException("待翻转的管线集合不能为空", nameof(items));
+
+            _items = items
+                .Where(x => !x.CurveId.IsNull)
+                .Select(x => (x.CurveId, x.BeforeSnapshot?.CloneSnapshot()))
+                .ToList();
+            _onBatchStateRestoredOrChanged = onBatchStateRestoredOrChanged;
+
+            if (_items.Count == 1)
+            {
+                var first = _items[0];
+                string handleText = !string.IsNullOrWhiteSpace(first.BeforeSnapshot?.TargetHandle)
+                    ? first.BeforeSnapshot.TargetHandle
+                    : (!first.CurveId.IsNull ? first.CurveId.Handle.ToString() : "未知管线");
+                Description = $"翻转管线 {handleText} 流向";
+            }
+            else
+            {
+                Description = $"批量翻转 {_items.Count} 条管线流向";
+            }
         }
 
         public void Execute()
         {
-            if (!TryReverseCurveInCad(_curveId))
+            var reversedIds = TryReverseCurvesInCad(_items.Select(x => x.CurveId).ToList());
+            if (reversedIds.Count == 0)
                 return;
 
-            CheckIssueItem afterSnapshot = _beforeSnapshot?.CloneSnapshot();
-            if (afterSnapshot != null)
+            var reversedSet = new HashSet<ObjectId>(reversedIds);
+            var afterList = new List<(ObjectId CurveId, CheckIssueItem Snapshot)>(_items.Count);
+            foreach (var item in _items)
             {
-                afterSnapshot.Status = IssueReviewStatus.Resolved;
-                afterSnapshot.Remark = "已翻转管线流向（已修复归档）";
+                if (!reversedSet.Contains(item.CurveId))
+                    continue;
+
+                CheckIssueItem afterSnapshot = item.BeforeSnapshot?.CloneSnapshot();
+                if (afterSnapshot != null)
+                {
+                    afterSnapshot.Status = IssueReviewStatus.Resolved;
+                    afterSnapshot.Remark = "已翻转管线流向（已修复归档）";
+                }
+                afterList.Add((item.CurveId, afterSnapshot));
             }
 
-            _onStateRestoredOrChanged?.Invoke(_curveId, afterSnapshot, false);
+            _onBatchStateRestoredOrChanged?.Invoke(afterList, false);
         }
 
         public void Undo()
         {
-            if (!TryReverseCurveInCad(_curveId))
+            var reversedIds = TryReverseCurvesInCad(_items.Select(x => x.CurveId).ToList());
+            if (reversedIds.Count == 0)
                 return;
 
-            _onStateRestoredOrChanged?.Invoke(_curveId, _beforeSnapshot?.CloneSnapshot(), true);
+            var reversedSet = new HashSet<ObjectId>(reversedIds);
+            var beforeList = new List<(ObjectId CurveId, CheckIssueItem Snapshot)>(_items.Count);
+            foreach (var item in _items)
+            {
+                if (!reversedSet.Contains(item.CurveId))
+                    continue;
+
+                beforeList.Add((item.CurveId, item.BeforeSnapshot?.CloneSnapshot()));
+            }
+
+            _onBatchStateRestoredOrChanged?.Invoke(beforeList, true);
         }
 
         /// <summary>
-        /// 在文档锁与事务保护下安全反转目标 Curve（Line / Polyline 等）的起点与终点方向。
+        /// 在单次文档锁与单个事务保护下，批量反转多条目标 Curve（Line / Polyline 等）的起点与终点方向并一次性刷新显示。
         /// </summary>
-        private static bool TryReverseCurveInCad(ObjectId curveId)
+        private static List<ObjectId> TryReverseCurvesInCad(IList<ObjectId> curveIds)
         {
-            if (curveId.IsNull || !curveId.IsValid || curveId.IsErased)
-                return false;
+            var reversed = new List<ObjectId>();
+            if (curveIds == null || curveIds.Count == 0)
+                return reversed;
 
             Document doc = AcadApp.DocumentManager.MdiActiveDocument;
             if (doc == null)
-                return false;
+                return reversed;
 
             using (DocumentLock docLock = doc.LockDocument())
             {
@@ -302,22 +365,38 @@ namespace process_pipeline.Core
                 {
                     try
                     {
-                        Curve cv = tr.GetObject(curveId, OpenMode.ForWrite) as Curve;
-                        if (cv == null)
-                            return false;
+                        foreach (ObjectId curveId in curveIds)
+                        {
+                            if (curveId.IsNull || !curveId.IsValid || curveId.IsErased)
+                                continue;
 
-                        cv.ReverseCurve();
-                        tr.Commit();
-                        doc.Editor.Regen();
-                        return true;
+                            Curve cv = tr.GetObject(curveId, OpenMode.ForWrite) as Curve;
+                            if (cv == null)
+                                continue;
+
+                            cv.ReverseCurve();
+                            reversed.Add(curveId);
+                        }
+
+                        if (reversed.Count > 0)
+                        {
+                            tr.Commit();
+                            doc.Editor.Regen();
+                        }
+                        else
+                        {
+                            tr.Abort();
+                        }
                     }
                     catch
                     {
                         tr.Abort();
-                        return false;
+                        reversed.Clear();
                     }
                 }
             }
+
+            return reversed;
         }
     }
 }
