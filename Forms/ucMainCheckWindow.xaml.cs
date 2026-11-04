@@ -50,6 +50,10 @@ namespace process_pipeline.Forms
 
             //CadThemes.ApplyCadTheme(this);
             _vm.AttachGrid(dgIssues);
+            if (dgIssues?.ContextMenu != null)
+            {
+                dgIssues.ContextMenu.DataContext = _vm;
+            }
             this.DataContext = _vm;
         }
 
@@ -115,7 +119,8 @@ namespace process_pipeline.Forms
                     var contextMenu = row.ContextMenu ?? dgIssues.ContextMenu;
                     if (contextMenu != null)
                     {
-                        contextMenu.PlacementTarget = row;
+                        contextMenu.DataContext = _vm;
+                        contextMenu.PlacementTarget = dgIssues;
                         contextMenu.IsOpen = true;
                     }
                 }
@@ -125,7 +130,11 @@ namespace process_pipeline.Forms
                     dgIssues.SelectedItems.Clear();
                     row.IsSelected = true;
                     _vm.SelectedRow = row.Item as PipeRowVm;
-                    _vm.SyncSelectedRowsFromGrid(syncCadSelection: false);
+                    _vm.SyncSelectedRowsFromGrid(syncCadSelection: true);
+                    if (dgIssues.ContextMenu != null)
+                    {
+                        dgIssues.ContextMenu.DataContext = _vm;
+                    }
                 }
             }
         }
