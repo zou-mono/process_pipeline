@@ -30,7 +30,7 @@ namespace process_pipeline.Models
         [Description("已忽略")]
         Ignored = 3,
 
-        [Description("已解决")]
+        [Description("已修复")]
         Resolved = 4
     }
 
@@ -65,6 +65,12 @@ namespace process_pipeline.Models
         /// 例如："FlowArrow"（流向箭头核查）、"MatchPipe"（管线匹配核查）、"CompareSegment"（线段覆盖核查）。
         /// </summary>
         public string RuleId { get; set; }
+
+        /// <summary>
+        /// 产出该问题的核查规则中文名称（Commit 5.1）。
+        /// 例如："流向箭头核查"、"管段匹配核查"、"管线标注核查"，用于主窗口左侧一级导航树及表格“核查类型”列展示。
+        /// </summary>
+        public string RuleName { get; set; }
 
         /// <summary>
         /// 问题分类/细分类型枚举（兼容原有的 ProblemType）。
@@ -107,6 +113,14 @@ namespace process_pipeline.Models
         /// 问题在 CAD 图面上的代表点坐标（用于双击缩放定位及坐标展示）。
         /// </summary>
         public Point3d Location { get; set; }
+
+        /// <summary>
+        /// 格式化后的二维代表点坐标文本（Commit 5.1，如 "12543.20, 38410.55"），供主窗口表格“位置坐标”列直接绑定。
+        /// </summary>
+        public string LocationText =>
+            (Math.Abs(Location.X) < 1e-6 && Math.Abs(Location.Y) < 1e-6)
+                ? "-"
+                : $"{Location.X:F2}, {Location.Y:F2}";
 
         // ============================================================
         // 3. 业务属性与核查描述（对接主界面表格列）
@@ -195,9 +209,30 @@ namespace process_pipeline.Models
                 case IssueReviewStatus.Ignored:
                     return "已忽略";
                 case IssueReviewStatus.Resolved:
-                    return "已解决";
+                    return "已修复";
                 default:
                     return Status.ToString();
+            }
+        }
+
+        /// <summary>
+        /// 获取当前问题所属核查类型的中文显示名称（Commit 5.1）。
+        /// </summary>
+        public string GetRuleDisplayName()
+        {
+            if (!string.IsNullOrWhiteSpace(RuleName))
+                return RuleName;
+
+            switch (RuleId)
+            {
+                case "FlowArrow":
+                    return "流向箭头核查";
+                case "MatchPipe":
+                    return "管段匹配核查";
+                case "CompareSegment":
+                    return "线段覆盖核查";
+                default:
+                    return !string.IsNullOrWhiteSpace(RuleId) ? RuleId : "常规管线核查";
             }
         }
 
@@ -211,6 +246,7 @@ namespace process_pipeline.Models
             {
                 IssueId = this.IssueId,
                 RuleId = this.RuleId,
+                RuleName = this.RuleName,
                 Type = this.Type,
                 Level = this.Level,
                 TargetObjectId = this.TargetObjectId,
@@ -239,7 +275,8 @@ namespace process_pipeline.Models
         public static CheckIssueItem FromProblemItem(
             ProblemItem problem,
             string ruleId = "FlowArrow",
-            string layerName = null)
+            string layerName = null,
+            string ruleName = "流向箭头核查")
         {
             if (problem == null)
                 return null;
@@ -258,6 +295,7 @@ namespace process_pipeline.Models
             {
                 IssueId = $"{ruleId}:{handleStr}:0",
                 RuleId = ruleId,
+                RuleName = ruleName,
                 Type = problem.Type,
                 Level = problem.Level,
                 TargetObjectId = problem.PipeId,

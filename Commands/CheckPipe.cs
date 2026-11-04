@@ -65,7 +65,7 @@ namespace process_pipeline.Commands
             var session = DocumentSessionManager.GetOrCreateSession(_db);
             if (session != null && result != null)
             {
-                session.CurrentIssues = new Dictionary<ObjectId, CheckIssueItem>(result);
+                return session.MergeRuleIssues(_rule.RuleId, result, isIncremental: false);
             }
             return result;
         }
@@ -82,7 +82,7 @@ namespace process_pipeline.Commands
             var result = _rule.CheckIncremental(pipeIds, currentIssues, context);
             if (session != null && result != null)
             {
-                session.CurrentIssues = new Dictionary<ObjectId, CheckIssueItem>(result);
+                return session.MergeRuleIssues(_rule.RuleId, result, isIncremental: true);
             }
             return result;
         }

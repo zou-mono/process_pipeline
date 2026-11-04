@@ -575,7 +575,7 @@ namespace process_pipeline.Commands
         /// <summary>
         /// 规则中文显示名称。
         /// </summary>
-        public string RuleName => "管线流向箭头核查";
+        public string RuleName => "流向箭头核查";
 
         /// <summary>
         /// ICheckRule 全量核查实现：执行全图流向箭头匹配检查并转换为统一的 CheckIssueItem 字典。
@@ -738,7 +738,7 @@ namespace process_pipeline.Commands
                             layerName = ent.Layer;
                     }
 
-                    CheckIssueItem newIssue = CheckIssueItem.FromProblemItem(problem, RuleId, layerName);
+                    CheckIssueItem newIssue = CheckIssueItem.FromProblemItem(problem, RuleId, layerName, RuleName);
 
                     // 如果之前已经有人工判读记录，且人工明确标记为“已忽略（Ignored）”，则保留人工忽略状态
                     if (result.TryGetValue(pipeId, out CheckIssueItem existingIssue) &&

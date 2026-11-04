@@ -78,6 +78,78 @@ namespace process_pipeline.Core
         }
 
         /// <summary>
+        /// 按核查规则 ID 合并更新当前文档会话的问题集合（Commit 5.1）。
+        /// 
+        /// 设计说明：
+        /// 当核查员在同一张图纸上先后执行不同核查命令（如先执行流向箭头核查，后执行管段匹配核查）时：
+        /// - 全量模式（isIncremental = false）：仅清理并替换属于当前 ruleId 的旧记录（同时保留人工已标记为“已忽略/已修复”的判读状态），
+        ///   而不会冲掉其他核查规则（其他 RuleId）已经产出的结果；
+        /// - 增量模式（isIncremental = true）：仅就地更新本次受影响的 ObjectId 记录。
+        /// </summary>
+        public Dictionary<ObjectId, CheckIssueItem> MergeRuleIssues(
+            string ruleId,
+            Dictionary<ObjectId, CheckIssueItem> ruleIssues,
+            bool isIncremental = false)
+        {
+            if (CurrentIssues == null)
+            {
+                CurrentIssues = new Dictionary<ObjectId, CheckIssueItem>();
+            }
+
+            if (ruleIssues == null)
+                return CurrentIssues;
+
+            if (!isIncremental && !string.IsNullOrWhiteSpace(ruleId))
+            {
+                // 收集属于当前规则但需保留人工判读状态（Ignored / Resolved）的旧记录
+                var existingSameRule = new Dictionary<ObjectId, CheckIssueItem>();
+                var keysToRemove = new List<ObjectId>();
+                foreach (var kvp in CurrentIssues)
+                {
+                    if (kvp.Value != null && string.Equals(kvp.Value.RuleId, ruleId, StringComparison.OrdinalIgnoreCase))
+                    {
+                        existingSameRule[kvp.Key] = kvp.Value;
+                        keysToRemove.Add(kvp.Key);
+                    }
+                }
+
+                foreach (ObjectId key in keysToRemove)
+                {
+                    CurrentIssues.Remove(key);
+                }
+
+                foreach (var kvp in ruleIssues)
+                {
+                    CheckIssueItem item = kvp.Value;
+                    if (item == null) continue;
+
+                    if (existingSameRule.TryGetValue(kvp.Key, out var oldItem) &&
+                        oldItem != null &&
+                        oldItem.Status == IssueReviewStatus.Ignored &&
+                        item.Status == IssueReviewStatus.Pending)
+                    {
+                        item.Status = IssueReviewStatus.Ignored;
+                        item.Remark = oldItem.Remark;
+                    }
+
+                    CurrentIssues[kvp.Key] = item;
+                }
+            }
+            else
+            {
+                foreach (var kvp in ruleIssues)
+                {
+                    if (kvp.Value != null)
+                    {
+                        CurrentIssues[kvp.Key] = kvp.Value;
+                    }
+                }
+            }
+
+            return new Dictionary<ObjectId, CheckIssueItem>(CurrentIssues);
+        }
+
+        /// <summary>
         /// 仅清空箭头空间缓存并重置初始化标志。
         /// </summary>
         public void ClearArrowCache()
