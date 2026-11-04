@@ -276,7 +276,7 @@ namespace process_pipeline.Forms
             RefreshCommand = new RelayCommand(_ => RefreshByRule());
             ZoomToCommand = new RelayCommand(_ => ZoomToSelectedRow(isZoomTo: true));
             ExportCommand = new RelayCommand(_ => StatusText = "已导出");
-            MarkModifiedCommand = new RelayCommand(_ => ChangeSelectedRowStatus(IssueReviewStatus.Modified), _ => GetActionTargetRows().Count > 0);
+            MarkModifiedCommand = new RelayCommand(_ => ChangeSelectedRowStatus(IssueReviewStatus.Resolved), _ => GetActionTargetRows().Count > 0);
             MarkToRecheckCommand = new RelayCommand(_ => ChangeSelectedRowStatus(IssueReviewStatus.ToRecheck), _ => GetActionTargetRows().Count > 0);
             MarkIgnoredCommand = new RelayCommand(_ => ChangeSelectedRowStatus(IssueReviewStatus.Ignored), _ => GetActionTargetRows().Count > 0);
             ReverseSelectedPipeCommand = new RelayCommand(_ => ReverseSelectedPipe(), _ => CanReverseSelectedPipe());
@@ -337,7 +337,7 @@ namespace process_pipeline.Forms
                 Diameter = 250,
                 Height = 1.10,
                 Description = "管线和箭头方向不一致",
-                Remark = "已翻转管线流向（已修复归档）"
+                Remark = "已翻转管线流向（已修复）"
             }));
 
             RebuildNavigationTreeNodes();
@@ -523,10 +523,10 @@ namespace process_pipeline.Forms
                 int totalCount = Rows.Count;
                 int resolvedCount = Rows.Count(r => r.SourceIssue?.Status == IssueReviewStatus.Resolved);
                 if (_rowsView == null)
-                    return $"记录数：{totalCount}（已修复归档：{resolvedCount}）";
+                    return $"记录数：{totalCount}（已修复：{resolvedCount}）";
 
                 int visibleCount = _rowsView.Cast<object>().Count();
-                return $"显示：{visibleCount} / 总计：{totalCount}（已修复归档：{resolvedCount}）";
+                return $"显示：{visibleCount} / 总计：{totalCount}（已修复：{resolvedCount}）";
             }
         }
 
@@ -555,7 +555,7 @@ namespace process_pipeline.Forms
                         break;
 
                     case TreeFilterKind.RuleStatus:
-                        // 点击二级【核查状态】节点（如“待核查”或“已修复归档”）时：按核查类型 + 具体状态精准匹配
+                        // 点击二级【核查状态】节点（如“待核查”或“已修复”）时：按核查类型 + 具体状态精准匹配
                         if (!string.Equals(row.RuleName, _selectedTreeNode.RuleNameFilter, StringComparison.OrdinalIgnoreCase))
                             return false;
                         if (_selectedTreeNode.StatusFilter.HasValue && rowStatus != _selectedTreeNode.StatusFilter.Value)
@@ -581,7 +581,7 @@ namespace process_pipeline.Forms
             }
             else
             {
-                // 未选中任何树节点时，默认隐藏已修复归档项，仅展示待处理/活动项
+                // 未选中任何树节点时，默认隐藏已修复项，仅展示待处理/活动项
                 if (rowStatus == IssueReviewStatus.Resolved)
                     return false;
 
@@ -639,11 +639,11 @@ namespace process_pipeline.Forms
         }
 
         /// <summary>
-        /// 使用统一核查问题模型（CheckIssueItem）更新列表，支持全量刷新、单行就地增量更新与已修复归档（Commit 5.2）。
+        /// 使用统一核查问题模型（CheckIssueItem）更新列表，支持全量刷新、单行就地增量更新与已修复（Commit 5.2）。
         /// 
         /// 设计说明：
         /// - 已修复（IssueReviewStatus.Resolved）的记录不再从 Rows 中物理删除，而是保留在集合中，
-        ///   自动归档到对应核查类型的“已修复归档”节点下；仅当 CAD 图元被彻底 Erase 删除时才移除行。
+        ///   自动归档到对应核查类型的“已修复”节点下；仅当 CAD 图元被彻底 Erase 删除时才移除行。
         /// </summary>
         public void UpdateFromIssues(Dictionary<ObjectId, CheckIssueItem> issues, bool isIncremental = false)
         {
@@ -692,7 +692,7 @@ namespace process_pipeline.Forms
                         }
                         else
                         {
-                            // 单行就地刷新（若变为 Resolved，则自动归档至“已修复归档”节点）
+                            // 单行就地刷新（若变为 Resolved，则自动归档至“已修复”节点）
                             existingRow.ApplyFromIssue(issue);
                         }
                     }
@@ -731,7 +731,7 @@ namespace process_pipeline.Forms
         /// <summary>
         /// 构建“构想 1”二级导航树（Commit 5.2）：
         /// - 一级主节点：各【核查类型】（如“流向箭头核查”、“管段匹配核查”）；
-        /// - 二级子节点：5 个带彩色矢量圆点的【核查状态】（待核查、待复核、已修改、已忽略、已修复归档）；
+        /// - 二级子节点：5 个带彩色矢量圆点的【核查状态】（待核查、待复核、已修改、已忽略、已修复）；
         /// - 底部节点：【按管线图层辅助筛选】及其各图层子节点。
         /// </summary>
         private void RebuildNavigationTreeNodes()
@@ -770,9 +770,8 @@ namespace process_pipeline.Forms
                 {
                     ("待核查", IssueReviewStatus.Pending),
                     ("待复核", IssueReviewStatus.ToRecheck),
-                    ("已修改", IssueReviewStatus.Modified),
                     ("已忽略", IssueReviewStatus.Ignored),
-                    ("已修复归档", IssueReviewStatus.Resolved)
+                    ("已修复", IssueReviewStatus.Resolved)
                 };
 
                 foreach (var def in statusDefinitions)
@@ -1017,11 +1016,11 @@ namespace process_pipeline.Forms
 
             if (validRows.Count == 1)
             {
-                StatusText = $"已翻转管线 [{validRows[0].Id}] 流向，并归档至【已修复归档】";
+                StatusText = $"已翻转管线 [{validRows[0].Id}] 流向，并归档至【已修复】";
             }
             else
             {
-                StatusText = $"已批量翻转 {validRows.Count} 条管线流向，并归档至【已修复归档】";
+                StatusText = $"已批量翻转 {validRows.Count} 条管线流向，并归档至【已修复】";
             }
         }
 
@@ -1228,7 +1227,7 @@ namespace process_pipeline.Forms
         public static readonly Brush ToRecheckBrush = CreateFrozenBrush(0xFF, 0xB3, 0x00); // 琥珀黄：待复核
         public static readonly Brush ModifiedBrush = CreateFrozenBrush(0x40, 0xC4, 0xFF);  // 亮天蓝：已修改
         public static readonly Brush IgnoredBrush = CreateFrozenBrush(0xCF, 0xD8, 0xDC);   // 柔和灰白：已忽略
-        public static readonly Brush ResolvedBrush = CreateFrozenBrush(0x69, 0xF0, 0xAE);  // 翠绿：已修复归档
+        public static readonly Brush ResolvedBrush = CreateFrozenBrush(0x69, 0xF0, 0xAE);  // 翠绿：已修复
 
         private static Brush CreateFrozenBrush(byte r, byte g, byte b)
         {

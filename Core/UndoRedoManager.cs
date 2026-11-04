@@ -319,7 +319,7 @@ namespace process_pipeline.Core
                 if (afterSnapshot != null)
                 {
                     afterSnapshot.Status = IssueReviewStatus.Resolved;
-                    afterSnapshot.Remark = "已翻转管线流向（已修复归档）";
+                    afterSnapshot.Remark = "已翻转管线流向（已修复）";
                 }
                 afterList.Add((item.CurveId, afterSnapshot));
             }

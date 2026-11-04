@@ -492,7 +492,7 @@
                           Command="{Binding ReverseSelectedPipeCommand}"
                           Visibility="{Binding ReversePipeMenuVisibility}" />
                 <Separator Visibility="{Binding ReversePipeMenuVisibility}" />
-                <MenuItem Header="人工判定：标记为【已修改】" Command="{Binding MarkModifiedCommand}" />
+                <MenuItem Header="人工判定：标记为【已修复】" Command="{Binding MarkModifiedCommand}" />
                 <MenuItem Header="人工判定：标记为【待复核】" Command="{Binding MarkToRecheckCommand}" />
                 <MenuItem Header="人工判定：标记为【已忽略】" Command="{Binding MarkIgnoredCommand}" />
                 <Separator />
