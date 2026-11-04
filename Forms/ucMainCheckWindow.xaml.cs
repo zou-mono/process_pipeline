@@ -76,6 +76,16 @@ namespace process_pipeline.Forms
         private string _keyword = string.Empty;
         private GridLengthCache _cache = new GridLengthCache();
 
+        // ============================================================
+        // Commit 2.2：引入 ICollectionView 内存过滤与 ObjectId->Row 索引映射
+        // 1. _rowsView：直接挂载在 Rows 默认视图上，当切换图层树节点或输入搜索关键字时，
+        //    只通过 _rowsView.Refresh() 过滤显示，绝不调用 Rows.Clear() 破坏原集合。
+        // 2. _objectIdToRowMap：用于增量核查或人工修改时 O(1) 定位到具体行进行就地更新。
+        // ============================================================
+        private string _selectedLayerFilter = "全部图层";
+        private readonly ICollectionView _rowsView;
+        private readonly Dictionary<ObjectId, PipeRowVm> _objectIdToRowMap = new Dictionary<ObjectId, PipeRowVm>();
+
         //private double _leftPanelToggleX;  // GridSplitter距离左侧的偏移值
 
         public ObservableCollection<TreeNodeVm> TreeNodes { get; } = new ObservableCollection<TreeNodeVm>();
@@ -92,6 +102,13 @@ namespace process_pipeline.Forms
             RefreshCommand = new RelayCommand(_ => StatusText = "已刷新");
             ZoomToCommand = new RelayCommand(_ => StatusText = "已定位");
             ExportCommand = new RelayCommand(_ => StatusText = "已导出");
+
+            // 挂载默认集合视图过滤器（WPF DataGrid 绑定 Rows 时会自动使用此 DefaultView）
+            _rowsView = CollectionViewSource.GetDefaultView(Rows);
+            if (_rowsView != null)
+            {
+                _rowsView.Filter = FilterRow;
+            }
 
             // 初始化 mock 数据（在实际应用中，可以从服务加载）
             InitializeMockData();
@@ -137,10 +154,84 @@ namespace process_pipeline.Forms
         public string Keyword
         {
             get => _keyword;
-            set => Set(ref _keyword, value);
+            set
+            {
+                if (Set(ref _keyword, value))
+                {
+                    RefreshFilter();
+                }
+            }
         }
 
-        public string RowCountText => $"记录数：{Rows.Count}";
+        /// <summary>
+        /// 当前左侧图层树选中的图层过滤名称（默认 "全部图层" 表示不过滤）。
+        /// </summary>
+        public string SelectedLayerFilter
+        {
+            get => _selectedLayerFilter;
+            set
+            {
+                if (Set(ref _selectedLayerFilter, value ?? "全部图层"))
+                {
+                    RefreshFilter();
+                }
+            }
+        }
+
+        public string RowCountText
+        {
+            get
+            {
+                if (_rowsView == null)
+                    return $"记录数：{Rows.Count}";
+
+                int visibleCount = _rowsView.Cast<object>().Count();
+                return visibleCount == Rows.Count
+                    ? $"记录数：{Rows.Count}"
+                    : $"记录数：{visibleCount} / {Rows.Count}";
+            }
+        }
+
+        /// <summary>
+        /// 集合视图单行过滤谓词：同时判断左侧图层树选中项与顶部搜索框关键字。
+        /// </summary>
+        private bool FilterRow(object obj)
+        {
+            PipeRowVm row = obj as PipeRowVm;
+            if (row == null) return false;
+
+            // 1. 图层/分类过滤（"全部图层" 或空字符串时放行全部）
+            if (!string.IsNullOrWhiteSpace(_selectedLayerFilter) &&
+                !string.Equals(_selectedLayerFilter, "全部图层", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!string.Equals(row.Type, _selectedLayerFilter, StringComparison.OrdinalIgnoreCase))
+                    return false;
+            }
+
+            // 2. 关键字模糊匹配（支持匹配编号、类型、状态、备注）
+            if (!string.IsNullOrWhiteSpace(_keyword))
+            {
+                string kw = _keyword.Trim();
+                bool matchId = row.Id != null && row.Id.IndexOf(kw, StringComparison.OrdinalIgnoreCase) >= 0;
+                bool matchType = row.Type != null && row.Type.IndexOf(kw, StringComparison.OrdinalIgnoreCase) >= 0;
+                bool matchStatus = row.Status != null && row.Status.IndexOf(kw, StringComparison.OrdinalIgnoreCase) >= 0;
+                bool matchRemark = row.Remark != null && row.Remark.IndexOf(kw, StringComparison.OrdinalIgnoreCase) >= 0;
+
+                if (!matchId && !matchType && !matchStatus && !matchRemark)
+                    return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// 触发内存视图过滤刷新并同步底部状态栏记录数。
+        /// </summary>
+        public void RefreshFilter()
+        {
+            _rowsView?.Refresh();
+            OnPropertyChanged(nameof(RowCountText));
+        }
 
         private void ToggleTree()
         {
@@ -155,12 +246,19 @@ namespace process_pipeline.Forms
 
             // 清空并重新填充 Rows（基于 ProblemItem 字段）
             Rows.Clear();
+            _objectIdToRowMap.Clear();
             //int index = 1;
             foreach (var kvp in data.Where(p => !p.Value.IsFixed && !p.Value.PipeId.IsErased))
             {
                 var item = kvp.Value;
                 // 假设 ProblemItem 有这些属性；如果字段名不同，调整此处
-                //Rows.Add(new PipeRowVm($"PL{index++:D3}", item.Type, item.Status, item.Diameter, item.Height, item.Remark));
+                CheckIssueItem issue = CheckIssueItem.FromProblemItem(item);
+                var rowVm = new PipeRowVm(issue);
+                Rows.Add(rowVm);
+                if (!issue.TargetObjectId.IsNull)
+                {
+                    _objectIdToRowMap[issue.TargetObjectId] = rowVm;
+                }
             }
 
             // 更新状态文本（可选）
@@ -168,7 +266,99 @@ namespace process_pipeline.Forms
 
             // 触发属性通知，确保 WPF 绑定刷新
             OnPropertyChanged(nameof(Rows));
-            OnPropertyChanged(nameof(RowCountText));
+            RefreshFilter();
+        }
+
+        /// <summary>
+        /// 使用统一核查问题模型（CheckIssueItem）更新列表，支持全量刷新与单行就地增量更新。
+        /// 
+        /// 设计说明（Commit 2.2）：
+        /// - 当 isIncremental == false（全量核查）时：重建列表并自动提取图层树节点；
+        /// - 当 isIncremental == true（增量核查）时：不调用 Rows.Clear()，而是通过 _objectIdToRowMap
+        ///   直接定位受影响的 PipeRowVm 调用 ApplyFromIssue() 就地更新属性，若问题已解决则移除该行。
+        /// </summary>
+        public void UpdateFromIssues(Dictionary<ObjectId, CheckIssueItem> issues, bool isIncremental = false)
+        {
+            if (issues == null) return;
+
+            if (!isIncremental)
+            {
+                Rows.Clear();
+                _objectIdToRowMap.Clear();
+
+                foreach (var kvp in issues)
+                {
+                    CheckIssueItem issue = kvp.Value;
+                    if (issue == null || issue.Status == IssueReviewStatus.Resolved || issue.TargetObjectId.IsErased)
+                        continue;
+
+                    var rowVm = new PipeRowVm(issue);
+                    Rows.Add(rowVm);
+                    if (!issue.TargetObjectId.IsNull)
+                    {
+                        _objectIdToRowMap[issue.TargetObjectId] = rowVm;
+                    }
+                }
+
+                RebuildLayerTreeNodes();
+            }
+            else
+            {
+                foreach (var kvp in issues)
+                {
+                    ObjectId targetId = kvp.Key;
+                    CheckIssueItem issue = kvp.Value;
+                    if (issue == null) continue;
+
+                    bool isResolvedOrErased = issue.Status == IssueReviewStatus.Resolved || targetId.IsErased;
+
+                    if (_objectIdToRowMap.TryGetValue(targetId, out PipeRowVm existingRow))
+                    {
+                        if (isResolvedOrErased)
+                        {
+                            Rows.Remove(existingRow);
+                            _objectIdToRowMap.Remove(targetId);
+                        }
+                        else
+                        {
+                            // 单行就地刷新，不破坏表格滚动位置与选中项
+                            existingRow.ApplyFromIssue(issue);
+                        }
+                    }
+                    else if (!isResolvedOrErased)
+                    {
+                        var newRow = new PipeRowVm(issue);
+                        Rows.Add(newRow);
+                        if (!targetId.IsNull)
+                        {
+                            _objectIdToRowMap[targetId] = newRow;
+                        }
+                    }
+                }
+            }
+
+            RefreshFilter();
+            StatusText = $"已更新 {Rows.Count} 条记录";
+        }
+
+        /// <summary>
+        /// 根据当前 Rows 中的图层/分类动态刷新左侧图层树节点。
+        /// </summary>
+        private void RebuildLayerTreeNodes()
+        {
+            var rootNode = new TreeNodeVm("全部图层");
+            var distinctLayers = Rows
+                .Select(r => r.Type)
+                .Where(t => !string.IsNullOrWhiteSpace(t))
+                .Distinct(StringComparer.OrdinalIgnoreCase);
+
+            foreach (string layer in distinctLayers)
+            {
+                rootNode.Children.Add(new TreeNodeVm(layer));
+            }
+
+            TreeNodes.Clear();
+            TreeNodes.Add(rootNode);
         }
 
         public event PropertyChangedEventHandler PropertyChanged;
