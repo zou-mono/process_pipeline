@@ -67,6 +67,11 @@ namespace process_pipeline.Core
         /// </summary>
         public ICheckRule ActiveRule { get; set; }
 
+        /// <summary>
+        /// 当前文档专属的混合撤销/重做管理器（Commit 4.1）。
+        /// </summary>
+        public HybridUndoRedoManager UndoRedoManager { get; } = new HybridUndoRedoManager();
+
         public DocumentCheckSession(AcadDb.Database db)
         {
             Db = db ?? throw new ArgumentNullException(nameof(db));
@@ -92,6 +97,7 @@ namespace process_pipeline.Core
             ArrowToPipes.Clear();
             PipeToArrows.Clear();
             ActiveRule = null;
+            UndoRedoManager.Clear();
         }
     }
 
