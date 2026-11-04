@@ -1,7 +1,8 @@
-﻿using Autodesk.AutoCAD.DatabaseServices;
+using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using process_pipeline.Commands;
 using process_pipeline.Core;
+using process_pipeline.Models;
 using process_pipeline.Themes;
 using process_pipeline.Utils;
 using System;
@@ -204,14 +205,142 @@ namespace process_pipeline.Forms
         public TreeNodeVm(string name) => Name = name;
     }
 
-    public class PipeRowVm
+    /// <summary>
+    /// 主核查窗口表格单行视图模型（Commit 2.1）。
+    /// 
+    /// 架构设计说明：
+    /// 1. 实现 INotifyPropertyChanged：
+    ///    原有的 PipeRowVm 所有属性均为只读 get，导致任何状态或属性变化都必须 Rows.Clear() 全表重建。
+    ///    改为可通知属性后，人工修改（如状态变为“已修改/已忽略”、修改管径或备注）以及 Undo/Redo 回滚时，
+    ///    只需更新对应行的属性即可触发 WPF 单元格局部刷新，保留表格滚动条位置与当前选中状态。
+    /// 2. 绑定统一领域模型 CheckIssueItem：
+    ///    内部持有 SourceIssue 引用，并提供 ApplyFromIssue() 方法支持单行就地同步。
+    /// </summary>
+    public class PipeRowVm : INotifyPropertyChanged
     {
-        public string Id { get; }
-        public string Type { get; }
-        public string Status { get; }
-        public double Diameter { get; }
-        public double Height { get; }
-        public string Remark { get; }
+        private string _id;
+        private string _type;
+        private string _status;
+        private double _diameter;
+        private double _height;
+        private string _remark;
+
+        /// <summary>
+        /// 关联的底层统一核查问题领域模型。
+        /// </summary>
+        public CheckIssueItem SourceIssue { get; private set; }
+
+        /// <summary>
+        /// 对应 CAD 图元的运行时 ObjectId（用于双击定位与图面联动高亮）。
+        /// </summary>
+        public ObjectId TargetObjectId => SourceIssue != null ? SourceIssue.TargetObjectId : ObjectId.Null;
+
+        public string Id
+        {
+            get => _id;
+            set => SetField(ref _id, value);
+        }
+        public string Type
+        {
+            get => _type;
+            set
+            {
+                if (SetField(ref _type, value) && SourceIssue != null)
+                {
+                    SourceIssue.LayerName = value;
+                }
+            }
+        }
+        public string Status
+        {
+            get => _status;
+            set => SetField(ref _status, value);
+        }
+        public double Diameter
+        {
+            get => _diameter;
+            set
+            {
+                if (SetField(ref _diameter, value) && SourceIssue != null)
+                {
+                    SourceIssue.Diameter = value;
+                }
+            }
+        }
+        public double Height
+        {
+            get => _height;
+            set
+            {
+                if (SetField(ref _height, value) && SourceIssue != null)
+                {
+                    SourceIssue.Height = value;
+                }
+            }
+        }
+        public string Remark
+        {
+            get => _remark;
+            set
+            {
+                if (SetField(ref _remark, value) && SourceIssue != null)
+                {
+                    SourceIssue.Remark = value;
+                }
+            }
+        }
+
+        public PipeRowVm(CheckIssueItem issue)
+        {
+            ApplyFromIssue(issue);
+        }
+
+        /// <summary>
+        /// 从统一问题领域模型就地刷新当前行各列属性（不销毁行实例）。
+        /// </summary>
+        public void ApplyFromIssue(CheckIssueItem issue)
+        {
+            if (issue == null) return;
+
+            SourceIssue = issue;
+            Id = !string.IsNullOrWhiteSpace(issue.TargetHandle) ? issue.TargetHandle : issue.IssueId;
+            Type = !string.IsNullOrWhiteSpace(issue.LayerName) ? issue.LayerName : issue.RuleId;
+            Status = issue.GetStatusDisplayText();
+            Diameter = issue.Diameter;
+            Height = issue.Height;
+            Remark = !string.IsNullOrWhiteSpace(issue.Remark) ? issue.Remark : issue.Description;
+        }
+
+        /// <summary>
+        /// 更新人工核查状态并同步刷新 Status 显示文本。
+        /// </summary>
+        public void UpdateReviewStatus(IssueReviewStatus newStatus, string newRemark = null)
+        {
+            if (SourceIssue != null)
+            {
+                SourceIssue.Status = newStatus;
+                Status = SourceIssue.GetStatusDisplayText();
+            }
+            if (newRemark != null)
+            {
+                Remark = newRemark;
+            }
+        }
+
+        public event PropertyChangedEventHandler PropertyChanged;
+
+        protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
+
+        protected bool SetField<T>(ref T field, T value, [CallerMemberName] string propertyName = null)
+        {
+            if (Equals(field, value)) return false;
+            field = value;
+            OnPropertyChanged(propertyName);
+            return true;
+        }
 
         public PipeRowVm(string id, string type, string status, double diameter, double height, string remark)
         {
