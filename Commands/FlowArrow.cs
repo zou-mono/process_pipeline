@@ -43,6 +43,12 @@ namespace process_pipeline.Commands
             };
 
             // 2. 启动引擎！
+            // Commit 5.4：将当前流向箭头核查规则注册到当前文档会话，并统一通过主核查面板展示结果
+            var session = DocumentSessionManager.GetOrCreateSession(Doc.Database);
+            if (session != null)
+            {
+                session.ActiveRule = service;
+            }
             service.Run(Properties.Settings.Default.taskFlowArrow, false);
         }
     }
@@ -259,11 +265,26 @@ namespace process_pipeline.Commands
         private Dictionary<ObjectId, ProblemItem> _RunChecker(ObjectId[] pipeObjs, 
             Dictionary<ObjectId, ArrowCacheInfo> arrowData, ProgressContext context)
         {
-            Dictionary<ObjectId, ProblemItem> problems = null;
-            if(palMatchArrowResult.Instance.CurrentProblems != null)
+            // Commit 5.4：统一从主核查面板 palCheckPipe 中继承同规则已有问题的修复状态
+            Dictionary<ObjectId, ProblemItem> problems = new Dictionary<ObjectId, ProblemItem>();
+            if (palCheckPipe.Instance.CurrentIssues != null && palCheckPipe.Instance.CurrentIssues.Count > 0)
             {
-                problems = palMatchArrowResult.Instance.CurrentProblems
-                    .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+                foreach (var kvp in palCheckPipe.Instance.CurrentIssues)
+                {
+                    if (kvp.Value != null && string.Equals(kvp.Value.RuleId, RuleId, StringComparison.OrdinalIgnoreCase))
+                    {
+                        problems[kvp.Key] = new ProblemItem
+                        {
+                            PipeId = kvp.Key,
+                            Type = kvp.Value.Type,
+                            Description = kvp.Value.Description,
+                            Location = kvp.Value.Location,
+                            PossibleMatches = kvp.Value.PossibleMatches,
+                            IsFixed = kvp.Value.IsFixed
+                        };
+                    }
+                }
+
             }
 
             //Dictionary<ObjectId, ProblemItem> problems = palCheckArrow.Instance.CurrentProblems
@@ -767,11 +788,28 @@ namespace process_pipeline.Commands
 
             if (bOnlyUpdate)
             {
-                palMatchArrowResult.Instance.UpdateData(result);
+                // Commit 5.4：将 MATCHARROW 增量重算结果统一合并到当前文档会话并驱动主核查面板局部刷新
+                var session = DocumentSessionManager.GetOrCreateSession(_db);
+                var existingIssues = session?.CurrentIssues != null && session.CurrentIssues.Count > 0
+                    ? new Dictionary<ObjectId, CheckIssueItem>(session.CurrentIssues)
+                    : (palCheckPipe.Instance.CurrentIssues != null
+                        ? palCheckPipe.Instance.CurrentIssues.ToDictionary(kvp => kvp.Key, kvp => kvp.Value)
+                        : new Dictionary<ObjectId, CheckIssueItem>());
+                var convertedIssues = ConvertProblemsToIssues(result, existingIssues);
+                var merged = session != null
+                    ? session.MergeRuleIssues(RuleId, convertedIssues, isIncremental: true)
+                    : convertedIssues;
+                palCheckPipe.Instance.UpdateIncrementalData(merged);
             }
             else { 
                 // 弹窗展示
-                palMatchArrowResult.Instance.Show(result);    
+                // Commit 5.4：将 MATCHARROW 全量核查结果统一归并到当前文档会话并在主核查面板 palCheckPipe 展示
+                var session = DocumentSessionManager.GetOrCreateSession(_db);
+                var convertedIssues = ConvertProblemsToIssues(result, new Dictionary<ObjectId, CheckIssueItem>());
+                var merged = session != null
+                    ? session.MergeRuleIssues(RuleId, convertedIssues, isIncremental: false)
+                    : convertedIssues;
+                palCheckPipe.Instance.Show(merged);
             }
         }
     }

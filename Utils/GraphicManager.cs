@@ -86,7 +86,8 @@ namespace process_pipeline.Utils
         {
             GraphicManager.ClearAuxiliaryGraphics();
 
-            // Commit 3.3：当主核查窗口 palCheckPipe 可见时，复用当前文档会话的 ActiveRule 执行局部增量重算与单行就地刷新
+            // Commit 3.3 & 5.4：所有核查命令（MATCHPIPE / MATCHARROW 等）已统一收拢至主核查窗口 palCheckPipe，
+            // 当面板可见时，复用当前文档会话的 ActiveRule 执行局部增量重算与单行就地刷新
             if (palCheckPipe.Instance.IsVisible)
             {
                 var session = DocumentSessionManager.GetOrCreateSession(doc.Database);
@@ -102,24 +103,6 @@ namespace process_pipeline.Utils
                         issue.PossibleMatches != null)
                     {
                         GraphicManager.DrawAuxiliaryLines(issue.PossibleMatches);
-                    }
-                }
-            }
-
-            if (palMatchArrowResult.Instance.IsVisible)
-            {
-                var service = new FlowArrowService(doc.Database, doc.Editor, useEditor: false);
-                service.Run(Properties.Settings.Default.taskFlowArrow, true, idsToProcess);
-
-                foreach (ObjectId oid in idsToProcess)
-                {
-                    if (palMatchArrowResult.Instance.CurrentProblems.ContainsKey(oid))
-                    {
-                        var problem = palMatchArrowResult.Instance.CurrentProblems[oid];
-                        if (problem.Type == ProblemType.OneToMany && !problem.IsFixed)
-                        {
-                            GraphicManager.DrawAuxiliaryLines(problem.PossibleMatches);
-                        }
                     }
                 }
             }
@@ -152,8 +135,8 @@ namespace process_pipeline.Utils
     }
 
     /// <summary>
-/// 统一管理 Unicode 图标（纯字符串，优雅无依赖）
-/// </summary>
+    /// 统一管理 Unicode 图标（纯字符串，优雅无依赖）
+    /// </summary>
     public static class IconUnicode
     {
         // 成功/完成
