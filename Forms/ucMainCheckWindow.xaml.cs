@@ -99,6 +99,9 @@ namespace process_pipeline.Forms
         {
             if (dgIssues == null) return;
 
+            dgIssues.Tag = null;
+            _vm.ContextTargetRow = null;
+
             DependencyObject dep = e.OriginalSource as DependencyObject;
             while (dep != null && !(dep is DataGridRow))
             {
@@ -137,11 +140,26 @@ namespace process_pipeline.Forms
                     }
                 }
             }
+            else
+            {
+                // 点击在表格空白处或表头时：保持菜单 DataContext 正确并刷新按钮可用性
+                if (dgIssues.ContextMenu != null)
+                {
+                    dgIssues.ContextMenu.DataContext = _vm;
+                }
+                _vm.SyncSelectedRowsFromGrid(syncCadSelection: false);
+            }
         }
 
         private void DataGrid_MouseDoubleClick(object sender, MouseButtonEventArgs e)
         {
-            _vm.ZoomToSelectedRow(isZoomTo: true);
+            // 仅当双击落在数据行上时才执行 CAD 定位，防止双击列宽分隔线、表头排序或滚动条时误触发
+            var (_, row) = VisualTree.GetRowContext(e.OriginalSource);
+            if (row != null && row.Item is PipeRowVm)
+            {
+                _vm.ZoomToSelectedRow(isZoomTo: true);
+                e.Handled = true;
+            }
         }
 
         private void DataGrid_LoadingRow(object sender, DataGridRowEventArgs e)
@@ -446,18 +464,22 @@ namespace process_pipeline.Forms
             {
                 foreach (var item in _grid.SelectedItems)
                 {
-                    if (item is PipeRowVm rowVm && !_selectedRows.Contains(rowVm))
+                    if (item is PipeRowVm rowVm && FilterRow(rowVm) && !_selectedRows.Contains(rowVm))
                     {
                         _selectedRows.Add(rowVm);
                     }
                 }
             }
 
-            if (_selectedRows.Count == 0 && _grid?.SelectedCells != null && _grid.SelectedCells.Count > 0)
+            if (_selectedRows.Count == 0 &&
+                _grid != null &&
+                _grid.SelectionUnit != DataGridSelectionUnit.FullRow &&
+                _grid.SelectedCells != null &&
+                _grid.SelectedCells.Count > 0)
             {
                 foreach (var cell in _grid.SelectedCells)
                 {
-                    if (cell.Item is PipeRowVm rowVm && !_selectedRows.Contains(rowVm))
+                    if (cell.Item is PipeRowVm rowVm && FilterRow(rowVm) && !_selectedRows.Contains(rowVm))
                     {
                         _selectedRows.Add(rowVm);
                     }
@@ -475,17 +497,21 @@ namespace process_pipeline.Forms
         }
 
         /// <summary>
-        /// 获取当前右键动作的目标行集合（优先使用表格多选集合，未多选时回退至右键落点行或当前焦点行）。
+        /// 获取当前右键动作的目标行集合（优先使用表格多选集合，未多选时回退至右键落点行或当前焦点行，并过滤已隐藏行）。
         /// </summary>
         public IReadOnlyList<PipeRowVm> GetActionTargetRows()
         {
             if (_selectedRows.Count > 0)
-                return _selectedRows;
+            {
+                var visibleSelected = _selectedRows.Where(r => FilterRow(r)).ToList();
+                if (visibleSelected.Count > 0)
+                    return visibleSelected;
+            }
 
-            if (ContextTargetRow != null)
+            if (ContextTargetRow != null && FilterRow(ContextTargetRow))
                 return new[] { ContextTargetRow };
 
-            if (SelectedRow != null)
+            if (SelectedRow != null && FilterRow(SelectedRow))
                 return new[] { SelectedRow };
 
             return Array.Empty<PipeRowVm>();
@@ -625,11 +651,37 @@ namespace process_pipeline.Forms
         }
 
         /// <summary>
-        /// 触发内存视图过滤刷新并同步底部状态栏记录数。
+        /// 触发内存视图过滤刷新，清理已被隐藏行的选中残留，并同步底部状态栏记录数与连续行号。
         /// </summary>
         public void RefreshFilter()
         {
             _rowsView?.Refresh();
+
+            if (ContextTargetRow != null && !FilterRow(ContextTargetRow))
+            {
+                ContextTargetRow = null;
+            }
+            if (SelectedRow != null && !FilterRow(SelectedRow))
+            {
+                SelectedRow = null;
+            }
+
+            if (_grid != null)
+            {
+                // 清理已被过滤隐藏的选中行，并异步刷新虚拟化可见行的连续行号（1, 2, 3...）
+                _grid.Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    for (int i = 0; i < _grid.Items.Count; i++)
+                    {
+                        if (_grid.ItemContainerGenerator.ContainerFromIndex(i) is DataGridRow rowContainer)
+                        {
+                            rowContainer.Header = (i + 1).ToString();
+                        }
+                    }
+                    SyncSelectedRowsFromGrid(syncCadSelection: false);
+                }), System.Windows.Threading.DispatcherPriority.Background);
+            }
+
             OnPropertyChanged(nameof(RowCountText));
         }
 
@@ -1018,10 +1070,11 @@ namespace process_pipeline.Forms
                                 ApplyIssueSnapshotToRow(targetRow, item.Snapshot, refreshTreeAndFilter: false);
                             }
                         }
+                        // 抑制由本操作自身事务引发的后台 Idle 二次重算，防止覆盖 Undo/Redo 恢复的精确快照
+                        PaletteRefreshManager.SuppressIds(restoredList.Select(x => x.CurveId));
                         UpdateTreeCounts();
                         RefreshFilter();
                     }
-                    PaletteRefreshManager.TriggerPaletteRefreshIfNeeded();
                 });
 
             ActiveUndoRedoManager.ExecuteOperation(op);
@@ -1192,45 +1245,50 @@ namespace process_pipeline.Forms
         public void OnImpliedSelectionChanged()
         {
             if (_isSyncingSelection) return;
+            if (_grid == null) return;
             var doc = AcadApp.DocumentManager.MdiActiveDocument;
             if (doc == null) return;
 
-            _isSyncingSelection = true;
-            try
+            _grid.Dispatcher.BeginInvoke(new Action(() =>
             {
-                var psr = doc.Editor.SelectImplied();
-                var matchedRows = new List<PipeRowVm>();
-                if (psr.Status == PromptStatus.OK && psr.Value != null)
+                if (_isSyncingSelection) return;
+                var activeDoc = AcadApp.DocumentManager.MdiActiveDocument;
+                if (activeDoc == null) return;
+
+                _isSyncingSelection = true;
+                try
                 {
-                    foreach (ObjectId id in psr.Value.GetObjectIds())
+                    var psr = activeDoc.Editor.SelectImplied();
+                    var matchedRows = new List<PipeRowVm>();
+                    if (psr.Status == PromptStatus.OK && psr.Value != null)
                     {
-                        if (_objectIdToRowMap.TryGetValue(id, out PipeRowVm matchedRow))
+                        foreach (ObjectId id in psr.Value.GetObjectIds())
                         {
-                            matchedRows.Add(matchedRow);
+                            if (_objectIdToRowMap.TryGetValue(id, out PipeRowVm matchedRow) && FilterRow(matchedRow))
+                            {
+                                matchedRows.Add(matchedRow);
+                            }
                         }
                     }
-                }
 
-                if (_grid != null)
-                {
                     _grid.SelectedItems.Clear();
                     foreach (PipeRowVm row in matchedRows)
                     {
                         _grid.SelectedItems.Add(row);
                     }
-                }
 
-                SelectedRow = matchedRows.FirstOrDefault();
-                SyncSelectedRowsFromGrid(syncCadSelection: false);
-            }
-            catch
-            {
-                // 忽略选择集瞬态读取异常
-            }
-            finally
-            {
-                _isSyncingSelection = false;
-            }
+                    SelectedRow = matchedRows.FirstOrDefault();
+                    SyncSelectedRowsFromGrid(syncCadSelection: false);
+                }
+                catch
+                {
+                    // 忽略选择集瞬态读取异常
+                }
+                finally
+                {
+                    _isSyncingSelection = false;
+                }
+            }), System.Windows.Threading.DispatcherPriority.Background);
         }
 
         private void OnImpliedSelectionChangedPlaceholder()

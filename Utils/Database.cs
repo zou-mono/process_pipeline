@@ -126,6 +126,23 @@ namespace process_pipeline.Utils
             }
         }
 
+        /// <summary>
+        /// 供面板内部已自行管理状态快照的事务操作（如 ReverseCurveOperation 执行与撤销）调用，
+        /// 从待刷新队列中移除这些 ObjectId，防止后台 Idle 增量重算覆盖 Undo/Redo 恢复的精确快照。
+        /// </summary>
+        public static void SuppressIds(IEnumerable<ObjectId> ids)
+        {
+            if (_changedObjectIds == null || ids == null) return;
+            foreach (ObjectId id in ids)
+            {
+                _changedObjectIds.Remove(id);
+            }
+            if (_changedObjectIds.Count == 0)
+            {
+                Application.Idle -= SafeRefreshPalette_Idle;
+            }
+        }
+
         // 数据库对象发生变化时的回调（极速执行）
         private void Db_ObjectChanged(object sender, ObjectEventArgs e)
         {
