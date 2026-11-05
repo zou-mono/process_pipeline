@@ -1,4 +1,4 @@
-﻿using Autodesk.AutoCAD.ApplicationServices;
+using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Runtime;
@@ -31,7 +31,7 @@ namespace Cad.Plugin
              */
 
             // A.dwg 文件路径：基准数据所在 DWG。
-            string dwgPath = @"D:\资料\部门内部文件\小工具\管线CAD\提资\勘测管.dwg";
+            string dwgPath = @"D:\Codes\Tools\process_pipeline\Data\勘测管.dwg";
 
             // A.dwg 中的基准图层。
             string targetLayer = "勘测管";

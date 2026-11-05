@@ -1,4 +1,4 @@
-﻿using Autodesk.AutoCAD.ApplicationServices;
+using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Geometry;
@@ -39,18 +39,19 @@ namespace process_pipeline.Tests.Cad.Plugin
              */
 
             // A.dwg 文件路径：基准数据所在 DWG。
-            string dwgAPath = @"D:\资料\部门内部文件\小工具\管线CAD\提资\上版数据.dwg";
+            string dwgAPath = @"D:\Codes\Tools\process_pipeline\Data\勘测管.dwg";
 
             // B.dwg 文件路径：待比较数据所在 DWG。
-            string dwgBPath = @"D:\资料\部门内部文件\小工具\管线CAD\提资\盐田初始.dwg";
+            string dwgBPath = @"D:\Codes\Tools\process_pipeline\Data\新版数据.dwg";
 
             // A.dwg 中的基准图层。
             //string baseLayer = "勘测管";
             string[] baseLayers = 
             {
+                "勘测管",
                 "0污水-规划新建",
                 "0污水-规划改建",
-                "0污水-待补测规划管",
+                "0污水-待补测现状管",
                 "0污水-已核实需新增"
             };
 

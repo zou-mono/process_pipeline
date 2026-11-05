@@ -1,4 +1,4 @@
-﻿using Autodesk.AutoCAD.ApplicationServices;
+using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.DatabaseServices.Filters;
 using Autodesk.AutoCAD.Geometry;
@@ -25,7 +25,7 @@ namespace process_pipeline.Tests.Cad.Plugin
         [CommandMethod("test_read_dwg")]
         public override void Execute()
         {
-            string file_path = @"D:\资料\部门内部文件\小工具\管线CAD\提资\勘测管.dwg";
+            string file_path = @"D:\Codes\Tools\process_pipeline\Data\勘测管.dwg";
             var doc = Application.DocumentManager.MdiActiveDocument;
             Database sideDb = new Database(false, true);
 

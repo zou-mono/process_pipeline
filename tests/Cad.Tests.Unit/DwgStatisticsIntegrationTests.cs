@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using Newtonsoft.Json;
@@ -10,7 +10,7 @@ namespace Cad.Tests.Unit
     [TestFixture]
     public class DwgStatisticsIntegrationTests
     {
-        private const string SampleDwgPath = @"D:\资料\部门内部文件\小工具\管线CAD\盐田初始.dwg";
+        private const string SampleDwgPath = @"D:\Codes\Tools\process_pipeline\Data\新版数据.dwg";
         private const string OutputPath = @"D:\temp\DwgStats.json";
 
         [Test]
