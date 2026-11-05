@@ -1,4 +1,4 @@
-﻿using Autodesk.AutoCAD.DatabaseServices;
+using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Runtime;
 using NetTopologySuite.Geometries;
@@ -21,7 +21,7 @@ namespace process_pipeline.Commands
         [CommandMethod("MatchPipe", CommandFlags.Session | CommandFlags.Redraw)]
         public override void Execute()
         {
-            var service = new ClearLayerService(Doc.Database, Doc.Editor);
+            var service = new MatchPipeService(Doc.Database, Doc.Editor);
             service.Run("匹配管道数据");
         }
     }
