@@ -1,4 +1,4 @@
 {
     "dotnet.defaultSolution": "process_pipeline.sln",
-    "dotnet.preferCSharpExtension": true
+    "dotnet.projects.enableFileBasedPrograms": false
 }

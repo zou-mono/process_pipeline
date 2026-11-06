@@ -1,4 +1,4 @@
-﻿using Autodesk.AutoCAD.ApplicationServices;
+using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Runtime;
@@ -200,7 +200,7 @@ namespace process_pipeline.Utils
                 //    appResources.MergedDictionaries.Add(new ResourceDictionary { Source = uri });
                 //}
 
-                // 强制唤醒配置类，立刻读取 Config.ini 并检查错误
+                // 强制唤醒配置类，立刻读取 Config.json 并检查错误
                 CadConfig.EnsureLoaded();
 
                 // ⭐ 1. 配置 NLog（仅执行一次，整个插件生命周期有效）

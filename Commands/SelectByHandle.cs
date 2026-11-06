@@ -1,4 +1,4 @@
-﻿using Autodesk.AutoCAD.ApplicationServices;
+using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Geometry;
@@ -21,7 +21,7 @@ namespace process_pipeline.Commands
         public override void Execute()
         {
             var service = new SelectByHandleService(Doc.Database, Doc.Editor);
-            service.Run("根据句柄值选择实体");
+            service.Run(CadConfig.TaskNames.SelectByHandle);
         }
     }
 

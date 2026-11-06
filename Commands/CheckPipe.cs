@@ -28,7 +28,7 @@ namespace process_pipeline.Commands
             };
 
             // 2. 启动引擎！
-            service.Run(Properties.Settings.Default.taskFlowArrow, false);
+            service.Run(CadConfig.TaskNames.CheckPipe, false);
         }
     }
 

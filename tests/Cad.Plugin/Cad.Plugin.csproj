@@ -5,6 +5,8 @@
     <RootNamespace>Cad.Plugin</RootNamespace>
     <AssemblyName>Cad.Plugin</AssemblyName>
     <TargetFramework>net472</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
     <Configurations>Debug;Release</Configurations>
     <Platforms>AnyCPU;x64</Platforms>
     <PlatformTarget>x64</PlatformTarget>

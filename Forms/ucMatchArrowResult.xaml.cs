@@ -1,4 +1,4 @@
-﻿using Autodesk.AutoCAD.ApplicationServices;
+using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using process_pipeline.Commands;
@@ -375,7 +375,7 @@ namespace process_pipeline.Forms
         {
             if (_doc == null) return;
             var service = new FlowArrowService(_doc.Database, _doc.Editor, useEditor: false);
-            service.Run(Properties.Settings.Default.taskFlowArrow, true);
+            service.Run(CadConfig.TaskNames.FlowArrow, true);
         }
 
         public void TryCopy(CopyFormat fmt)

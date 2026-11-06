@@ -92,7 +92,7 @@ namespace process_pipeline.Utils
             {
                 var session = DocumentSessionManager.GetOrCreateSession(doc.Database);
                 var service = new CheckPipeService(doc.Database, doc.Editor, session?.ActiveRule);
-                service.Run(Properties.Settings.Default.taskFlowArrow, true, idsToProcess);
+                service.Run(CadConfig.TaskNames.FlowArrow, true, idsToProcess);
 
                 foreach (ObjectId oid in idsToProcess)
                 {

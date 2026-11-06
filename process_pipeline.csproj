@@ -68,6 +68,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Xaml.Behaviors.Wpf" Version="1.1.142" />
     <PackageReference Include="NetTopologySuite" Version="2.6.0" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
     <PackageReference Include="NLog" Version="6.1.4" />
     <PackageReference Include="System.Buffers" Version="4.6.0" />
     <PackageReference Include="System.Memory" Version="4.6.0" />
@@ -96,8 +97,8 @@
     <Reference Include="System.Numerics" />
   </ItemGroup>
 
-  <!-- 6. 解决 VS Code C# 语言服务在 DesignTimeBuild=true 时跳过 WPF MarkupCompilePass1 导致 InitializeComponent 报红的问题 -->
-  <Target Name="IncludeWpfGeneratedFilesForDesignTime" BeforeTargets="CoreCompile" Condition="'$(DesignTimeBuild)' == 'true'">
+  <!-- 6. 解决 VS Code C# 语言服务在 DesignTimeBuild=true 且未执行 MarkupCompilePass1 时 InitializeComponent 报红的问题（若 MarkupCompilePass1 已生成 _GeneratedCodeFiles 则跳过，避免重复添加 .g.cs 导致 Roslyn 加载项目抛 ArgumentException） -->
+  <Target Name="IncludeWpfGeneratedFilesForDesignTime" BeforeTargets="CoreCompile" Condition="'$(DesignTimeBuild)' == 'true' and '@(_GeneratedCodeFiles)' == ''">
     <ItemGroup>
       <Compile Include="$(IntermediateOutputPath)**\*.g.cs" Exclude="@(Compile)" />
     </ItemGroup>

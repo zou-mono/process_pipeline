@@ -1,4 +1,4 @@
-﻿using Autodesk.AutoCAD.DatabaseServices;
+using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Runtime;
 using process_pipeline.Core;
@@ -23,7 +23,7 @@ namespace process_pipeline.Commands
         public override void Execute()
         {
             var service = new ReversePolylineService(Doc.Database, Doc.Editor);
-            service.Run(Properties.Settings.Default.taskRevPL);
+            service.Run(CadConfig.TaskNames.ReversePolyline);
         }
     }
 

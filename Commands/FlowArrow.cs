@@ -36,9 +36,9 @@ namespace process_pipeline.Commands
             // 1. 直接 new 服务，填参数
             var service = new FlowArrowService(Doc.Database, Doc.Editor, false)
             {
-                MaxBufferDistance = 50.0,
+                MaxBufferDistance = CadConfig.MaxBufferDistance,
                 ArrowLayerName = CadConfig.ArrowLayers,
-                AngleTolerance = 30.0,
+                AngleTolerance = CadConfig.AngleTolerance,
                 PipeLayerName = CadConfig.PipeLayers
             };
 
@@ -49,7 +49,7 @@ namespace process_pipeline.Commands
             {
                 session.ActiveRule = service;
             }
-            service.Run(Properties.Settings.Default.taskFlowArrow, false);
+            service.Run(CadConfig.TaskNames.FlowArrow, false);
         }
     }
 
