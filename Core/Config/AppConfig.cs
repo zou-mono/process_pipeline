@@ -371,6 +371,30 @@ namespace process_pipeline.Core.Config
         /// 管线文字标注与管线走向平行校验的角度容差（度）。
         /// </summary>
         public double TextAngleTolerance { get; set; } = 35.0;
+
+        /// <summary>
+        /// 属性块中表示“管线长度”的候选字段名（Tag）优先级列表（支持不同图纸模板的字段别名，匹配到首个有效正数即生效）。
+        /// </summary>
+        public List<string> LengthAttributeAliases { get; set; } = new List<string>
+        {
+            "LEN", "LENGTH", "PIPE_LEN", "管长", "长度", "CD"
+        };
+
+        /// <summary>
+        /// 属性块中表示“管径/断面宽度”的候选字段名（Tag）优先级列表。
+        /// </summary>
+        public List<string> WidthAttributeAliases { get; set; } = new List<string>
+        {
+            "WIDTH", "DN", "DIAMETER", "管径", "宽度", "GJ"
+        };
+
+        /// <summary>
+        /// 属性块中表示“断面高度（渠箱高度）”的候选字段名（Tag）优先级列表（兼容 GIS 模板拼写 HEITH 与标准 HEIGHT）。
+        /// </summary>
+        public List<string> HeightAttributeAliases { get; set; } = new List<string>
+        {
+            "HEITH", "HEIGHT", "高度", "GD"
+        };
     }
 
     public class PipeMergeSettings

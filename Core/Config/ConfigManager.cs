@@ -327,6 +327,33 @@ namespace process_pipeline.Core.Config
             if (config.Algorithms.ArrowMatch.AngleTolerance <= 0)
                 config.Algorithms.ArrowMatch.AngleTolerance = 30.0;
 
+            if (config.Algorithms.SpatialMatch.LengthAttributeAliases == null ||
+                config.Algorithms.SpatialMatch.LengthAttributeAliases.Count == 0)
+            {
+                config.Algorithms.SpatialMatch.LengthAttributeAliases = new List<string>
+                {
+                    "LEN", "LENGTH", "PIPE_LEN", "管长", "长度", "CD"
+                };
+            }
+
+            if (config.Algorithms.SpatialMatch.WidthAttributeAliases == null ||
+                config.Algorithms.SpatialMatch.WidthAttributeAliases.Count == 0)
+            {
+                config.Algorithms.SpatialMatch.WidthAttributeAliases = new List<string>
+                {
+                    "WIDTH", "DN", "DIAMETER", "管径", "宽度", "GJ"
+                };
+            }
+
+            if (config.Algorithms.SpatialMatch.HeightAttributeAliases == null ||
+                config.Algorithms.SpatialMatch.HeightAttributeAliases.Count == 0)
+            {
+                config.Algorithms.SpatialMatch.HeightAttributeAliases = new List<string>
+                {
+                    "HEITH", "HEIGHT", "高度", "GD"
+                };
+            }
+
             if (config.General.GripLimit <= 0)
                 config.General.GripLimit = 500;
         }

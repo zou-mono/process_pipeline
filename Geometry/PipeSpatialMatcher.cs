@@ -189,6 +189,30 @@ namespace process_pipeline.Geometry
         /// </summary>
         public bool UseXDataLinks { get; set; } = true;
 
+        /// <summary>
+        /// 属性块中表示“管线长度”的候选字段名（Tag）别名列表（默认从 Config.json 的 SpatialMatch.LengthAttributeAliases 读取）。
+        /// </summary>
+        public List<string> LengthAttributeAliases { get; set; } = new List<string>
+        {
+            "LEN", "LENGTH", "PIPE_LEN", "管长", "长度", "CD"
+        };
+
+        /// <summary>
+        /// 属性块中表示“管径/宽度”的候选字段名（Tag）别名列表。
+        /// </summary>
+        public List<string> WidthAttributeAliases { get; set; } = new List<string>
+        {
+            "WIDTH", "DN", "DIAMETER", "管径", "宽度", "GJ"
+        };
+
+        /// <summary>
+        /// 属性块中表示“断面高度”的候选字段名（Tag）别名列表（兼容 HEITH 与 HEIGHT）。
+        /// </summary>
+        public List<string> HeightAttributeAliases { get; set; } = new List<string>
+        {
+            "HEITH", "HEIGHT", "高度", "GD"
+        };
+
         public static PipeSpatialMatchOptions FromConfig()
         {
             var spatialCfg = CadConfig.Current?.Algorithms?.SpatialMatch;
@@ -201,7 +225,16 @@ namespace process_pipeline.Geometry
                 ExtentsCenterTolerance = spatialCfg.ExtentsCenterTolerance > 0 ? spatialCfg.ExtentsCenterTolerance : 1.5,
                 LengthMatchTolerance = spatialCfg.LengthTolerance > 0 ? spatialCfg.LengthTolerance : 1.5,
                 ParallelAngleToleranceDegrees = spatialCfg.TextAngleTolerance > 0 ? spatialCfg.TextAngleTolerance : 35.0,
-                AmbiguityDistanceMargin = 0.5
+                AmbiguityDistanceMargin = 0.5,
+                LengthAttributeAliases = spatialCfg.LengthAttributeAliases != null && spatialCfg.LengthAttributeAliases.Count > 0
+                    ? new List<string>(spatialCfg.LengthAttributeAliases)
+                    : new List<string> { "LEN", "LENGTH", "PIPE_LEN", "管长", "长度", "CD" },
+                WidthAttributeAliases = spatialCfg.WidthAttributeAliases != null && spatialCfg.WidthAttributeAliases.Count > 0
+                    ? new List<string>(spatialCfg.WidthAttributeAliases)
+                    : new List<string> { "WIDTH", "DN", "DIAMETER", "管径", "宽度", "GJ" },
+                HeightAttributeAliases = spatialCfg.HeightAttributeAliases != null && spatialCfg.HeightAttributeAliases.Count > 0
+                    ? new List<string>(spatialCfg.HeightAttributeAliases)
+                    : new List<string> { "HEITH", "HEIGHT", "高度", "GD" }
             };
         }
     }
@@ -297,7 +330,7 @@ namespace process_pipeline.Geometry
 
                     if (ent is BlockReference br && blockLayerSet.Contains(ent.Layer))
                     {
-                        SpatialAttachmentItem attItem = CreateAttachmentFromBlock(br, objId, tr);
+                        SpatialAttachmentItem attItem = CreateAttachmentFromBlock(br, objId, tr, options);
                         if (attItem != null)
                         {
                             attachmentsById[objId] = attItem;
@@ -860,25 +893,23 @@ namespace process_pipeline.Geometry
 
         /// <summary>
         /// 从 CAD BlockReference 构建空间配对附属要素对象。
+        /// 支持按 Config.json 中配置的字段别名列表（LengthAttributeAliases / WidthAttributeAliases / HeightAttributeAliases）
+        /// 动态解析管长 DeclaredLength 并归一化标准键名（LEN / WIDTH / HEITH）。
         /// </summary>
         public static SpatialAttachmentItem CreateAttachmentFromBlock(
             BlockReference br,
             ObjectId objId,
-            Transaction tr)
+            Transaction tr,
+            PipeSpatialMatchOptions options = null)
         {
             if (br == null)
                 return null;
 
-            Dictionary<string, object> attrs = GeometryHelper.CollectAttributeValuesFromBlockReference(br, tr);
-            double? declaredLen = null;
-            if (attrs != null && attrs.TryGetValue("LEN", out object lenObj) && lenObj != null)
-            {
-                if (double.TryParse(lenObj.ToString().Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out double parsedLen) &&
-                    parsedLen > 0)
-                {
-                    declaredLen = parsedLen;
-                }
-            }
+            Dictionary<string, object> attrs = GeometryHelper.CollectAttributeValuesFromBlockReference(br, tr)
+                ?? new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+
+            double? declaredLen = ResolveDeclaredLengthFromAttributes(attrs, options?.LengthAttributeAliases);
+            NormalizeCanonicalAttributeAliases(attrs, options);
 
             return new SpatialAttachmentItem
             {
@@ -889,9 +920,103 @@ namespace process_pipeline.Geometry
                 Position = br.Position,
                 RotationDegrees = (br.Rotation * 180.0 / Math.PI + 360.0) % 360.0,
                 DeclaredLength = declaredLen,
-                Attributes = attrs ?? new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase),
+                Attributes = attrs,
                 XDataLinkedPipeHandle = ReadLinkedHandleFromXData(br)
             };
+        }
+
+        /// <summary>
+        /// 按配置的候选管长字段别名优先级列表（如 LEN, LENGTH, PIPE_LEN, 管长, 长度, CD）提取并解析管线声明长度。
+        /// </summary>
+        public static double? ResolveDeclaredLengthFromAttributes(
+            IDictionary<string, object> attrs,
+            IEnumerable<string> lengthAliases = null)
+        {
+            if (attrs == null || attrs.Count == 0)
+                return null;
+
+            var aliases = lengthAliases ??
+                          CadConfig.Current?.Algorithms?.SpatialMatch?.LengthAttributeAliases ??
+                          (IEnumerable<string>)new[] { "LEN", "LENGTH", "PIPE_LEN", "管长", "长度", "CD" };
+
+            foreach (string alias in aliases)
+            {
+                if (string.IsNullOrWhiteSpace(alias))
+                    continue;
+
+                if (attrs.TryGetValue(alias.Trim(), out object rawVal) && rawVal != null)
+                {
+                    string text = rawVal.ToString().Trim();
+                    if (double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out double parsedLen) &&
+                        parsedLen > 0)
+                    {
+                        return parsedLen;
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// 当图纸属性块使用了非标准字段别名（如用 LENGTH 代替 LEN、用 HEIGHT 代替 HEITH、用 DN 代替 WIDTH）时，
+        /// 自动在属性字典中补齐标准键名（LEN / WIDTH / HEITH），保证下游合并与对比算法无缝读取。
+        /// </summary>
+        public static void NormalizeCanonicalAttributeAliases(
+            IDictionary<string, object> attrs,
+            PipeSpatialMatchOptions options = null)
+        {
+            if (attrs == null || attrs.Count == 0)
+                return;
+
+            var spatialCfg = CadConfig.Current?.Algorithms?.SpatialMatch;
+
+            if (!attrs.ContainsKey("LEN"))
+            {
+                var lenAliases = options?.LengthAttributeAliases ?? spatialCfg?.LengthAttributeAliases;
+                string matchedVal = FindFirstNonEmptyAttributeValue(attrs, lenAliases);
+                if (!string.IsNullOrWhiteSpace(matchedVal))
+                    attrs["LEN"] = matchedVal;
+            }
+
+            if (!attrs.ContainsKey("WIDTH"))
+            {
+                var widthAliases = options?.WidthAttributeAliases ?? spatialCfg?.WidthAttributeAliases;
+                string matchedVal = FindFirstNonEmptyAttributeValue(attrs, widthAliases);
+                if (!string.IsNullOrWhiteSpace(matchedVal))
+                    attrs["WIDTH"] = matchedVal;
+            }
+
+            if (!attrs.ContainsKey("HEITH"))
+            {
+                var heightAliases = options?.HeightAttributeAliases ?? spatialCfg?.HeightAttributeAliases;
+                string matchedVal = FindFirstNonEmptyAttributeValue(attrs, heightAliases);
+                if (!string.IsNullOrWhiteSpace(matchedVal))
+                    attrs["HEITH"] = matchedVal;
+            }
+        }
+
+        private static string FindFirstNonEmptyAttributeValue(
+            IDictionary<string, object> attrs,
+            IEnumerable<string> aliases)
+        {
+            if (attrs == null || aliases == null)
+                return null;
+
+            foreach (string alias in aliases)
+            {
+                if (string.IsNullOrWhiteSpace(alias))
+                    continue;
+
+                if (attrs.TryGetValue(alias.Trim(), out object val) && val != null)
+                {
+                    string str = val.ToString().Trim();
+                    if (!string.IsNullOrEmpty(str))
+                        return str;
+                }
+            }
+
+            return null;
         }
 
         /// <summary>

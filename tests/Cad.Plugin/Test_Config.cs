@@ -8,6 +8,7 @@ using NLog;
 using process_pipeline.Core;
 using process_pipeline.Core.Config;
 using process_pipeline.Core.DataSource;
+using process_pipeline.Geometry;
 using process_pipeline.Models;
 
 namespace Cad.Plugin
@@ -220,6 +221,28 @@ namespace Cad.Plugin
 
                     session.ClearAll();
                 }
+
+                // 验证 Config.json 中的属性字段别名列表（LengthAttributeAliases / WidthAttributeAliases / HeightAttributeAliases）与动态解析
+                var spatialMatchCfg = CadConfig.Algorithms.SpatialMatch;
+                AssertTrue(spatialMatchCfg.LengthAttributeAliases != null &&
+                           spatialMatchCfg.LengthAttributeAliases.Contains("LEN") &&
+                           spatialMatchCfg.LengthAttributeAliases.Contains("LENGTH") &&
+                           spatialMatchCfg.LengthAttributeAliases.Contains("管长"),
+                    $"Config.json 默认包含管长字段多别名配置 ({string.Join(", ", spatialMatchCfg.LengthAttributeAliases ?? new List<string>())})");
+
+                var customAliasAttrs = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["LENGTH"] = "128.65",
+                    ["DN"] = "600",
+                    ["HEIGHT"] = "2200"
+                };
+                double? resolvedLen = PipeSpatialMatcher.ResolveDeclaredLengthFromAttributes(customAliasAttrs);
+                PipeSpatialMatcher.NormalizeCanonicalAttributeAliases(customAliasAttrs);
+                AssertTrue(resolvedLen.HasValue && Math.Abs(resolvedLen.Value - 128.65) < 1e-6 &&
+                           Equals(customAliasAttrs["LEN"], "128.65") &&
+                           Equals(customAliasAttrs["WIDTH"], "600") &&
+                           Equals(customAliasAttrs["HEITH"], "2200"),
+                    "PipeSpatialMatcher 支持通过配置别名 (LENGTH/DN/HEIGHT) 动态解析管长并归一化补齐标准键名 (LEN/WIDTH/HEITH)");
             }
             finally
             {
