@@ -1,3 +1,4 @@
 {
-    "dotnet.defaultSolution": "process_pipeline.sln"
+    "dotnet.defaultSolution": "process_pipeline.sln",
+    "dotnet.preferCSharpExtension": true
 }

@@ -15,7 +15,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace process_pipeline.Tests.Cad.Plugin
+namespace Cad.Plugin
 {
     public class Test_Compare_Segment : CadCommandBase
     {

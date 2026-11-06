@@ -44,69 +44,19 @@
       "group": "build",
       "problemMatcher": "$msCompile"
     },
-    // {
-    //   "label": "build-main",
-    //   "type": "process",
-    //   "command": "C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\MSBuild\\Current\\Bin\\MSBuild.exe",
-    //   "args": [
-    //     "${workspaceFolder}\\process_pipeline.csproj",
-    //     "/p:Configuration=Debug",
-    //     "/p:Platform=x64",
-		// "/p:DebugType=portable",
-    //     "/m",
-		// "/v:minimal",
-    //     "/clp:Summary"
-    //   ],
-	  // "group": "build",
-    //   "problemMatcher": "$msCompile"
-    // },
-    // {
-    //   "label": "rebuild-main",
-    //   "type": "process",
-    //   "command": "C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\MSBuild\\Current\\Bin\\MSBuild.exe",
-    //   "args": [
-    //     "${workspaceFolder}\\process_pipeline.csproj",
-    //     "/t:Rebuild",
-    //     "/p:Configuration=Debug",
-    //     "/p:Platform=x64",
-		// "/p:DebugType=portable",
-    //     "/m",
-    //     "/v:minimal",
-    //     "/clp:Summary"
-    //   ],
-    //   "group": "build",
-    //   "problemMatcher": "$msCompile"
-    // },
-    // {
-    //   "label": "build-test-plugin",
-    //   "type": "process",
-    //   "command": "C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\MSBuild\\Current\\Bin\\MSBuild.exe",
-    //   "args": [
-    //     "${workspaceFolder}\\Tests\\Cad.Plugin\\Cad.Plugin.csproj",
-    //     "/p:Configuration=Debug",
-    //     "/p:Platform=x64",
-		// "/p:DebugType=portable",
-    //     "/m",
-    //     "/v:minimal"
-    //   ],
-    //   "group": "build",
-    //   "problemMatcher": "$msCompile"
-    // },
-    // {
-    //   "label": "clean-main",
-    //   "type": "process",
-    //   "command": "C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\MSBuild\\Current\\Bin\\MSBuild.exe",
-    //   "args": [
-    //     "${workspaceFolder}\\process_pipeline.csproj",
-    //     "/t:Clean",
-    //     "/p:Configuration=Debug",
-    //     "/p:Platform=x64",
-    //     "/m",
-    //     "/v:minimal",
-    //     "/clp:Summary"
-    //   ],
-    //   "group": "build",
-    //   "problemMatcher": "$msCompile"
-    // }
+    {
+      "label": "build-test-plugin",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "build",
+        "${workspaceFolder}\\Tests\\Cad.Plugin\\Cad.Plugin.csproj",
+        "-c",
+        "Debug",
+        "-p:Platform=x64"
+      ],
+      "group": "build",
+      "problemMatcher": "$msCompile"
+    }
   ]
 }

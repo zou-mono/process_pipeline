@@ -16,9 +16,9 @@ using System.Text;
 using System.Threading.Tasks;
 using NLog;
 
-namespace process_pipeline.Tests.Cad.Plugin
+namespace Cad.Plugin
 {
-    public class Test_read_dwg: CadCommandBase
+    public class Test_Read_Dwg : CadCommandBase
     {
         private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
 

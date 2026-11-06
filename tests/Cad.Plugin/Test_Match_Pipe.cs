@@ -16,9 +16,9 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace process_pipeline.Tests.Cad.Plugin
+namespace Cad.Plugin
 {
-    public class Test_Match_pipe : CadCommandBase
+    public class Test_Match_Pipe : CadCommandBase
     {
         private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
 

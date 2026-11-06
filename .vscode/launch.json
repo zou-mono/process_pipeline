@@ -7,7 +7,6 @@
         {
             "name": "1. 启动 AutoCAD 2019 (调试主插件)",
             "type": "clr",
-            
             "request": "launch",
             "preLaunchTask": "dotnet-build-main",
             "program": "C:\\Program Files\\Autodesk\\AutoCAD 2019\\acad.exe",
@@ -23,12 +22,16 @@
             "request": "launch",
             "preLaunchTask": "build-test-plugin",
             "program": "C:\\Program Files\\Autodesk\\AutoCAD 2019\\accoreconsole.exe",
+            "console": "integratedTerminal",
             "args": [
                 "/i",
-                "D:\\temp\\1.dwg",
+                "${workspaceFolder}\\Data\\新版数据.dwg",
                 "/s",
                 "${workspaceFolder}\\Tests\\Cad.Plugin\\load.scr"
             ],
+            "env": {
+                "CAD_TEST_CMD": "${input:cadTestCommand}"
+            },
             "cwd": "${workspaceFolder}\\Tests\\Cad.Plugin"
         },
         {
@@ -36,6 +39,22 @@
             "type": "clr",
             "request": "attach",
             "processName": "acad"
+        }
+    ],
+    "inputs": [
+        {
+            "id": "cadTestCommand",
+            "type": "pickString",
+            "description": "选择要调试执行的 Cad.Plugin 测试命令 (回车默认执行第一项)",
+            "options": [
+                "test_match_pipe",
+                "test_compare_segment",
+                "test_merge_polylines",
+                "test_read_dwg",
+                "test_dwg_stats",
+                "list"
+            ],
+            "default": "test_match_pipe"
         }
     ]
 }

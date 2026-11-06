@@ -14,7 +14,7 @@ namespace Cad.Plugin
 {
     public class Test_Merge_Polylines : CadCommandBase
     {
-        [CommandMethod("Test_Merge_Polylines")]
+        [CommandMethod("test_merge_polylines")]
         public override void Execute()
         {
             Document doc = Application.DocumentManager.MdiActiveDocument;

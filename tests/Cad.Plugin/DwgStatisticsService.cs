@@ -1,6 +1,5 @@
-﻿using System;
+using System;
 using Autodesk.AutoCAD.DatabaseServices;
-using process_pipeline.Tests.Cad.Plugin;
 
 namespace Cad.Plugin
 {

@@ -1,19 +1,23 @@
 using System.IO;
 using Newtonsoft.Json;
 using Autodesk.AutoCAD.Runtime;
+using process_pipeline.Core;
 
 namespace Cad.Plugin
 {
-    public class DwgStatisticsCommand
+    public class Test_Dwg_Stats : CadCommandBase
     {
-        [CommandMethod("RUN_DWG_STATS")]
-        public void RunDwgStats()
+        [CommandMethod("test_dwg_stats")]
+        public override void Execute()
         {
-            // 改成你自己的 DWG 路径
             string dwgPath = @"D:\Codes\Tools\process_pipeline\Data\新版数据.dwg";
-
-            // 输出给测试项目读取
             string outputPath = @"D:\temp\DwgStats.json";
+
+            string dir = Path.GetDirectoryName(outputPath);
+            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+            {
+                Directory.CreateDirectory(dir);
+            }
 
             var result = DwgStatisticsService.ReadAndCountByLayer(dwgPath);
             var json = JsonConvert.SerializeObject(result, Formatting.Indented);
