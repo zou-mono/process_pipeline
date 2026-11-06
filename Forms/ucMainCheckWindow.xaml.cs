@@ -2,6 +2,7 @@ using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using process_pipeline.Commands;
 using process_pipeline.Core;
+using process_pipeline.Geometry;
 using process_pipeline.Models;
 using process_pipeline.Themes;
 using process_pipeline.Utils;
@@ -79,6 +80,17 @@ namespace process_pipeline.Forms
             if (this.DataContext is MainCheckWindowViewModel viewModel)
             {
                 viewModel.UpdateFromIssues(data, isIncremental: true);
+            }
+        }
+
+        /// <summary>
+        /// 接收按唯一 IssueId 组织的核查问题列表进行全量或增量更新（Stage 2 Commit 2.3）。
+        /// </summary>
+        public void UpdateIssueItems(IEnumerable<CheckIssueItem> items, bool isIncremental = false)
+        {
+            if (this.DataContext is MainCheckWindowViewModel viewModel)
+            {
+                viewModel.UpdateFromIssueItems(items, isIncremental);
             }
         }
 
@@ -259,6 +271,8 @@ namespace process_pipeline.Forms
         private TreeNodeVm _selectedTreeNode;
         private readonly ICollectionView _rowsView;
         private readonly Dictionary<ObjectId, PipeRowVm> _objectIdToRowMap = new Dictionary<ObjectId, PipeRowVm>();
+        private readonly Dictionary<string, PipeRowVm> _issueIdToRowMap = new Dictionary<string, PipeRowVm>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<ObjectId, List<PipeRowVm>> _objectIdToRowsMap = new Dictionary<ObjectId, List<PipeRowVm>>();
         private Dictionary<ObjectId, CheckIssueItem> _currentIssues = new Dictionary<ObjectId, CheckIssueItem>();
         private DataGrid _grid;
         private PipeRowVm _selectedRow;
@@ -704,33 +718,86 @@ namespace process_pipeline.Forms
         }
 
         /// <summary>
-        /// 使用统一核查问题模型（CheckIssueItem）更新列表，支持全量刷新、单行就地增量更新与已修复（Commit 5.2）。
+        /// 使用统一核查问题模型（CheckIssueItem）更新列表，支持全量刷新、单行就地增量更新与已修复（Commit 5.2 & Stage 2 Commit 2.3）。
         /// 
         /// 设计说明：
         /// - 已修复（IssueReviewStatus.Resolved）的记录不再从 Rows 中物理删除，而是保留在集合中，
         ///   自动归档到对应核查类型的“已修复”节点下；仅当 CAD 图元被彻底 Erase 删除时才移除行。
+        /// - Stage 2 Commit 2.3：底层改由 <see cref="UpdateFromIssueItems"/> 按唯一 IssueId 索引驱动，
+        ///   支持同一根管线同时展示多条不同规则/不同折线段的问题，以及 TargetObjectId == ObjectId.Null 的缺失管段问题。
         /// </summary>
         public void UpdateFromIssues(Dictionary<ObjectId, CheckIssueItem> issues, bool isIncremental = false)
         {
             if (issues == null) return;
 
+            var activeSession = DocumentSessionManager.GetActiveSession();
+            if (!isIncremental && activeSession != null && activeSession.IssuesById.Count > issues.Count)
+            {
+                // 当会话中已通过 MergeRuleIssueItems 累积了多规则或同管线多子问题时，展示全部会话问题
+                UpdateFromIssueItems(activeSession.GetAllIssueItems(), isIncremental: false);
+                return;
+            }
+
+            int seq = 0;
+            var itemList = new List<CheckIssueItem>(issues.Count);
+            foreach (var kvp in issues)
+            {
+                if (kvp.Value == null) continue;
+                if (kvp.Value.TargetObjectId.IsNull && !kvp.Key.IsNull)
+                {
+                    kvp.Value.TargetObjectId = kvp.Key;
+                }
+                DocumentCheckSession.EnsureIssueId(kvp.Value, kvp.Value.RuleId, seq++);
+                itemList.Add(kvp.Value);
+            }
+
+            UpdateFromIssueItems(itemList, isIncremental);
+        }
+
+        /// <summary>
+        /// 按唯一 IssueId 列表更新核查表格（Stage 2 Commit 2.3，支持单管线多规则/多折线段并存及 ObjectId.Null 缺失管段问题）。
+        /// </summary>
+        public void UpdateFromIssueItems(IEnumerable<CheckIssueItem> issueItems, bool isIncremental = false)
+        {
+            if (issueItems == null) return;
+
+            var incomingList = issueItems.Where(x => x != null).ToList();
+
             if (!isIncremental)
             {
-                _currentIssues = new Dictionary<ObjectId, CheckIssueItem>(issues);
+                _currentIssues.Clear();
                 Rows.Clear();
                 _objectIdToRowMap.Clear();
+                _issueIdToRowMap.Clear();
+                _objectIdToRowsMap.Clear();
 
-                foreach (var kvp in issues)
+                int seq = 0;
+                foreach (CheckIssueItem issue in incomingList)
                 {
-                    CheckIssueItem issue = kvp.Value;
-                    if (issue == null || (!issue.TargetObjectId.IsNull && issue.TargetObjectId.IsErased))
+                    if (!issue.TargetObjectId.IsNull && issue.TargetObjectId.IsErased)
                         continue;
+
+                    string issueId = DocumentCheckSession.EnsureIssueId(issue, issue.RuleId, seq++);
+                    if (_issueIdToRowMap.TryGetValue(issueId, out PipeRowVm duplicateRow))
+                    {
+                        duplicateRow.ApplyFromIssue(issue);
+                        continue;
+                    }
 
                     var rowVm = new PipeRowVm(issue);
                     Rows.Add(rowVm);
+                    _issueIdToRowMap[issueId] = rowVm;
+
                     if (!issue.TargetObjectId.IsNull)
                     {
+                        _currentIssues[issue.TargetObjectId] = issue;
                         _objectIdToRowMap[issue.TargetObjectId] = rowVm;
+                        if (!_objectIdToRowsMap.TryGetValue(issue.TargetObjectId, out List<PipeRowVm> rowList))
+                        {
+                            rowList = new List<PipeRowVm>();
+                            _objectIdToRowsMap[issue.TargetObjectId] = rowList;
+                        }
+                        rowList.Add(rowVm);
                     }
                 }
 
@@ -739,35 +806,58 @@ namespace process_pipeline.Forms
             else
             {
                 bool hasNewRuleOrLayer = false;
-                foreach (var kvp in issues)
+                int seq = 0;
+                foreach (CheckIssueItem issue in incomingList)
                 {
-                    ObjectId targetId = kvp.Key;
-                    CheckIssueItem issue = kvp.Value;
-                    if (issue == null) continue;
-
-                    _currentIssues[targetId] = issue;
+                    ObjectId targetId = issue.TargetObjectId;
+                    string issueId = DocumentCheckSession.EnsureIssueId(issue, issue.RuleId, seq++);
                     bool isErased = !targetId.IsNull && targetId.IsErased;
 
-                    if (_objectIdToRowMap.TryGetValue(targetId, out PipeRowVm existingRow))
+                    if (!targetId.IsNull)
+                    {
+                        _currentIssues[targetId] = issue;
+                    }
+
+                    if (_issueIdToRowMap.TryGetValue(issueId, out PipeRowVm existingByIssueId))
                     {
                         if (isErased)
                         {
-                            Rows.Remove(existingRow);
-                            _objectIdToRowMap.Remove(targetId);
+                            RemoveRowInternal(existingByIssueId, issueId, targetId);
                         }
                         else
                         {
-                            // 单行就地刷新（若变为 Resolved，则自动归档至“已修复”节点）
-                            existingRow.ApplyFromIssue(issue);
+                            existingByIssueId.ApplyFromIssue(issue);
+                        }
+                    }
+                    else if (!targetId.IsNull &&
+                             _objectIdToRowMap.TryGetValue(targetId, out PipeRowVm existingByOid) &&
+                             string.Equals(existingByOid.SourceIssue?.RuleId, issue.RuleId, StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (isErased)
+                        {
+                            RemoveRowInternal(existingByOid, existingByOid.SourceIssue?.IssueId, targetId);
+                        }
+                        else
+                        {
+                            existingByOid.ApplyFromIssue(issue);
+                            _issueIdToRowMap[issueId] = existingByOid;
                         }
                     }
                     else if (!isErased)
                     {
                         var newRow = new PipeRowVm(issue);
                         Rows.Add(newRow);
+                        _issueIdToRowMap[issueId] = newRow;
+
                         if (!targetId.IsNull)
                         {
                             _objectIdToRowMap[targetId] = newRow;
+                            if (!_objectIdToRowsMap.TryGetValue(targetId, out List<PipeRowVm> rowList))
+                            {
+                                rowList = new List<PipeRowVm>();
+                                _objectIdToRowsMap[targetId] = rowList;
+                            }
+                            rowList.Add(newRow);
                         }
                         hasNewRuleOrLayer = true;
                     }
@@ -786,11 +876,51 @@ namespace process_pipeline.Forms
             var activeSession = DocumentSessionManager.GetActiveSession();
             if (activeSession != null)
             {
-                activeSession.CurrentIssues = new Dictionary<ObjectId, CheckIssueItem>(_currentIssues);
+                foreach (var kvp in _currentIssues)
+                {
+                    activeSession.CurrentIssues[kvp.Key] = kvp.Value;
+                }
+                foreach (var kvp in _issueIdToRowMap)
+                {
+                    if (kvp.Value?.SourceIssue != null)
+                    {
+                        activeSession.IssuesById[kvp.Key] = kvp.Value.SourceIssue;
+                    }
+                }
             }
 
             RefreshFilter();
             StatusText = $"已更新 {Rows.Count} 条核查记录";
+        }
+
+        private void RemoveRowInternal(PipeRowVm row, string issueId, ObjectId targetId)
+        {
+            if (row == null) return;
+            Rows.Remove(row);
+            if (!string.IsNullOrWhiteSpace(issueId))
+            {
+                _issueIdToRowMap.Remove(issueId);
+            }
+            if (!targetId.IsNull)
+            {
+                if (_objectIdToRowsMap.TryGetValue(targetId, out List<PipeRowVm> list) && list != null)
+                {
+                    list.Remove(row);
+                    if (list.Count == 0)
+                    {
+                        _objectIdToRowsMap.Remove(targetId);
+                        _objectIdToRowMap.Remove(targetId);
+                    }
+                    else
+                    {
+                        _objectIdToRowMap[targetId] = list[list.Count - 1];
+                    }
+                }
+                else
+                {
+                    _objectIdToRowMap.Remove(targetId);
+                }
+            }
         }
 
         /// <summary>
@@ -1125,10 +1255,16 @@ namespace process_pipeline.Forms
             if (row == null || snapshot == null) return;
 
             row.ApplyFromIssue(snapshot);
+            var activeSession = DocumentSessionManager.GetActiveSession();
+
+            if (!string.IsNullOrWhiteSpace(snapshot.IssueId) && activeSession != null)
+            {
+                activeSession.IssuesById[snapshot.IssueId] = snapshot;
+            }
+
             if (!snapshot.TargetObjectId.IsNull)
             {
                 _currentIssues[snapshot.TargetObjectId] = snapshot;
-                var activeSession = DocumentSessionManager.GetActiveSession();
                 if (activeSession != null)
                 {
                     activeSession.CurrentIssues[snapshot.TargetObjectId] = snapshot;
@@ -1152,7 +1288,8 @@ namespace process_pipeline.Forms
         }
 
         /// <summary>
-        /// 选中或缩放定位到当前选中行（单行或多行）对应的全部 CAD 实体，并按需绘制一对多瞬态辅助线（Commit 5.5）。
+        /// 选中或缩放定位到当前选中行（单行或多行）对应的全部 CAD 实体，并按需绘制一对多瞬态辅助线（Commit 5.5 & Stage 2 Commit 2.3）。
+        /// 当记录对应上版缺失管段（TargetObjectId == ObjectId.Null）但包含有效坐标时，支持直接按代表点坐标缩放 CAD 视口。
         /// </summary>
         public void ZoomToSelectedRow(bool isZoomTo)
         {
@@ -1172,7 +1309,30 @@ namespace process_pipeline.Forms
 
             if (validIds.Length == 0)
             {
-                StatusText = $"管线 [{targetRows[0].Id}] 为示例数据或未关联有效图元";
+                var firstWithLoc = targetRows.FirstOrDefault(r =>
+                    r?.SourceIssue != null &&
+                    (Math.Abs(r.SourceIssue.Location.X) > 1e-3 || Math.Abs(r.SourceIssue.Location.Y) > 1e-3));
+
+                if (isZoomTo && firstWithLoc != null)
+                {
+                    try
+                    {
+                        var loc = firstWithLoc.SourceIssue.Location;
+                        double halfSpan = 25.0;
+                        var ext = new Extents3d(
+                            new Autodesk.AutoCAD.Geometry.Point3d(loc.X - halfSpan, loc.Y - halfSpan, 0),
+                            new Autodesk.AutoCAD.Geometry.Point3d(loc.X + halfSpan, loc.Y + halfSpan, 0));
+                        doc.Editor.ZoomToExtents(ext);
+                        StatusText = $"已按坐标定位到缺失/外部记录 [{firstWithLoc.Id}] ({firstWithLoc.LocationText})";
+                        return;
+                    }
+                    catch
+                    {
+                        // 忽略视口缩放异常
+                    }
+                }
+
+                StatusText = $"管线 [{targetRows[0].Id}] 为示例数据或未关联当前图纸图元";
                 return;
             }
 
@@ -1264,9 +1424,22 @@ namespace process_pipeline.Forms
                     {
                         foreach (ObjectId id in psr.Value.GetObjectIds())
                         {
-                            if (_objectIdToRowMap.TryGetValue(id, out PipeRowVm matchedRow) && FilterRow(matchedRow))
+                            if (_objectIdToRowsMap.TryGetValue(id, out List<PipeRowVm> rowsForId) && rowsForId != null)
                             {
-                                matchedRows.Add(matchedRow);
+                                foreach (PipeRowVm row in rowsForId)
+                                {
+                                    if (FilterRow(row) && !matchedRows.Contains(row))
+                                    {
+                                        matchedRows.Add(row);
+                                    }
+                                }
+                            }
+                            else if (_objectIdToRowMap.TryGetValue(id, out PipeRowVm matchedRow) && FilterRow(matchedRow))
+                            {
+                                if (!matchedRows.Contains(matchedRow))
+                                {
+                                    matchedRows.Add(matchedRow);
+                                }
                             }
                         }
                     }
@@ -1698,7 +1871,14 @@ namespace process_pipeline.Forms
         {
             if (newDoc?.Database == null) return;
             var session = DocumentSessionManager.GetOrCreateSession(newDoc.Database);
-            UpdateData(session?.CurrentIssues ?? new Dictionary<ObjectId, CheckIssueItem>());
+            if (session != null && session.IssuesById.Count > 0)
+            {
+                UpdateIssueItems(session.GetAllIssueItems(), isIncremental: false);
+            }
+            else
+            {
+                UpdateData(session?.CurrentIssues ?? new Dictionary<ObjectId, CheckIssueItem>());
+            }
         }
 
         /// <summary>
@@ -1716,6 +1896,37 @@ namespace process_pipeline.Forms
             {
                 _currentControl.UpdateIncrementalData(incrementalData);
             }
+        }
+
+        /// <summary>
+        /// 按唯一 IssueId 列表更新面板数据（支持单管线多规则/多折线段并存及 ObjectId.Null 缺失问题，Stage 2 Commit 2.3）。
+        /// </summary>
+        public void UpdateIssueItems(IEnumerable<CheckIssueItem> items, bool isIncremental = false)
+        {
+            if (items == null) return;
+            if (_currentControl == null)
+            {
+                Show(new Dictionary<ObjectId, CheckIssueItem>());
+            }
+            if (_currentControl == null) return;
+
+            if (!_currentControl.Dispatcher.CheckAccess())
+            {
+                _currentControl.Dispatcher.Invoke(() => _currentControl.UpdateIssueItems(items, isIncremental));
+            }
+            else
+            {
+                _currentControl.UpdateIssueItems(items, isIncremental);
+            }
+        }
+
+        /// <summary>
+        /// 打开核查主面板并按唯一 IssueId 列表展示核查结果（Stage 2 Commit 2.3）。
+        /// </summary>
+        public void ShowIssueItems(IEnumerable<CheckIssueItem> items)
+        {
+            Show(new Dictionary<ObjectId, CheckIssueItem>());
+            UpdateIssueItems(items, isIncremental: false);
         }
 
         public override void RefreshData()

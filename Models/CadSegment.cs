@@ -1,4 +1,4 @@
-﻿using Autodesk.AutoCAD.DatabaseServices;
+using Autodesk.AutoCAD.DatabaseServices;
 using NetTopologySuite.Geometries;
 using System;
 using System.Collections.Generic;
@@ -42,6 +42,14 @@ namespace process_pipeline.Models
         /// 2. 放入 STRtree 空间索引。
         /// </summary>
         public LineString Geometry { get; set; }
+
+        /// <summary>
+        /// 线段的二维外包框（优先取 Geometry.EnvelopeInternal，回退至 Start/End 构造）。
+        /// </summary>
+        public Envelope Envelope =>
+            Geometry != null
+                ? Geometry.EnvelopeInternal
+                : (Start != null && End != null ? new Envelope(Start, End) : null);
 
         /// <summary>
         /// 当前 segment 来源的 CAD 对象 ID 集合。

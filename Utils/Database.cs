@@ -161,21 +161,62 @@ namespace process_pipeline.Utils
             RecordIfTargetObject(e.DBObject);
         }
 
-        // 委托给当前文档会话的 ICheckRule.GetAffectedTargetIds 计算受影响的目标管线 ID
+        // 委托给当前文档会话的所有已激活 ICheckRule.GetAffectedTargetIds 计算受影响的目标管线 ID，
+        // 并在监听到【上版数据】图层或 Group 发生增删改时自动标记 DatasetContext 上版数据缓存失效（Stage 2 Commit 2.3）
         private void RecordIfTargetObject(DBObject obj)
         {
             if (obj == null) return;
 
             _changedObjectIds = _changedObjectIds ?? new HashSet<ObjectId>();
 
-            var rule = DocumentSessionManager.GetOrCreateSession(_currentDb)?.ActiveRule ?? _activeRule;
-            if (rule == null) return;
-
-            foreach (ObjectId targetId in rule.GetAffectedTargetIds(obj))
+            var session = DocumentSessionManager.GetOrCreateSession(_currentDb);
+            if (session != null)
             {
-                if (!targetId.IsNull)
+                if (obj is Group)
                 {
-                    _changedObjectIds.Add(targetId);
+                    session.DatasetContext.InvalidatePreviousData();
+                }
+                else if (obj is Entity ent && !string.IsNullOrWhiteSpace(ent.Layer))
+                {
+                    var prevPipeLayers = CadConfig.PreviousData.PipeLayers;
+                    var prevAttrLayers = CadConfig.PreviousData.AttributeLayers;
+                    bool isPrevPipe = prevPipeLayers != null &&
+                                      prevPipeLayers.Any(l => string.Equals(l, ent.Layer, StringComparison.OrdinalIgnoreCase));
+                    bool isPrevAttr = prevAttrLayers != null &&
+                                      prevAttrLayers.Any(l => string.Equals(l, ent.Layer, StringComparison.OrdinalIgnoreCase));
+
+                    if (isPrevPipe || isPrevAttr)
+                    {
+                        session.DatasetContext.InvalidatePreviousData();
+                    }
+                }
+            }
+
+            var rulesToQuery = new List<ICheckRule>();
+            if (session?.ActiveRules != null && session.ActiveRules.Count > 0)
+            {
+                rulesToQuery.AddRange(session.ActiveRules.Values.Where(r => r != null));
+            }
+            else
+            {
+                var fallbackRule = session?.ActiveRule ?? _activeRule;
+                if (fallbackRule != null)
+                {
+                    rulesToQuery.Add(fallbackRule);
+                }
+            }
+
+            foreach (ICheckRule rule in rulesToQuery)
+            {
+                var affected = rule.GetAffectedTargetIds(obj);
+                if (affected == null) continue;
+
+                foreach (ObjectId targetId in affected)
+                {
+                    if (!targetId.IsNull)
+                    {
+                        _changedObjectIds.Add(targetId);
+                    }
                 }
             }
         }

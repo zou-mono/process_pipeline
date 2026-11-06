@@ -91,18 +91,40 @@ namespace process_pipeline.Utils
             if (palCheckPipe.Instance.IsVisible)
             {
                 var session = DocumentSessionManager.GetOrCreateSession(doc.Database);
-                var service = new CheckPipeService(doc.Database, doc.Editor, session?.ActiveRule);
-                service.Run(CadConfig.TaskNames.FlowArrow, true, idsToProcess);
+                if (session?.ActiveRules != null && session.ActiveRules.Count > 1)
+                {
+                    foreach (ICheckRule activeRule in session.ActiveRules.Values.ToList())
+                    {
+                        if (activeRule == null) continue;
+                        var service = new CheckPipeService(doc.Database, doc.Editor, activeRule);
+                        service.Run(activeRule.RuleName ?? CadConfig.TaskNames.FlowArrow, true, idsToProcess);
+                    }
+                }
+                else
+                {
+                    var service = new CheckPipeService(doc.Database, doc.Editor, session?.ActiveRule);
+                    service.Run(CadConfig.TaskNames.FlowArrow, true, idsToProcess);
+                }
 
                 foreach (ObjectId oid in idsToProcess)
                 {
-                    if (palCheckPipe.Instance.CurrentIssues.TryGetValue(oid, out var issue) &&
-                        issue != null &&
-                        issue.Type == ProblemType.OneToMany &&
-                        issue.Status != IssueReviewStatus.Resolved &&
-                        issue.PossibleMatches != null)
+                    var issuesForOid = session != null
+                        ? session.GetIssuesByObjectId(oid)
+                        : (palCheckPipe.Instance.CurrentIssues.TryGetValue(oid, out var singleIssue) && singleIssue != null
+                            ? (IReadOnlyList<CheckIssueItem>)new[] { singleIssue }
+                            : Array.Empty<CheckIssueItem>());
+
+                    foreach (CheckIssueItem issue in issuesForOid)
                     {
-                        GraphicManager.DrawAuxiliaryLines(issue.PossibleMatches);
+                        if (issue != null &&
+                            issue.Type == ProblemType.OneToMany &&
+                            issue.Status != IssueReviewStatus.Resolved &&
+                            issue.PossibleMatches != null &&
+                            issue.PossibleMatches.Count > 0)
+                        {
+                            GraphicManager.DrawAuxiliaryLines(issue.PossibleMatches);
+                            break;
+                        }
                     }
                 }
             }

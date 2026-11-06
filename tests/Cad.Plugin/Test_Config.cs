@@ -1,10 +1,14 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Runtime;
 using NLog;
 using process_pipeline.Core;
 using process_pipeline.Core.Config;
+using process_pipeline.Core.DataSource;
+using process_pipeline.Models;
 
 namespace Cad.Plugin
 {
@@ -134,6 +138,88 @@ namespace Cad.Plugin
 
                 AssertTrue(ConfigManager.LastLoadHadError, $"检测到 ArrowLayers 为空并触发自愈 (错误信息: {ConfigManager.LastErrorMessage})");
                 AssertTrue(CadConfig.ArrowLayers.Count == 2, $"自愈后 ArrowLayers 恢复为 2 个默认图层 (实际={CadConfig.ArrowLayers.Count})");
+
+                // ====================================================================
+                // 场景 5：验证 DocumentCheckSession 多规则/多子问题并存与 DataSourceService 智能数据源探测（Commit 2.3）
+                // ====================================================================
+                Logger.Info("--- 场景 5：验证 DocumentCheckSession IssueId 索引与 DataSourceService 三级探测 ---");
+                if (Db != null)
+                {
+                    var session = DocumentSessionManager.GetOrCreateSession(Db);
+                    session.ClearAll();
+
+                    // 模拟同一根管线（或无 ObjectId 的缺失管段）在多个规则下产生多条问题
+                    var arrowIssue = new CheckIssueItem
+                    {
+                        IssueId = "FlowArrow:18F:0",
+                        RuleId = "FlowArrow",
+                        RuleName = "流向箭头核查",
+                        TargetHandle = "18F",
+                        TargetObjectId = Db.BlockTableId, // 借用非空有效 ObjectId 模拟同一管线实体
+                        Description = "流向冲突"
+                    };
+                    var segIssues = new List<CheckIssueItem>
+                    {
+                        new CheckIssueItem
+                        {
+                            IssueId = "CompareSegment:18F:0",
+                            RuleId = "CompareSegment",
+                            RuleName = "折线段对比",
+                            TargetHandle = "18F",
+                            TargetObjectId = Db.BlockTableId,
+                            Description = "折线段 0 偏移"
+                        },
+                        new CheckIssueItem
+                        {
+                            IssueId = "CompareSegment:18F:1",
+                            RuleId = "CompareSegment",
+                            RuleName = "折线段对比",
+                            TargetHandle = "18F",
+                            TargetObjectId = Db.BlockTableId,
+                            Description = "折线段 1 未覆盖"
+                        },
+                        new CheckIssueItem
+                        {
+                            IssueId = "CompareSegment:PREV_2A1:0",
+                            RuleId = "CompareSegment",
+                            RuleName = "折线段对比",
+                            TargetHandle = "PREV_2A1",
+                            TargetObjectId = ObjectId.Null,
+                            Description = "上版管段缺失"
+                        }
+                    };
+
+                    session.MergeRuleIssueItems("FlowArrow", new[] { arrowIssue }, isIncremental: false);
+                    session.MergeRuleIssueItems("CompareSegment", segIssues, isIncremental: false);
+
+                    AssertTrue(session.IssuesById.Count == 4,
+                        $"DocumentCheckSession.IssuesById 支持同管线多规则/多折线段及 ObjectId.Null 问题并存 (预期=4, 实际={session.IssuesById.Count})");
+                    var byOid = session.GetIssuesByObjectId(Db.BlockTableId);
+                    AssertTrue(byOid.Count == 3,
+                        $"ObjectIdToIssueIds 二级索引可准确反查同一 ObjectId 下的 3 条跨规则/多折线段问题 (实际={byOid.Count})");
+
+                    // 测试 DataSourceService 对新版数据.dwg 的探测（新版数据含 2 个残留块参照，不应误判为已合图的上版数据）
+                    string planDwgPath = @"D:\Codes\Tools\process_pipeline\Data\新版数据.dwg";
+                    if (File.Exists(planDwgPath))
+                    {
+                        using (var planSideDb = new Database(false, true))
+                        {
+                            planSideDb.ReadDwgFile(planDwgPath, FileOpenMode.OpenForReadAndAllShare, true, "");
+                            planSideDb.CloseInput(true);
+
+                            var dsService = new DataSourceService();
+                            var prevDesc = dsService.ResolvePreviousDataSource(planSideDb);
+                            var surveyDesc = dsService.ResolveSurveyDataSource(planSideDb);
+
+                            AssertTrue(prevDesc.IsValid && prevDesc.Kind == DataSourceKind.ExternalDwgFile,
+                                $"DataSourceService 未将新版数据中的残留图层误判为同图数据，正确解析外部上版数据 ({prevDesc.DisplayName})");
+                            AssertTrue(surveyDesc.IsValid && surveyDesc.Kind == DataSourceKind.ExternalDwgFile,
+                                $"DataSourceService 正确解析外部勘测数据 ({surveyDesc.DisplayName})");
+                        }
+                    }
+
+                    session.ClearAll();
+                }
             }
             finally
             {

@@ -1,16 +1,18 @@
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
+using process_pipeline.Core.DataSource;
 using process_pipeline.Models;
 using process_pipeline.Utils;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using AcadApp = Autodesk.AutoCAD.ApplicationServices.Application;
 using AcadDb = Autodesk.AutoCAD.DatabaseServices;
 
 namespace process_pipeline.Core
 {
     /// <summary>
-    /// 单文档核查会话容器（Commit 3.2）。
+    /// 单文档核查会话容器（Commit 3.2 & Stage 2 Commit 2.3）。
     /// 
     /// 架构设计说明：
     /// 1. 为什么需要按 Document / Database 隔离会话状态：
@@ -19,25 +21,46 @@ namespace process_pipeline.Core
     ///    全局 static 字典会导致：
     ///    - 多张图纸同时打开时，不同图纸的 ObjectId 混杂在同一字典中造成拓扑串扰；
     ///    - 在两个 DWG 标签页之间来回切换时，箭头缓存被迫清空重建，且上一张图纸的人工核查状态丢失。
-    /// 2. 本类将单张图纸的：
-    ///    - 当前核查问题字典（CurrentIssues，含人工判读状态）
-    ///    - 箭头空间缓存（ArrowCache / IsArrowCacheInitialized）
-    ///    - 箭头与管线的双向拓扑映射（ArrowToPipes / PipeToArrows）
-    ///    - 当前激活的核查规则实例（ActiveRule）
-    ///    全部收拢到与 Database 一一绑定的会话实例中，随文档销毁自动释放。
+    /// 2. Stage 2 Commit 2.3 架构增强：
+    ///    - 引入 <see cref="IssuesById"/>（以 IssueId "{RuleId}:{TargetHandle}:{SubIndex}" 为主键）与
+    ///      <see cref="ObjectIdToIssueIds"/> 二级索引，彻底解决同一根管线在多核查规则（流向箭头、规划自检、管段匹配、折线段对比）
+    ///      或多子折线段下因单一 ObjectId 字典键冲突导致的互相覆盖问题，同时支持 ObjectId.Null 的“上版缺失管段”问题存储；
+    ///    - 引入 <see cref="ActiveRules"/> 多规则集合，支持单次会话同时挂载并增量监听多个核查规则；
+    ///    - 引入 <see cref="DatasetContext"/>（<see cref="PipeDatasetContext"/>），统一承载规划富化属性、可编辑上版数据动态缓存与只读勘测数据静态缓存。
     /// </summary>
     public class DocumentCheckSession
     {
+        private ICheckRule _activeRule;
+
         /// <summary>
         /// 当前会话绑定的 CAD 数据库实例。
         /// </summary>
         public AcadDb.Database Db { get; }
 
         /// <summary>
-        /// 当前文档的核查问题字典（ObjectId -> CheckIssueItem），包含人工判读状态与备注。
+        /// 当前文档的核查问题字典（ObjectId -> CheckIssueItem），保留用于向后兼容单规则按 ObjectId 索引的调用方。
         /// </summary>
         public Dictionary<ObjectId, CheckIssueItem> CurrentIssues { get; set; } =
             new Dictionary<ObjectId, CheckIssueItem>();
+
+        /// <summary>
+        /// 按全局唯一 IssueId（格式："{RuleId}:{TargetHandle}:{SubIndex}"）索引的主问题字典（Stage 2 Commit 2.3）。
+        /// 支持同一管线挂载多条不同规则/不同折线段的问题，以及 TargetObjectId == ObjectId.Null 的缺失管段问题。
+        /// </summary>
+        public Dictionary<string, CheckIssueItem> IssuesById { get; } =
+            new Dictionary<string, CheckIssueItem>(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// CAD 实体 ObjectId -> 关联的 IssueId 列表二级索引（Stage 2 Commit 2.3），
+        /// 供图面点选联动与局部增量刷新 O(1) 反查该管线上的全部核查问题。
+        /// </summary>
+        public Dictionary<ObjectId, List<string>> ObjectIdToIssueIds { get; } =
+            new Dictionary<ObjectId, List<string>>();
+
+        /// <summary>
+        /// 当前文档的三方管线数据集上下文（规划富化属性 + 可编辑上版数据动态缓存 + 只读勘测数据静态缓存）。
+        /// </summary>
+        public PipeDatasetContext DatasetContext { get; } = new PipeDatasetContext();
 
         /// <summary>
         /// 当前文档的流向箭头空间缓存（Arrow ObjectId -> ArrowCacheInfo）。
@@ -63,9 +86,35 @@ namespace process_pipeline.Core
             new Dictionary<ObjectId, HashSet<ObjectId>>();
 
         /// <summary>
-        /// 当前文档正在使用的核查规则（供增量刷新调度器直接复用）。
+        /// 当前文档已注册激活的核查规则集合（RuleId -> ICheckRule，Stage 2 Commit 2.3）。
         /// </summary>
-        public ICheckRule ActiveRule { get; set; }
+        public Dictionary<string, ICheckRule> ActiveRules { get; } =
+            new Dictionary<string, ICheckRule>(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// 当前文档正在使用的最近主核查规则（兼容旧调用方；设置时自动注册进 <see cref="ActiveRules"/>）。
+        /// </summary>
+        public ICheckRule ActiveRule
+        {
+            get => _activeRule;
+            set
+            {
+                _activeRule = value;
+                if (value != null && !string.IsNullOrWhiteSpace(value.RuleId))
+                {
+                    ActiveRules[value.RuleId] = value;
+                }
+            }
+        }
+
+        /// <summary>
+        /// 注册并激活一个核查规则实例。
+        /// </summary>
+        public void RegisterActiveRule(ICheckRule rule)
+        {
+            if (rule == null) return;
+            ActiveRule = rule;
+        }
 
         /// <summary>
         /// 当前文档专属的混合撤销/重做管理器（Commit 4.1）。
@@ -78,13 +127,120 @@ namespace process_pipeline.Core
         }
 
         /// <summary>
-        /// 按核查规则 ID 合并更新当前文档会话的问题集合（Commit 5.1）。
-        /// 
-        /// 设计说明：
-        /// 当核查员在同一张图纸上先后执行不同核查命令（如先执行流向箭头核查，后执行管段匹配核查）时：
-        /// - 全量模式（isIncremental = false）：仅清理并替换属于当前 ruleId 的旧记录（同时保留人工已标记为“已忽略/已修复”的判读状态），
-        ///   而不会冲掉其他核查规则（其他 RuleId）已经产出的结果；
-        /// - 增量模式（isIncremental = true）：仅就地更新本次受影响的 ObjectId 记录。
+        /// 确保核查问题项具备合法的唯一 IssueId。
+        /// </summary>
+        public static string EnsureIssueId(CheckIssueItem item, string fallbackRuleId = null, int subIndex = 0)
+        {
+            if (item == null)
+                return string.Empty;
+
+            if (!string.IsNullOrWhiteSpace(item.IssueId))
+                return item.IssueId;
+
+            string rId = !string.IsNullOrWhiteSpace(item.RuleId)
+                ? item.RuleId
+                : (!string.IsNullOrWhiteSpace(fallbackRuleId) ? fallbackRuleId : "General");
+
+            string handle = !string.IsNullOrWhiteSpace(item.TargetHandle)
+                ? item.TargetHandle
+                : (!item.TargetObjectId.IsNull && item.TargetObjectId.IsValid
+                    ? item.TargetObjectId.Handle.ToString()
+                    : "NULL");
+
+            item.IssueId = $"{rId}:{handle}:{subIndex}";
+            return item.IssueId;
+        }
+
+        /// <summary>
+        /// 按核查规则 ID 合并更新当前文档会话的问题集合（支持同一 ObjectId 多条问题及 ObjectId.Null 缺失问题，Stage 2 Commit 2.3）。
+        /// </summary>
+        public IReadOnlyList<CheckIssueItem> MergeRuleIssueItems(
+            string ruleId,
+            IEnumerable<CheckIssueItem> ruleIssues,
+            bool isIncremental = false,
+            IEnumerable<ObjectId> incrementalTargetIds = null)
+        {
+            if (CurrentIssues == null)
+            {
+                CurrentIssues = new Dictionary<ObjectId, CheckIssueItem>();
+            }
+
+            if (ruleIssues == null)
+                return GetAllIssueItems();
+
+            var incomingList = ruleIssues.Where(x => x != null).ToList();
+
+            if (!isIncremental && !string.IsNullOrWhiteSpace(ruleId))
+            {
+                // 1. 收集属于当前规则的旧记录（用于保留 Ignored 状态与人工备注）
+                var existingSameRuleById = new Dictionary<string, CheckIssueItem>(StringComparer.OrdinalIgnoreCase);
+                var issueIdsToRemove = new List<string>();
+
+                foreach (var kvp in IssuesById)
+                {
+                    if (kvp.Value != null && string.Equals(kvp.Value.RuleId, ruleId, StringComparison.OrdinalIgnoreCase))
+                    {
+                        existingSameRuleById[kvp.Key] = kvp.Value;
+                        issueIdsToRemove.Add(kvp.Key);
+                    }
+                }
+
+                foreach (string idToRemove in issueIdsToRemove)
+                {
+                    RemoveIssueByIdInternal(idToRemove);
+                }
+
+                var currentKeysToRemove = CurrentIssues
+                    .Where(kvp => kvp.Value != null && string.Equals(kvp.Value.RuleId, ruleId, StringComparison.OrdinalIgnoreCase))
+                    .Select(kvp => kvp.Key)
+                    .ToList();
+                foreach (ObjectId oid in currentKeysToRemove)
+                {
+                    CurrentIssues.Remove(oid);
+                }
+
+                // 2. 写入当前规则的新问题并继承人工忽略状态
+                int seq = 0;
+                foreach (CheckIssueItem item in incomingList)
+                {
+                    if (string.IsNullOrWhiteSpace(item.RuleId) && !string.IsNullOrWhiteSpace(ruleId))
+                    {
+                        item.RuleId = ruleId;
+                    }
+
+                    string issueId = EnsureIssueId(item, ruleId, seq++);
+                    if (existingSameRuleById.TryGetValue(issueId, out var oldItem) &&
+                        oldItem != null &&
+                        oldItem.Status == IssueReviewStatus.Ignored &&
+                        item.Status == IssueReviewStatus.Pending)
+                    {
+                        item.Status = IssueReviewStatus.Ignored;
+                        item.Remark = oldItem.Remark;
+                    }
+
+                    UpsertIssueInternal(item);
+                }
+            }
+            else
+            {
+                // 增量模式：若指定了受影响的管线 ObjectId 集合，可先清理这些 ObjectId 在本规则下的旧子问题（保留 Resolved/Ignored 或被新结果替换）
+                int seq = 0;
+                foreach (CheckIssueItem item in incomingList)
+                {
+                    if (string.IsNullOrWhiteSpace(item.RuleId) && !string.IsNullOrWhiteSpace(ruleId))
+                    {
+                        item.RuleId = ruleId;
+                    }
+                    EnsureIssueId(item, ruleId, seq++);
+                    UpsertIssueInternal(item);
+                }
+            }
+
+            return GetAllIssueItems();
+        }
+
+        /// <summary>
+        /// 按核查规则 ID 合并更新当前文档会话的问题字典（兼容以 ObjectId 为键的旧调用方，同时同步更新 IssuesById 与二级索引）。
         /// </summary>
         public Dictionary<ObjectId, CheckIssueItem> MergeRuleIssues(
             string ruleId,
@@ -99,54 +255,125 @@ namespace process_pipeline.Core
             if (ruleIssues == null)
                 return CurrentIssues;
 
-            if (!isIncremental && !string.IsNullOrWhiteSpace(ruleId))
+            foreach (var kvp in ruleIssues)
             {
-                // 收集属于当前规则但需保留人工判读状态（Ignored / Resolved）的旧记录
-                var existingSameRule = new Dictionary<ObjectId, CheckIssueItem>();
-                var keysToRemove = new List<ObjectId>();
-                foreach (var kvp in CurrentIssues)
+                if (kvp.Value != null && kvp.Value.TargetObjectId.IsNull && !kvp.Key.IsNull)
                 {
-                    if (kvp.Value != null && string.Equals(kvp.Value.RuleId, ruleId, StringComparison.OrdinalIgnoreCase))
-                    {
-                        existingSameRule[kvp.Key] = kvp.Value;
-                        keysToRemove.Add(kvp.Key);
-                    }
-                }
-
-                foreach (ObjectId key in keysToRemove)
-                {
-                    CurrentIssues.Remove(key);
-                }
-
-                foreach (var kvp in ruleIssues)
-                {
-                    CheckIssueItem item = kvp.Value;
-                    if (item == null) continue;
-
-                    if (existingSameRule.TryGetValue(kvp.Key, out var oldItem) &&
-                        oldItem != null &&
-                        oldItem.Status == IssueReviewStatus.Ignored &&
-                        item.Status == IssueReviewStatus.Pending)
-                    {
-                        item.Status = IssueReviewStatus.Ignored;
-                        item.Remark = oldItem.Remark;
-                    }
-
-                    CurrentIssues[kvp.Key] = item;
+                    kvp.Value.TargetObjectId = kvp.Key;
                 }
             }
-            else
+
+            MergeRuleIssueItems(ruleId, ruleIssues.Values, isIncremental, ruleIssues.Keys);
+
+            // 确保按 ObjectId 映射的字典对当前规则的键值完全同步
+            foreach (var kvp in ruleIssues)
             {
-                foreach (var kvp in ruleIssues)
+                if (kvp.Value != null)
                 {
-                    if (kvp.Value != null)
-                    {
-                        CurrentIssues[kvp.Key] = kvp.Value;
-                    }
+                    CurrentIssues[kvp.Key] = kvp.Value;
                 }
             }
 
             return new Dictionary<ObjectId, CheckIssueItem>(CurrentIssues);
+        }
+
+        /// <summary>
+        /// 根据 CAD 实体 ObjectId 查询其挂载的所有核查问题（支持单管线多规则/多折线段问题）。
+        /// </summary>
+        public IReadOnlyList<CheckIssueItem> GetIssuesByObjectId(ObjectId targetId)
+        {
+            if (targetId.IsNull)
+                return Array.Empty<CheckIssueItem>();
+
+            var result = new List<CheckIssueItem>();
+            if (ObjectIdToIssueIds.TryGetValue(targetId, out List<string> issueIds) && issueIds != null)
+            {
+                foreach (string id in issueIds)
+                {
+                    if (IssuesById.TryGetValue(id, out CheckIssueItem item) && item != null)
+                    {
+                        result.Add(item);
+                    }
+                }
+            }
+
+            if (result.Count == 0 && CurrentIssues != null && CurrentIssues.TryGetValue(targetId, out CheckIssueItem fallbackItem) && fallbackItem != null)
+            {
+                result.Add(fallbackItem);
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// 获取当前会话中的全部核查问题列表（汇总 <see cref="IssuesById"/> 与直接写入 <see cref="CurrentIssues"/> 的问题）。
+        /// </summary>
+        public IReadOnlyList<CheckIssueItem> GetAllIssueItems()
+        {
+            if (CurrentIssues != null)
+            {
+                int seq = 0;
+                foreach (var kvp in CurrentIssues)
+                {
+                    if (kvp.Value == null) continue;
+                    if (kvp.Value.TargetObjectId.IsNull && !kvp.Key.IsNull)
+                    {
+                        kvp.Value.TargetObjectId = kvp.Key;
+                    }
+                    string issueId = EnsureIssueId(kvp.Value, kvp.Value.RuleId, seq++);
+                    if (!IssuesById.ContainsKey(issueId))
+                    {
+                        UpsertIssueInternal(kvp.Value);
+                    }
+                }
+            }
+
+            return IssuesById.Values.ToList();
+        }
+
+        private void UpsertIssueInternal(CheckIssueItem item)
+        {
+            if (item == null) return;
+
+            string issueId = EnsureIssueId(item);
+            IssuesById[issueId] = item;
+
+            if (!item.TargetObjectId.IsNull)
+            {
+                if (!ObjectIdToIssueIds.TryGetValue(item.TargetObjectId, out List<string> idList))
+                {
+                    idList = new List<string>();
+                    ObjectIdToIssueIds[item.TargetObjectId] = idList;
+                }
+
+                if (!idList.Contains(issueId, StringComparer.OrdinalIgnoreCase))
+                {
+                    idList.Add(issueId);
+                }
+
+                CurrentIssues[item.TargetObjectId] = item;
+            }
+        }
+
+        private void RemoveIssueByIdInternal(string issueId)
+        {
+            if (string.IsNullOrWhiteSpace(issueId))
+                return;
+
+            if (IssuesById.TryGetValue(issueId, out CheckIssueItem removed) && removed != null)
+            {
+                IssuesById.Remove(issueId);
+                if (!removed.TargetObjectId.IsNull &&
+                    ObjectIdToIssueIds.TryGetValue(removed.TargetObjectId, out List<string> idList) &&
+                    idList != null)
+                {
+                    idList.RemoveAll(x => string.Equals(x, issueId, StringComparison.OrdinalIgnoreCase));
+                    if (idList.Count == 0)
+                    {
+                        ObjectIdToIssueIds.Remove(removed.TargetObjectId);
+                    }
+                }
+            }
         }
 
         /// <summary>
@@ -164,11 +391,15 @@ namespace process_pipeline.Core
         public void ClearAll()
         {
             CurrentIssues?.Clear();
+            IssuesById.Clear();
+            ObjectIdToIssueIds.Clear();
+            DatasetContext.ClearSessionData();
             ArrowCache.Clear();
             IsArrowCacheInitialized = false;
             ArrowToPipes.Clear();
             PipeToArrows.Clear();
-            ActiveRule = null;
+            ActiveRules.Clear();
+            _activeRule = null;
             UndoRedoManager.Clear();
         }
     }

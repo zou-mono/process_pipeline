@@ -219,10 +219,10 @@ namespace Cad.Plugin
                 if (!string.IsNullOrEmpty(text))
                 {
                     // 注意：
-                    // 1. 将消息内部的换行符压平为空格，防止单条日志被拆碎或含 \r 回车覆盖；
+                    // 1. 将消息内部的 \0（如 Newtonsoft.Json EOF 报错中嵌入的 '\0' 字符，会导致 C++ acutPrintf 提前截断并吞掉末尾 \n）和换行符清理掉；
                     // 2. 在 accoreconsole.exe 的真实 Win32 控制台（cmd.exe）中，Editor.WriteMessage 必须以末尾 "\n" 结束，
                     //    若写成前置 "\n" + text（末尾无 \n），accoreconsole 会认为当前行未结束并在下次调用时通过 SetConsoleCursorPosition 回到行首覆盖上一行！
-                    text = text.Replace("\r", " ").Replace("\n", " ").TrimEnd();
+                    text = text.Replace("\0", "<EOF>").Replace("\r", " ").Replace("\n", " ").TrimEnd();
                     ed.WriteMessage(text + "\n");
                 }
             }
