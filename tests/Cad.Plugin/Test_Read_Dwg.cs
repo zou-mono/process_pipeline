@@ -60,7 +60,6 @@ namespace Cad.Plugin
                     result.LayerCountMap[layerName]++;
                 }
 
-                ed.WriteMessage($"实体的数量: {result.TotalCount}\n");
                 Logger.Info($"实体的数量: {result.TotalCount}");
 
                 // 以只读方式打开包含Group的DWG文件
@@ -70,7 +69,6 @@ namespace Cad.Plugin
                 DBDictionary groupDict = tr.GetObject(sideDb.GroupDictionaryId, OpenMode.ForRead) as DBDictionary;
 
                 int groupCount = groupDict.Count;
-                ed.WriteMessage($"共有 {groupCount} 个 Group 待处理。\n");
                 Logger.Info($"共有 {groupCount} 个 Group 待处理。");
 
                 // 用于存储结果：每个Group对应一个 (块参照ID, 多段线ID)

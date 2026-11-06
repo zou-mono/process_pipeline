@@ -29,7 +29,7 @@ namespace Cad.Plugin
         public void Initialize()
         {
             LoggerSetup.Configure();
-            EnsureDebuggerLogTarget();
+            EnsureTestLogTargets();
         }
 
         public void Terminate()
@@ -38,14 +38,17 @@ namespace Cad.Plugin
         }
 
         /// <summary>
-        /// 为 NLog 补充 DebuggerTarget（走 .NET 托管调试通道 OutputDebugString），
-        /// 确保在 VS Code / Visual Studio 的“调试控制台 (Debug Console)”中输出纯正 UTF-8/Unicode 中文而不受 accoreconsole 标准输出管道编码影响。
+        /// 为 NLog 补充测试专用输出目标：
+        /// 1. DebuggerTarget（走 .NET 托管调试通道 OutputDebugString，供 VS Code / VS 调试控制台显示）；
+        /// 2. CadEditorTarget（转发至 AutoCAD Editor.WriteMessage，解决 accoreconsole.exe 重定向 stdout 导致 NLog ConsoleTarget 在 cmd 中不可见的问题）。
         /// </summary>
-        private static void EnsureDebuggerLogTarget()
+        private static void EnsureTestLogTargets()
         {
             try
             {
                 LoggingConfiguration config = LogManager.Configuration ?? new LoggingConfiguration();
+                bool changed = false;
+
                 if (config.FindTargetByName("vscode_debugger") == null)
                 {
                     var debugTarget = new DebuggerTarget("vscode_debugger")
@@ -54,6 +57,22 @@ namespace Cad.Plugin
                     };
                     config.AddTarget(debugTarget);
                     config.AddRule(LogLevel.Debug, LogLevel.Fatal, debugTarget);
+                    changed = true;
+                }
+
+                if (config.FindTargetByName("cad_editor") == null)
+                {
+                    var editorTarget = new CadEditorTarget("cad_editor")
+                    {
+                        Layout = "[${level:uppercase=true}] ${message} ${exception:format=tostring}"
+                    };
+                    config.AddTarget(editorTarget);
+                    config.AddRule(LogLevel.Info, LogLevel.Fatal, editorTarget);
+                    changed = true;
+                }
+
+                if (changed)
+                {
                     LogManager.Configuration = config;
                     LogManager.ReconfigExistingLoggers();
                 }
@@ -72,39 +91,36 @@ namespace Cad.Plugin
         [CommandMethod("run_test")]
         public void RunTest()
         {
-            EnsureDebuggerLogTarget();
-
-            Document doc = Application.DocumentManager.MdiActiveDocument;
-            Editor ed = doc?.Editor;
+            EnsureTestLogTargets();
 
             string targetCmd = Environment.GetEnvironmentVariable(EnvTestCommandKey);
             if (string.IsNullOrWhiteSpace(targetCmd))
             {
                 targetCmd = DefaultTestCommand;
-                WriteLog(ed, $"[run_test] 未检测到环境变量 {EnvTestCommandKey}，使用默认测试命令: {targetCmd}");
+                Logger.Info($"[run_test] 未检测到环境变量 {EnvTestCommandKey}，使用默认测试命令: {targetCmd}");
             }
             else
             {
                 targetCmd = targetCmd.Trim();
-                WriteLog(ed, $"[run_test] 从环境变量 {EnvTestCommandKey} 读取到目标测试命令: {targetCmd}");
+                Logger.Info($"[run_test] 从环境变量 {EnvTestCommandKey} 读取到目标测试命令: {targetCmd}");
             }
 
             var commandMap = DiscoverTestCommands();
 
             if (string.Equals(targetCmd, "list", StringComparison.OrdinalIgnoreCase))
             {
-                PrintAvailableCommands(ed, commandMap);
+                PrintAvailableCommands(commandMap);
                 return;
             }
 
             if (!commandMap.TryGetValue(targetCmd, out MethodInfo targetMethod))
             {
-                WriteLog(ed, $"[run_test] 错误：未找到名为 '{targetCmd}' 的测试命令！");
-                PrintAvailableCommands(ed, commandMap);
+                Logger.Error($"[run_test] 错误：未找到名为 '{targetCmd}' 的测试命令！");
+                PrintAvailableCommands(commandMap);
                 return;
             }
 
-            WriteLog(ed, $"========== 开始执行测试命令: {targetCmd} ({targetMethod.DeclaringType?.FullName}.{targetMethod.Name}) ==========");
+            Logger.Info($"========== 开始执行测试命令: {targetCmd} ({targetMethod.DeclaringType?.FullName}.{targetMethod.Name}) ==========");
             Stopwatch sw = Stopwatch.StartNew();
 
             try
@@ -116,22 +132,18 @@ namespace Cad.Plugin
                 targetMethod.Invoke(instance, null);
 
                 sw.Stop();
-                WriteLog(ed, $"========== 测试命令 {targetCmd} 执行完成，耗时: {sw.ElapsedMilliseconds} ms ==========");
+                Logger.Info($"========== 测试命令 {targetCmd} 执行完成，耗时: {sw.ElapsedMilliseconds} ms ==========");
             }
             catch (TargetInvocationException tie)
             {
                 sw.Stop();
                 System.Exception inner = tie.InnerException ?? tie;
-                WriteLog(ed, $"========== 测试命令 {targetCmd} 执行异常 ({sw.ElapsedMilliseconds} ms) ==========");
-                WriteLog(ed, $"{inner.GetType().Name}: {inner.Message}\n{inner.StackTrace}");
-                Logger.Error(inner, $"执行测试命令 {targetCmd} 异常");
+                Logger.Error(inner, $"========== 测试命令 {targetCmd} 执行异常 ({sw.ElapsedMilliseconds} ms) ==========");
             }
             catch (System.Exception ex)
             {
                 sw.Stop();
-                WriteLog(ed, $"========== 测试命令 {targetCmd} 执行异常 ({sw.ElapsedMilliseconds} ms) ==========");
-                WriteLog(ed, $"{ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}");
-                Logger.Error(ex, $"执行测试命令 {targetCmd} 异常");
+                Logger.Error(ex, $"========== 测试命令 {targetCmd} 执行异常 ({sw.ElapsedMilliseconds} ms) ==========");
             }
         }
 
@@ -173,20 +185,51 @@ namespace Cad.Plugin
             return map;
         }
 
-        private static void PrintAvailableCommands(Editor ed, Dictionary<string, MethodInfo> commandMap)
+        private static void PrintAvailableCommands(Dictionary<string, MethodInfo> commandMap)
         {
-            WriteLog(ed, "当前 Cad.Plugin 可用的测试命令列表：");
+            Logger.Info("当前 Cad.Plugin 可用的测试命令列表：");
             int idx = 1;
             foreach (var kvp in commandMap.OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase))
             {
-                WriteLog(ed, $"  [{idx++}] {kvp.Key,-24} -> {kvp.Value.DeclaringType?.Name}.{kvp.Value.Name}()");
+                Logger.Info($"  [{idx++}] {kvp.Key,-24} -> {kvp.Value.DeclaringType?.Name}.{kvp.Value.Name}()");
             }
         }
+    }
 
-        private static void WriteLog(Editor ed, string message)
+    /// <summary>
+    /// 自定义 NLog 输出目标：将日志直接转发至 AutoCAD 当前活动文档的 Editor.WriteMessage，
+    /// 使测试代码只需调用一次 Logger.Info / Warn / Error 即可同时在 cmd 终端、VS Code 调试控制台和本地日志文件中查看输出。
+    /// </summary>
+    public sealed class CadEditorTarget : TargetWithLayout
+    {
+        public CadEditorTarget(string name)
         {
-            ed?.WriteMessage(message + "\n");
-            Logger.Info(message);
+            Name = name;
+        }
+
+        protected override void Write(LogEventInfo logEvent)
+        {
+            try
+            {
+                Editor ed = Application.DocumentManager?.MdiActiveDocument?.Editor;
+                if (ed == null)
+                    return;
+
+                string text = RenderLogEvent(Layout, logEvent);
+                if (!string.IsNullOrEmpty(text))
+                {
+                    // 注意：
+                    // 1. 将消息内部的换行符压平为空格，防止单条日志被拆碎或含 \r 回车覆盖；
+                    // 2. 在 accoreconsole.exe 的真实 Win32 控制台（cmd.exe）中，Editor.WriteMessage 必须以末尾 "\n" 结束，
+                    //    若写成前置 "\n" + text（末尾无 \n），accoreconsole 会认为当前行未结束并在下次调用时通过 SetConsoleCursorPosition 回到行首覆盖上一行！
+                    text = text.Replace("\r", " ").Replace("\n", " ").TrimEnd();
+                    ed.WriteMessage(text + "\n");
+                }
+            }
+            catch
+            {
+                // 忽略 CAD 文档未就绪或切换时的输出异常
+            }
         }
     }
 }

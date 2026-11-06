@@ -25,9 +25,10 @@ echo   [2] test_compare_segment  (Test_Compare_Segment)
 echo   [3] test_merge_polylines  (Test_Merge_Polylines)
 echo   [4] test_read_dwg         (Test_Read_Dwg)
 echo   [5] test_dwg_stats        (Test_Dwg_Stats)
-echo   [6] list                  (List all test commands)
+echo   [6] test_config           (Test_Config)
+echo   [7] list                  (List all test commands)
 echo ============================================================
-set /p "USER_INPUT=Select [1-6] or enter command name (default 1): "
+set /p "USER_INPUT=Select [1-7] or enter command name (default 1): "
 
 if "%USER_INPUT%"=="" set "USER_INPUT=1"
 if "%USER_INPUT%"=="1" set "TARGET_CMD=test_match_pipe"
@@ -35,7 +36,8 @@ if "%USER_INPUT%"=="2" set "TARGET_CMD=test_compare_segment"
 if "%USER_INPUT%"=="3" set "TARGET_CMD=test_merge_polylines"
 if "%USER_INPUT%"=="4" set "TARGET_CMD=test_read_dwg"
 if "%USER_INPUT%"=="5" set "TARGET_CMD=test_dwg_stats"
-if "%USER_INPUT%"=="6" set "TARGET_CMD=list"
+if "%USER_INPUT%"=="6" set "TARGET_CMD=test_config"
+if "%USER_INPUT%"=="7" set "TARGET_CMD=list"
 if "%TARGET_CMD%"=="" set "TARGET_CMD=%USER_INPUT%"
 
 :RUN_CMD
