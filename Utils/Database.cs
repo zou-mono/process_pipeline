@@ -172,7 +172,7 @@ namespace process_pipeline.Utils
             var session = DocumentSessionManager.GetOrCreateSession(_currentDb);
             if (session != null)
             {
-                if (obj is Group)
+                if (obj is Group || obj is AttributeReference)
                 {
                     session.DatasetContext.InvalidatePreviousData();
                 }

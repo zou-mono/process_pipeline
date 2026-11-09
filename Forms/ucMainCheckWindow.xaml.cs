@@ -311,6 +311,7 @@ namespace process_pipeline.Forms
         public ICommand MarkToRecheckCommand { get; }
         public ICommand MarkIgnoredCommand { get; }
         public ICommand ReverseSelectedPipeCommand { get; }
+        public ICommand BindSelectedGroupCommand { get; }
         public ICommand UndoCommand { get; }
         public ICommand RedoCommand { get; }
         public ICommand CadSelectionChangedCommand { get; }
@@ -325,6 +326,7 @@ namespace process_pipeline.Forms
             MarkToRecheckCommand = new RelayCommand(_ => ChangeSelectedRowStatus(IssueReviewStatus.ToRecheck), _ => GetActionTargetRows().Count > 0);
             MarkIgnoredCommand = new RelayCommand(_ => ChangeSelectedRowStatus(IssueReviewStatus.Ignored), _ => GetActionTargetRows().Count > 0);
             ReverseSelectedPipeCommand = new RelayCommand(_ => ReverseSelectedPipe(), _ => CanReverseSelectedPipe());
+            BindSelectedGroupCommand = new RelayCommand(_ => BindSelectedPipeGroups(), _ => CanBindSelectedGroup());
             UndoCommand = new RelayCommand(_ => ExecuteUndo(), _ => ActiveUndoRedoManager.CanUndo);
             RedoCommand = new RelayCommand(_ => ExecuteRedo(), _ => ActiveUndoRedoManager.CanRedo);
             CadSelectionChangedCommand = new RelayCommand(_ => OnImpliedSelectionChanged());
@@ -550,6 +552,28 @@ namespace process_pipeline.Forms
                 return count > 1
                     ? $"一键修复：批量翻转管线流向 (共 {count} 条)"
                     : "一键修复：翻转管线流向";
+            }
+        }
+
+        /// <summary>
+        /// 上下文感知显隐（Stage 3 Commit 3.2）：
+        /// 当当前选中行集合中存在属于图属 Group 核查（MatchGroup）且具备候选属性块的记录时，
+        /// 右键菜单显示“一键修复：绑定图属 Group 与 XData”。
+        /// </summary>
+        public System.Windows.Visibility BindGroupMenuVisibility =>
+            CanBindSelectedGroup() ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+
+        /// <summary>
+        /// 右键菜单“一键绑定 Group 与 XData”项的动态标题。
+        /// </summary>
+        public string BindGroupMenuHeader
+        {
+            get
+            {
+                int count = GetBindableGroupTargetRows().Count;
+                return count > 1
+                    ? $"一键修复：批量绑定图属 Group 与 XData (共 {count} 组)"
+                    : "一键修复：绑定图属 Group 与 XData";
             }
         }
 
@@ -1140,12 +1164,13 @@ namespace process_pipeline.Forms
         }
 
         /// <summary>
-        /// 筛选当前目标行集合中所有适用于“翻转管线流向”的记录（DirectionConflict 或 OneToMany）。
+        /// 筛选当前目标行集合中所有适用于“翻转管线流向”的记录（属于流向核查且为 DirectionConflict 或 OneToMany）。
         /// </summary>
         public IReadOnlyList<PipeRowVm> GetReversibleTargetRows()
         {
             return GetActionTargetRows()
                 .Where(r => r?.SourceIssue != null &&
+                            !string.Equals(r.SourceIssue.RuleId, MatchGroupService.DefaultRuleId, StringComparison.OrdinalIgnoreCase) &&
                             (r.SourceIssue.Type == ProblemType.DirectionConflict ||
                              r.SourceIssue.Type == ProblemType.OneToMany))
                 .ToList();
@@ -1157,6 +1182,104 @@ namespace process_pipeline.Forms
         public bool CanReverseSelectedPipe()
         {
             return GetReversibleTargetRows().Count > 0;
+        }
+
+        /// <summary>
+        /// 筛选当前目标行集合中所有适用于“绑定图属 Group 与 XData”的记录（Stage 3 Commit 3.2）。
+        /// </summary>
+        public IReadOnlyList<PipeRowVm> GetBindableGroupTargetRows()
+        {
+            return GetActionTargetRows()
+                .Where(r => r?.SourceIssue != null &&
+                            string.Equals(r.SourceIssue.RuleId, MatchGroupService.DefaultRuleId, StringComparison.OrdinalIgnoreCase) &&
+                            !r.TargetObjectId.IsNull &&
+                            r.SourceIssue.RelatedObjectIds != null &&
+                            r.SourceIssue.RelatedObjectIds.Count > 0 &&
+                            !r.SourceIssue.RelatedObjectIds[0].IsNull)
+                .ToList();
+        }
+
+        /// <summary>
+        /// 判断当前选中行集合中是否存在可绑定图属 Group 与 XData 的记录。
+        /// </summary>
+        public bool CanBindSelectedGroup()
+        {
+            return GetBindableGroupTargetRows().Count > 0;
+        }
+
+        /// <summary>
+        /// 一键将当前选中管线与配对属性块绑定为 CAD Group 并写入 XData（支持单选与多选批量，Stage 3 Commit 3.2）。
+        /// 封装为单事务可逆复合操作 BindPipeGroupOperation，支持按一次 Ctrl+Z 整批撤销。
+        /// </summary>
+        public void BindSelectedPipeGroups()
+        {
+            var bindableRows = GetBindableGroupTargetRows();
+            if (bindableRows.Count == 0)
+                return;
+
+            var validRows = bindableRows
+                .Where(r => !r.TargetObjectId.IsNull && r.TargetObjectId.IsValid && !r.TargetObjectId.IsErased &&
+                            r.SourceIssue.RelatedObjectIds != null &&
+                            r.SourceIssue.RelatedObjectIds.Count > 0 &&
+                            r.SourceIssue.RelatedObjectIds[0].IsValid &&
+                            !r.SourceIssue.RelatedObjectIds[0].IsErased)
+                .ToList();
+
+            if (validRows.Count == 0)
+            {
+                StatusText = "选中的记录未关联有效 CAD 管线或属性块图元，无法绑定 Group";
+                return;
+            }
+
+            var rowByPipeId = new Dictionary<ObjectId, PipeRowVm>(validRows.Count);
+            var batchItems = new List<(ObjectId PipeId, ObjectId AttachmentId, CheckIssueItem BeforeSnapshot)>(validRows.Count);
+
+            foreach (PipeRowVm row in validRows)
+            {
+                ObjectId pipeId = row.TargetObjectId;
+                ObjectId attId = row.SourceIssue.RelatedObjectIds[0];
+                rowByPipeId[pipeId] = row;
+                batchItems.Add((pipeId, attId, row.SourceIssue.CloneSnapshot()));
+            }
+
+            var op = new BindPipeGroupOperation(
+                batchItems,
+                (restoredList, isUndo) =>
+                {
+                    if (restoredList != null)
+                    {
+                        var affectedIds = new List<ObjectId>(restoredList.Count * 2);
+                        foreach (var item in restoredList)
+                        {
+                            affectedIds.Add(item.PipeId);
+                            if (item.Snapshot != null && rowByPipeId.TryGetValue(item.PipeId, out PipeRowVm targetRow))
+                            {
+                                if (targetRow.SourceIssue?.RelatedObjectIds != null)
+                                {
+                                    affectedIds.AddRange(targetRow.SourceIssue.RelatedObjectIds);
+                                }
+                                ApplyIssueSnapshotToRow(targetRow, item.Snapshot, refreshTreeAndFilter: false);
+                            }
+                        }
+
+                        PaletteRefreshManager.SuppressIds(affectedIds);
+                        GraphicManager.ClearAuxiliaryGraphics();
+                        UpdateTreeCounts();
+                        RefreshFilter();
+                    }
+                });
+
+            ActiveUndoRedoManager.ExecuteOperation(op);
+            NotifyUndoRedoStateChanged();
+
+            if (validRows.Count == 1)
+            {
+                StatusText = $"已绑定管线 [{validRows[0].Id}] 的 Group 与 XData，并归档至【已修复】";
+            }
+            else
+            {
+                StatusText = $"已批量绑定 {validRows.Count} 组管线 Group 与 XData，并归档至【已修复】";
+            }
         }
 
         /// <summary>
@@ -1284,6 +1407,8 @@ namespace process_pipeline.Forms
             OnPropertyChanged(nameof(RedoMenuHeader));
             OnPropertyChanged(nameof(ReversePipeMenuVisibility));
             OnPropertyChanged(nameof(ReversePipeMenuHeader));
+            OnPropertyChanged(nameof(BindGroupMenuVisibility));
+            OnPropertyChanged(nameof(BindGroupMenuHeader));
             CommandManager.InvalidateRequerySuggested();
         }
 

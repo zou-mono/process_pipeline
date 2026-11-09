@@ -7,8 +7,10 @@ using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Geometry;
 using Autodesk.AutoCAD.Runtime;
 using NLog;
+using process_pipeline.Commands;
 using process_pipeline.Core;
 using process_pipeline.Geometry;
+using process_pipeline.Models;
 
 namespace Cad.Plugin
 {
@@ -195,6 +197,170 @@ namespace Cad.Plugin
 
                     AssertTrue(totalSpatialMatched == 5823 && spatialSummary.UnmatchedPipes.Count == 0,
                         $"模拟无 Group 状态下，5823 条勘测管通过纯空间距离实现 100% 配对覆盖 (实际={totalSpatialMatched})");
+
+                    // 2C：验证 MatchGroupService 在全部 5,823 条勘测管均已 1:1 绑定 Group 时检出 0 条异常；
+                    //     而在模拟无 Group 状态（UseExistingCadGroups = false）下准确检出 10 条 Pending 空间冲突与 5,813 条 ToRecheck 待绑定项
+                    var surveyMatchGroupSvc = new MatchGroupService(surveyDb);
+                    var surveyGroupIssues = surveyMatchGroupSvc.CheckAll();
+                    AssertTrue(surveyGroupIssues != null && surveyGroupIssues.Count == 0,
+                        $"MatchGroupService 核查勘测管图纸（5823 个合法 Group）应返回 0 条问题 (实际={surveyGroupIssues?.Count ?? -1})");
+
+                    surveyMatchGroupSvc.MatchOptions = spatialOnlyOpts;
+                    var surveyUnboundIssues = surveyMatchGroupSvc.CheckAll();
+                    int surveyPendingConflicts = surveyUnboundIssues.Values.Count(i => i.Status == IssueReviewStatus.Pending && i.PossibleMatches.Count >= 2);
+                    int surveyToRecheckUniques = surveyUnboundIssues.Values.Count(i => i.Status == IssueReviewStatus.ToRecheck);
+                    AssertTrue(surveyPendingConflicts == 10 && surveyToRecheckUniques == 5813,
+                        $"MatchGroupService 在无 Group 勘测管上准确区分 10 条一对多冲突(Pending)与 5813 条唯一匹配(ToRecheck) (冲突={surveyPendingConflicts}, 唯一={surveyToRecheckUniques})");
+                }
+            }
+
+            // ====================================================================
+            // 场景 3：验证 Commit 3.2 GeometryHelper.CollectPolylinesFromLayer(s) 三级优先级属性提取
+            // ====================================================================
+            Logger.Info("--- 场景 3：验证 GeometryHelper.CollectPolylinesFromLayers 三级优先级属性提取 ---");
+            if (File.Exists(prevDwgPath))
+            {
+                var prevPipeLayers = new[]
+                {
+                    "0污水-待补测现状管",
+                    "0污水-规划新建",
+                    "0污水-规划改建",
+                    "0污水-已核实需新增"
+                };
+
+                using (var prevDb = new Database(false, true))
+                {
+                    prevDb.ReadDwgFile(prevDwgPath, FileOpenMode.OpenForReadAndAllShare, true, "");
+                    prevDb.CloseInput(true);
+
+                    var gf = NetTopologySuite.NtsGeometryServices.Instance.CreateGeometryFactory();
+                    List<CadPolyline> collectedPrevPolylines = GeometryHelper.CollectPolylinesFromLayers(
+                        prevDb,
+                        prevPipeLayers,
+                        gf,
+                        "previous");
+
+                    int withCoreAttrsCount = collectedPrevPolylines.Count(p =>
+                        p?.Attributes != null &&
+                        p.Attributes.ContainsKey("WIDTH") &&
+                        p.Attributes.ContainsKey("LEN") &&
+                        p.Attributes.ContainsKey("GHZT") &&
+                        p.Attributes.ContainsKey("LX"));
+
+                    Logger.Info(
+                        $"  [GeometryHelper 三级提取] 上版数据(无原生Group)提取 CadPolyline={collectedPrevPolylines.Count} 条, " +
+                        $"成功挂载完整块属性={withCoreAttrsCount} 条");
+
+                    AssertTrue(collectedPrevPolylines.Count == 317 && withCoreAttrsCount == 317,
+                        $"GeometryHelper.CollectPolylinesFromLayers 在无原生 Group 的上版数据上自动通过空间配对挂载全部 317 条管线属性 (实际={withCoreAttrsCount}/317)");
+                }
+            }
+
+            // ====================================================================
+            // 场景 4：验证 Commit 3.2 MatchGroupService + BindPipeGroupOperation (Execute/Undo/Redo) + XData 二级恢复
+            // ====================================================================
+            Logger.Info("--- 场景 4：验证 MatchGroupService 与 BindPipeGroupOperation (Group + XData 可逆绑定与恢复) ---");
+            if (File.Exists(prevDwgPath))
+            {
+                var prevPipeLayers = new[]
+                {
+                    "0污水-待补测现状管",
+                    "0污水-规划新建",
+                    "0污水-规划改建",
+                    "0污水-已核实需新增"
+                };
+                var prevAttrLayers = new[] { "0污水-属性" };
+
+                using (var editDb = new Database(false, true))
+                {
+                    editDb.ReadDwgFile(prevDwgPath, FileOpenMode.OpenForReadAndAllShare, true, "");
+                    editDb.CloseInput(true);
+
+                    var matchGroupSvc = new MatchGroupService(editDb);
+                    Dictionary<ObjectId, CheckIssueItem> initialIssues = matchGroupSvc.CheckAll();
+
+                    int pendingConflictCount = initialIssues.Values.Count(i => i.Status == IssueReviewStatus.Pending);
+                    int toRecheckUniqueCount = initialIssues.Values.Count(i => i.Status == IssueReviewStatus.ToRecheck);
+                    Logger.Info(
+                        $"  [MatchGroupService 初始核查] 总记录={initialIssues.Count}, 待核查冲突={pendingConflictCount}, 待复核唯一匹配={toRecheckUniqueCount}");
+
+                    AssertTrue(initialIssues.Count == 317 && pendingConflictCount == 0 && toRecheckUniqueCount == 317,
+                        $"MatchGroupService 检出上版数据全部 317 条未建 Group 的唯一匹配项 (ToRecheck={toRecheckUniqueCount}, Pending={pendingConflictCount})");
+
+                    bool allHaveAuxLines = initialIssues.Values.All(i => i.PossibleMatches != null && i.PossibleMatches.Count >= 1);
+                    AssertTrue(allHaveAuxLines,
+                        "所有待核查/待复核记录均已生成 PossibleMatches 瞬态辅助连线数据");
+
+                    // 4.1 执行 BindPipeGroupOperation 批量绑定 317 组唯一匹配项（写入 CAD Group + PIPE_CHECK_LINK XData）
+                    var workingIssues = new Dictionary<ObjectId, CheckIssueItem>(initialIssues);
+                    BindPipeGroupOperation bindOp = matchGroupSvc.CreateBatchBindOperationForUniqueMatches(
+                        workingIssues,
+                        (restoredList, isUndo) =>
+                        {
+                            foreach (var pair in restoredList)
+                            {
+                                if (pair.Snapshot != null)
+                                    workingIssues[pair.PipeId] = pair.Snapshot;
+                            }
+                        });
+
+                    var undoRedoMgr = new HybridUndoRedoManager();
+                    undoRedoMgr.ExecuteOperation(bindOp);
+
+                    int resolvedInCallback = workingIssues.Values.Count(i => i.Status == IssueReviewStatus.Resolved);
+                    AssertTrue(bindOp != null && bindOp.LastBoundCount == 317 && resolvedInCallback == 317,
+                        $"BindPipeGroupOperation.Execute 成功绑定 317 组 CAD Group 与 XData，并将 317 条记录状态更新为 Resolved (实际={bindOp?.LastBoundCount})");
+
+                    // 4.2 验证增量重算 CheckIncremental 自动识别已绑定的 317 组 Group
+                    var afterIncremental = matchGroupSvc.CheckIncremental(new List<ObjectId>(), new Dictionary<ObjectId, CheckIssueItem>(initialIssues));
+                    int resolvedAfterInc = afterIncremental.Values.Count(i => i.Status == IssueReviewStatus.Resolved);
+                    int remainingPendingAfterInc = afterIncremental.Values.Count(i => i.Status != IssueReviewStatus.Resolved);
+                    AssertTrue(resolvedAfterInc == 317 && remainingPendingAfterInc == 0,
+                        $"MatchGroupService.CheckIncremental 增量重算准确归档全部 317 条已建 Group 记录 (已修复={resolvedAfterInc}, 剩余未修复={remainingPendingAfterInc})");
+
+                    // 4.3 验证第二级 XData (PIPE_CHECK_LINK) 独立恢复能力（禁用 GroupDictionary 读取以模拟跨图复制丢失 Group）
+                    var xdataOnlyOpts = PipeSpatialMatchOptions.FromConfig();
+                    xdataOnlyOpts.UseExistingCadGroups = false;
+                    xdataOnlyOpts.UseXDataLinks = true;
+
+                    PipeSpatialMatchSummary xdataSummary = matcher.MatchDatabaseBlockAttributes(
+                        editDb,
+                        prevPipeLayers,
+                        prevAttrLayers,
+                        xdataOnlyOpts);
+
+                    Logger.Info(
+                        $"  [XData 恢复验证] 禁用 GroupDictionary 时，通过 XData ({PipeSpatialMatcher.XDataRegAppName}) 直接恢复配对={xdataSummary.XDataMatchedCount} 组");
+                    AssertTrue(xdataSummary.XDataMatchedCount == 317,
+                        $"模拟 GroupDictionary 丢失场景下，通过 XData (PIPE_CHECK_LINK) 100% 恢复全部 317 组配对 (实际={xdataSummary.XDataMatchedCount})");
+
+                    // 4.4 验证 Undo() 回滚：擦除 317 个新建 Group、清除 PIPE_CHECK_LINK XData 并恢复 ToRecheck 状态
+                    undoRedoMgr.Undo();
+                    int toRecheckAfterUndo = workingIssues.Values.Count(i => i.Status == IssueReviewStatus.ToRecheck);
+                    PipeSpatialMatchSummary afterUndoSummary = matcher.MatchDatabaseBlockAttributes(
+                        editDb,
+                        prevPipeLayers,
+                        prevAttrLayers,
+                        PipeSpatialMatchOptions.FromConfig());
+
+                    Logger.Info(
+                        $"  [Undo 回滚验证] Undo 后有效 Group 数={afterUndoSummary.ValidGroupPairCount}, XData 匹配数={afterUndoSummary.XDataMatchedCount}, 恢复 ToRecheck 记录={toRecheckAfterUndo}");
+                    AssertTrue(afterUndoSummary.ValidGroupPairCount == 0 && afterUndoSummary.XDataMatchedCount == 0 && toRecheckAfterUndo == 317,
+                        $"BindPipeGroupOperation.Undo 完整擦除 317 个 Group、清空 XData 并还原 317 条记录为 ToRecheck 状态");
+
+                    // 4.5 验证 Redo() 重做：重新创建 317 个 Group 与 XData 并恢复 Resolved 状态
+                    undoRedoMgr.Redo();
+                    int resolvedAfterRedo = workingIssues.Values.Count(i => i.Status == IssueReviewStatus.Resolved);
+                    PipeSpatialMatchSummary afterRedoSummary = matcher.MatchDatabaseBlockAttributes(
+                        editDb,
+                        prevPipeLayers,
+                        prevAttrLayers,
+                        PipeSpatialMatchOptions.FromConfig());
+
+                    Logger.Info(
+                        $"  [Redo 重做验证] Redo 后有效 Group 数={afterRedoSummary.ValidGroupPairCount}, Resolved 记录={resolvedAfterRedo}");
+                    AssertTrue(afterRedoSummary.ValidGroupPairCount == 317 && resolvedAfterRedo == 317,
+                        $"BindPipeGroupOperation.Redo 成功重建 317 个 1:1 Group 与 XData 并恢复 Resolved 状态");
                 }
             }
 

@@ -1,5 +1,6 @@
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
+using process_pipeline.Geometry;
 using process_pipeline.Models;
 using System;
 using System.Collections.Generic;
@@ -397,6 +398,446 @@ namespace process_pipeline.Core
             }
 
             return reversed;
+        }
+    }
+
+    /// <summary>
+    /// 管线与属性块 CAD Group + XData (PIPE_CHECK_LINK) 可逆绑定操作（支持单条与批量，Stage 3 Commit 3.2）。
+    /// 
+    /// 架构设计说明：
+    /// 1. 双重图属持久化：
+    ///    在创建或修复 CAD GroupDictionary 中 1:1 Group 的同时，向管线（Polyline/Line）与属性块（BlockReference）
+    ///    双向写入 XData（注册应用名 PIPE_CHECK_LINK，记录配对实体的十六进制 Handle）。
+    ///    即使后续跨图复制粘贴（Ctrl+C/V）或写块（WBLOCK）导致原生 GroupDictionary 丢失，
+    ///    GeometryHelper 与 PipeSpatialMatcher 依然可通过 XData 100% 恢复配对关系。
+    /// 2. 完整可逆快照（Undo / Redo）：
+    ///    首次执行时自动记录目标管线与属性块的原始 XData 值以及受影响的既有 Group 成员快照；
+    ///    调用 Undo() 时自动擦除新建 Group、还原被修改的既有 Group 成员、清除或恢复原始 XData，并回滚 UI 核查行状态。
+    /// </summary>
+    public class BindPipeGroupOperation : IUserOperation
+    {
+        private sealed class BindPairExecutionRecord
+        {
+            public ObjectId PipeId { get; set; }
+            public ObjectId AttachmentId { get; set; }
+            public string PipeHandle { get; set; }
+            public string AttachmentHandle { get; set; }
+            public CheckIssueItem BeforeSnapshot { get; set; }
+            public bool HasCapturedInitialXData { get; set; }
+            public string PreviousPipeXDataHandle { get; set; } = string.Empty;
+            public string PreviousAttachmentXDataHandle { get; set; } = string.Empty;
+            public ObjectId CreatedGroupId { get; set; } = ObjectId.Null;
+            public string CreatedGroupName { get; set; } = string.Empty;
+            public bool LastExecuteSucceeded { get; set; }
+        }
+
+        private sealed class ModifiedGroupSnapshot
+        {
+            public ObjectId GroupId { get; set; }
+            public string GroupName { get; set; }
+            public ObjectId[] OriginalMemberIds { get; set; }
+        }
+
+        private readonly List<BindPairExecutionRecord> _records;
+        private readonly List<ModifiedGroupSnapshot> _modifiedGroups = new List<ModifiedGroupSnapshot>();
+        private readonly Action<IReadOnlyList<(ObjectId PipeId, CheckIssueItem Snapshot)>, bool> _onBatchStateRestoredOrChanged;
+        private readonly Database _targetDatabase;
+
+        public string Description { get; }
+        public bool TouchesCadDatabase => true;
+        public ObjectId TargetObjectId => _records.Count > 0 ? _records[0].PipeId : ObjectId.Null;
+
+        /// <summary>
+        /// 最近一次 Execute 成功绑定的管线数量。
+        /// </summary>
+        public int LastBoundCount => _records.Count(r => r.LastExecuteSucceeded);
+
+        public BindPipeGroupOperation(
+            ObjectId pipeId,
+            ObjectId attachmentId,
+            CheckIssueItem beforeSnapshot = null,
+            Action<ObjectId, CheckIssueItem, bool> onStateRestoredOrChanged = null,
+            Database targetDatabase = null)
+            : this(
+                new[] { (pipeId, attachmentId, beforeSnapshot) },
+                (batchList, isUndo) =>
+                {
+                    if (onStateRestoredOrChanged != null && batchList.Count > 0)
+                    {
+                        onStateRestoredOrChanged(batchList[0].PipeId, batchList[0].Snapshot, isUndo);
+                    }
+                },
+                targetDatabase)
+        {
+        }
+
+        public BindPipeGroupOperation(
+            IList<(ObjectId PipeId, ObjectId AttachmentId, CheckIssueItem BeforeSnapshot)> items,
+            Action<IReadOnlyList<(ObjectId PipeId, CheckIssueItem Snapshot)>, bool> onBatchStateRestoredOrChanged = null,
+            Database targetDatabase = null)
+        {
+            if (items == null || items.Count == 0)
+                throw new ArgumentException("待绑定的管线-属性块配对集合不能为空", nameof(items));
+
+            _records = items
+                .Where(x => !x.PipeId.IsNull && !x.AttachmentId.IsNull)
+                .Select(x => new BindPairExecutionRecord
+                {
+                    PipeId = x.PipeId,
+                    AttachmentId = x.AttachmentId,
+                    PipeHandle = x.PipeId.IsValid ? x.PipeId.Handle.ToString() : string.Empty,
+                    AttachmentHandle = x.AttachmentId.IsValid ? x.AttachmentId.Handle.ToString() : string.Empty,
+                    BeforeSnapshot = x.BeforeSnapshot?.CloneSnapshot()
+                })
+                .ToList();
+
+            if (_records.Count == 0)
+                throw new ArgumentException("待绑定的管线-属性块配对集合中没有有效 ObjectId", nameof(items));
+
+            _onBatchStateRestoredOrChanged = onBatchStateRestoredOrChanged;
+            _targetDatabase = targetDatabase;
+
+            if (_records.Count == 1)
+            {
+                var first = _records[0];
+                Description = $"绑定管线 [{first.PipeHandle}] 与属性块 [{first.AttachmentHandle}] 的 Group 及 XData";
+            }
+            else
+            {
+                Description = $"批量绑定 {_records.Count} 组管线与属性块 Group 及 XData";
+            }
+        }
+
+        public void Execute()
+        {
+            Database db = ResolveTargetDatabase();
+            if (db == null)
+                return;
+
+            Document activeDoc = null;
+            try
+            {
+                activeDoc = AcadApp.DocumentManager?.MdiActiveDocument;
+            }
+            catch
+            {
+                activeDoc = null;
+            }
+
+            bool needDocLock = activeDoc != null && activeDoc.Database == db;
+            DocumentLock docLock = needDocLock ? activeDoc.LockDocument() : null;
+
+            try
+            {
+                _modifiedGroups.Clear();
+                foreach (var rec in _records)
+                {
+                    rec.LastExecuteSucceeded = false;
+                    rec.CreatedGroupId = ObjectId.Null;
+                    rec.CreatedGroupName = string.Empty;
+                }
+
+                using (Transaction tr = db.TransactionManager.StartTransaction())
+                {
+                    try
+                    {
+                        PipeSpatialMatcher.EnsureRegAppRegistered(db, tr);
+                        DBDictionary groupDict = (DBDictionary)tr.GetObject(db.GroupDictionaryId, OpenMode.ForWrite);
+
+                        var targetEntitySet = new HashSet<ObjectId>();
+                        foreach (var rec in _records)
+                        {
+                            targetEntitySet.Add(rec.PipeId);
+                            targetEntitySet.Add(rec.AttachmentId);
+                        }
+
+                        // 1. 检查既有 Group 是否已引用本次待绑定的管线或属性块；若有则记录快照并先剥离旧引用
+                        foreach (DBDictionaryEntry entry in groupDict)
+                        {
+                            Group existingGrp = tr.GetObject(entry.Value, OpenMode.ForRead, false) as Group;
+                            if (existingGrp == null || existingGrp.IsErased)
+                                continue;
+
+                            ObjectId[] memberIds = existingGrp.GetAllEntityIds();
+                            if (memberIds == null || memberIds.Length == 0)
+                                continue;
+
+                            if (memberIds.Any(id => targetEntitySet.Contains(id)))
+                            {
+                                _modifiedGroups.Add(new ModifiedGroupSnapshot
+                                {
+                                    GroupId = entry.Value,
+                                    GroupName = entry.Key,
+                                    OriginalMemberIds = memberIds.ToArray()
+                                });
+
+                                existingGrp.UpgradeOpen();
+                                foreach (ObjectId idToRemove in memberIds.Where(id => targetEntitySet.Contains(id)).ToList())
+                                {
+                                    existingGrp.Remove(idToRemove);
+                                }
+                            }
+                        }
+
+                        // 2. 为每一对 (Pipe, Attachment) 创建标准 1:1 Group 并写入双向 XData (PIPE_CHECK_LINK)
+                        int boundCount = 0;
+                        foreach (BindPairExecutionRecord rec in _records)
+                        {
+                            if (!rec.PipeId.IsValid || rec.PipeId.IsErased ||
+                                !rec.AttachmentId.IsValid || rec.AttachmentId.IsErased)
+                            {
+                                continue;
+                            }
+
+                            Entity pipeEnt = tr.GetObject(rec.PipeId, OpenMode.ForWrite, false) as Entity;
+                            Entity attEnt = tr.GetObject(rec.AttachmentId, OpenMode.ForWrite, false) as Entity;
+                            if (pipeEnt == null || attEnt == null)
+                                continue;
+
+                            rec.PipeHandle = rec.PipeId.Handle.ToString();
+                            rec.AttachmentHandle = rec.AttachmentId.Handle.ToString();
+
+                            if (!rec.HasCapturedInitialXData)
+                            {
+                                rec.PreviousPipeXDataHandle = PipeSpatialMatcher.ReadLinkedHandleFromXData(pipeEnt);
+                                rec.PreviousAttachmentXDataHandle = PipeSpatialMatcher.ReadLinkedHandleFromXData(attEnt);
+                                rec.HasCapturedInitialXData = true;
+                            }
+
+                            PipeSpatialMatcher.WriteLinkedHandleToXData(pipeEnt, rec.AttachmentHandle);
+                            PipeSpatialMatcher.WriteLinkedHandleToXData(attEnt, rec.PipeHandle);
+
+                            string baseGroupName = $"PIPE_GRP_{rec.PipeHandle}_{rec.AttachmentHandle}";
+                            string groupName = AllocateGroupName(groupDict, tr, baseGroupName);
+
+                            var newGrp = new Group($"Pipe[{rec.PipeHandle}]-Attr[{rec.AttachmentHandle}]", true);
+                            ObjectId grpId = groupDict.SetAt(groupName, newGrp);
+                            tr.AddNewlyCreatedDBObject(newGrp, true);
+                            newGrp.Append(rec.PipeId);
+                            newGrp.Append(rec.AttachmentId);
+
+                            rec.CreatedGroupId = grpId;
+                            rec.CreatedGroupName = groupName;
+                            rec.LastExecuteSucceeded = true;
+                            boundCount++;
+                        }
+
+                        if (boundCount > 0)
+                        {
+                            tr.Commit();
+                        }
+                        else
+                        {
+                            tr.Abort();
+                            return;
+                        }
+                    }
+                    catch
+                    {
+                        tr.Abort();
+                        throw;
+                    }
+                }
+
+                DocumentSessionManager.GetOrCreateSession(db)?.DatasetContext.InvalidatePreviousData();
+
+                var afterList = new List<(ObjectId PipeId, CheckIssueItem Snapshot)>(_records.Count);
+                foreach (BindPairExecutionRecord rec in _records)
+                {
+                    if (!rec.LastExecuteSucceeded)
+                        continue;
+
+                    CheckIssueItem afterSnapshot = rec.BeforeSnapshot?.CloneSnapshot();
+                    if (afterSnapshot != null)
+                    {
+                        afterSnapshot.Status = IssueReviewStatus.Resolved;
+                        afterSnapshot.Remark = $"已绑定 Group [{rec.CreatedGroupName}] 与 XData ({PipeSpatialMatcher.XDataRegAppName}:{rec.AttachmentHandle})（已修复）";
+                    }
+                    afterList.Add((rec.PipeId, afterSnapshot));
+                }
+
+                _onBatchStateRestoredOrChanged?.Invoke(afterList, false);
+            }
+            finally
+            {
+                docLock?.Dispose();
+            }
+        }
+
+        public void Undo()
+        {
+            Database db = ResolveTargetDatabase();
+            if (db == null)
+                return;
+
+            Document activeDoc = null;
+            try
+            {
+                activeDoc = AcadApp.DocumentManager?.MdiActiveDocument;
+            }
+            catch
+            {
+                activeDoc = null;
+            }
+
+            bool needDocLock = activeDoc != null && activeDoc.Database == db;
+            DocumentLock docLock = needDocLock ? activeDoc.LockDocument() : null;
+
+            try
+            {
+                using (Transaction tr = db.TransactionManager.StartTransaction())
+                {
+                    try
+                    {
+                        PipeSpatialMatcher.EnsureRegAppRegistered(db, tr);
+
+                        // 1. 擦除本次操作新建的 Group
+                        foreach (BindPairExecutionRecord rec in _records)
+                        {
+                            if (!rec.CreatedGroupId.IsNull && rec.CreatedGroupId.IsValid && !rec.CreatedGroupId.IsErased)
+                            {
+                                Group createdGrp = tr.GetObject(rec.CreatedGroupId, OpenMode.ForWrite, false) as Group;
+                                if (createdGrp != null)
+                                {
+                                    createdGrp.Clear();
+                                    createdGrp.Erase(true);
+                                }
+                            }
+                        }
+
+                        // 2. 还原执行前被修改的既有 Group 成员
+                        foreach (ModifiedGroupSnapshot mod in _modifiedGroups)
+                        {
+                            if (mod.GroupId.IsNull || !mod.GroupId.IsValid)
+                                continue;
+
+                            Group origGrp = tr.GetObject(mod.GroupId, OpenMode.ForWrite, true) as Group;
+                            if (origGrp == null)
+                                continue;
+
+                            if (origGrp.IsErased)
+                            {
+                                origGrp.Erase(false);
+                            }
+
+                            origGrp.Clear();
+                            if (mod.OriginalMemberIds != null)
+                            {
+                                foreach (ObjectId memberId in mod.OriginalMemberIds)
+                                {
+                                    if (!memberId.IsNull && memberId.IsValid && !memberId.IsErased)
+                                    {
+                                        origGrp.Append(memberId);
+                                    }
+                                }
+                            }
+                        }
+
+                        // 3. 还原或清除管线与属性块上的 PIPE_CHECK_LINK XData
+                        foreach (BindPairExecutionRecord rec in _records)
+                        {
+                            if (rec.PipeId.IsValid && !rec.PipeId.IsErased)
+                            {
+                                Entity pipeEnt = tr.GetObject(rec.PipeId, OpenMode.ForWrite, false) as Entity;
+                                if (pipeEnt != null)
+                                {
+                                    if (string.IsNullOrWhiteSpace(rec.PreviousPipeXDataHandle))
+                                        PipeSpatialMatcher.ClearLinkedHandleFromXData(pipeEnt);
+                                    else
+                                        PipeSpatialMatcher.WriteLinkedHandleToXData(pipeEnt, rec.PreviousPipeXDataHandle);
+                                }
+                            }
+
+                            if (rec.AttachmentId.IsValid && !rec.AttachmentId.IsErased)
+                            {
+                                Entity attEnt = tr.GetObject(rec.AttachmentId, OpenMode.ForWrite, false) as Entity;
+                                if (attEnt != null)
+                                {
+                                    if (string.IsNullOrWhiteSpace(rec.PreviousAttachmentXDataHandle))
+                                        PipeSpatialMatcher.ClearLinkedHandleFromXData(attEnt);
+                                    else
+                                        PipeSpatialMatcher.WriteLinkedHandleToXData(attEnt, rec.PreviousAttachmentXDataHandle);
+                                }
+                            }
+                        }
+
+                        tr.Commit();
+                    }
+                    catch
+                    {
+                        tr.Abort();
+                        throw;
+                    }
+                }
+
+                DocumentSessionManager.GetOrCreateSession(db)?.DatasetContext.InvalidatePreviousData();
+
+                var beforeList = new List<(ObjectId PipeId, CheckIssueItem Snapshot)>(_records.Count);
+                foreach (BindPairExecutionRecord rec in _records)
+                {
+                    beforeList.Add((rec.PipeId, rec.BeforeSnapshot?.CloneSnapshot()));
+                }
+
+                _onBatchStateRestoredOrChanged?.Invoke(beforeList, true);
+            }
+            finally
+            {
+                docLock?.Dispose();
+            }
+        }
+
+        private Database ResolveTargetDatabase()
+        {
+            if (_targetDatabase != null)
+                return _targetDatabase;
+
+            foreach (var rec in _records)
+            {
+                if (!rec.PipeId.IsNull && rec.PipeId.Database != null)
+                    return rec.PipeId.Database;
+                if (!rec.AttachmentId.IsNull && rec.AttachmentId.Database != null)
+                    return rec.AttachmentId.Database;
+            }
+
+            try
+            {
+                return AcadApp.DocumentManager?.MdiActiveDocument?.Database;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static string AllocateGroupName(DBDictionary groupDict, Transaction tr, string baseName)
+        {
+            if (!groupDict.Contains(baseName))
+                return baseName;
+
+            try
+            {
+                ObjectId existingId = groupDict.GetAt(baseName);
+                if (existingId.IsErased)
+                    return baseName;
+
+                Group existingGrp = tr.GetObject(existingId, OpenMode.ForWrite, false) as Group;
+                if (existingGrp != null && existingGrp.NumEntities == 0)
+                {
+                    existingGrp.Erase(true);
+                    return baseName;
+                }
+            }
+            catch
+            {
+                // 忽略，改用递增后缀
+            }
+
+            int suffix = 1;
+            while (groupDict.Contains($"{baseName}_{suffix}"))
+            {
+                suffix++;
+            }
+            return $"{baseName}_{suffix}";
         }
     }
 }

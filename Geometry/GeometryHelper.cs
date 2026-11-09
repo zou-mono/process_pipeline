@@ -1,4 +1,4 @@
-﻿using Autodesk.AutoCAD.ApplicationServices;
+using Autodesk.AutoCAD.ApplicationServices;
 using System.Data.OleDb;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
@@ -9,6 +9,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using NetTopologySuite.Geometries;
+using process_pipeline.Core;
 using process_pipeline.Models;
 using NLog;
 
@@ -375,150 +376,43 @@ namespace process_pipeline.Geometry
         }
 
         /// <summary>
-        /// 从指定图层收集 AutoCAD Polyline，并转换为 CadPolyline。
+        /// 从指定图层收集 AutoCAD Polyline，并按 GroupDictionary -> XData (PIPE_CHECK_LINK) -> PipeSpatialMatcher
+        /// 三级优先级自动提取属性挂载至 CadPolyline.Attributes（Stage 3 Commit 3.2）。
         /// </summary>
         public static List<CadPolyline> CollectPolylinesFromLayer(
             Database db,
             string layerName,
             GeometryFactory geometryFactory,
-            string datasetName = null)
+            string datasetName = null,
+            IEnumerable<string> attributeLayerNames = null)
         {
-            var result = new List<CadPolyline>();
-            var addedKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (string.IsNullOrWhiteSpace(layerName))
+                return new List<CadPolyline>();
 
-            using (var tr = db.TransactionManager.StartOpenCloseTransaction())
-            {
-                // 1) 先处理 Group 里的 Polyline
-                DBDictionary groupDict =
-                    tr.GetObject(db.GroupDictionaryId, OpenMode.ForRead) as DBDictionary;
-
-                if (groupDict != null && groupDict.Count > 0)
-                {
-                    foreach (DBDictionaryEntry entry in groupDict)
-                    {
-                        Group group = tr.GetObject(entry.Value, OpenMode.ForRead) as Group;
-                        if (group == null)
-                            continue;
-
-                        ObjectId[] entityIds = group.GetAllEntityIds();
-
-                        Polyline pl = null;
-                        BlockReference br = null;
-
-                        // 一个 group 中，找出 polyline 和 block reference
-                        foreach (ObjectId id in entityIds)
-                        {
-                            if (id.Handle.ToString() == "97E") {
-                                Console.WriteLine("debug");
-                            }
-
-                            Entity ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
-                            if (ent == null)
-                                continue;
-
-                            if (ent is Polyline foundPolyline)
-                            {
-                                // 如果一个 group 里有多个 polyline，这里先按“第一个”为准
-                                if (pl == null)
-                                    pl = foundPolyline;
-                                continue;
-                            }
-
-                            if (ent is BlockReference foundBlockRef)
-                            {
-                                // 如果一个 group 里有多个 block reference，这里先按“第一个”为准
-                                if (br == null)
-                                    br = foundBlockRef;
-                                continue;
-                            }
-
-                            // 如果后面要支持 Polyline2d / Polyline3d，可以在这里扩展
-                        }
-
-                        if (pl == null)
-                            continue;
-
-                        if (!string.Equals(pl.Layer, layerName, StringComparison.OrdinalIgnoreCase))
-                            continue;
-
-                        Dictionary<string, object> attributes = null;
-                        if (br != null)
-                        {
-                            attributes = CollectAttributeValuesFromBlockReference(br, tr);
-                        }
-
-                        var cadPolyline = ConvertAutoCadPolylineToPolyline(
-                            pl,
-                            pl.ObjectId,
-                            geometryFactory,
-                            datasetName,
-                            attributes);
-
-                        if (cadPolyline != null &&
-                            cadPolyline.Geometry != null &&
-                            cadPolyline.Geometry.Length > 0)
-                        {
-                            string key = BuildPolylineDedupKey(cadPolyline);
-                            if (addedKeys.Add(key))
-                            {
-                                result.Add(cadPolyline);
-                            }
-                        }
-                    }
-                }
-
-                // 2) 再处理 ModelSpace 里的普通 Polyline
-                BlockTable bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
-                BlockTableRecord modelSpace =
-                    (BlockTableRecord)tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForRead);
-
-                foreach (ObjectId id in modelSpace)
-                {
-                    Entity ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
-                    if (ent == null)
-                        continue;
-
-                    if (!string.Equals(ent.Layer, layerName, StringComparison.OrdinalIgnoreCase))
-                        continue;
-
-                    if (!(ent is Polyline pl))
-                        continue;
-
-                    // 如果这条线已经在 group 里被处理过，就跳过
-                    string key = BuildPolylineDedupKey(id);
-                    if (addedKeys.Contains(key))
-                        continue;
-
-                    var cadPolyline = ConvertAutoCadPolylineToPolyline(
-                        pl,
-                        id,
-                        geometryFactory,
-                        datasetName);
-
-                    if (cadPolyline != null &&
-                        cadPolyline.Geometry != null &&
-                        cadPolyline.Geometry.Length > 0)
-                    {
-                        string polylineKey = BuildPolylineDedupKey(cadPolyline);
-                        if (addedKeys.Add(polylineKey))
-                        {
-                            result.Add(cadPolyline);
-                        }
-                    }
-                }
-            }
-
-            return result;
+            return CollectPolylinesFromLayers(
+                db,
+                new[] { layerName },
+                geometryFactory,
+                datasetName,
+                attributeLayerNames);
         }
 
+        /// <summary>
+        /// 从指定多个图层收集 AutoCAD Polyline，并按 GroupDictionary -> XData (PIPE_CHECK_LINK) -> PipeSpatialMatcher
+        /// 三级优先级自动提取属性挂载至 CadPolyline.Attributes（Stage 3 Commit 3.2）。
+        /// </summary>
         public static List<CadPolyline> CollectPolylinesFromLayers(
             Database db,
             IEnumerable<string> layerNames,
             GeometryFactory geometryFactory,
-            string datasetName = null)
+            string datasetName = null,
+            IEnumerable<string> attributeLayerNames = null)
         {
             var result = new List<CadPolyline>();
             var addedKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            if (db == null)
+                return result;
 
             var layerSet = new HashSet<string>(
                 (layerNames ?? Enumerable.Empty<string>())
@@ -529,6 +423,17 @@ namespace process_pipeline.Geometry
             if (layerSet.Count == 0)
                 return result;
 
+            var gf = geometryFactory ?? NetTopologySuite.NtsGeometryServices.Instance.CreateGeometryFactory();
+            HashSet<string> attrLayerSet = ResolveCandidateAttributeLayers(layerSet, datasetName, attributeLayerNames);
+
+            // 执行三级优先级（GroupDictionary -> XData -> PipeSpatialMatcher 空间双距离判据）属性配对提取
+            var matcher = new PipeSpatialMatcher(gf);
+            PipeSpatialMatchSummary matchSummary = matcher.MatchDatabaseBlockAttributes(
+                db,
+                layerSet,
+                attrLayerSet,
+                PipeSpatialMatchOptions.FromConfig());
+
             using (var tr = db.TransactionManager.StartOpenCloseTransaction())
             {
                 // 1) 先处理 Group 里的 Polyline
@@ -540,10 +445,12 @@ namespace process_pipeline.Geometry
                     foreach (DBDictionaryEntry entry in groupDict)
                     {
                         Group group = tr.GetObject(entry.Value, OpenMode.ForRead) as Group;
-                        if (group == null)
+                        if (group == null || group.IsErased)
                             continue;
 
                         ObjectId[] entityIds = group.GetAllEntityIds();
+                        if (entityIds == null || entityIds.Length == 0)
+                            continue;
 
                         Polyline pl = null;
                         BlockReference br = null;
@@ -551,6 +458,9 @@ namespace process_pipeline.Geometry
                         // 一个 group 中，找出 polyline 和 block reference
                         foreach (ObjectId id in entityIds)
                         {
+                            if (id.IsNull || id.IsErased)
+                                continue;
+
                             Entity ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
                             if (ent == null)
                                 continue;
@@ -576,16 +486,23 @@ namespace process_pipeline.Geometry
                         if (!layerSet.Contains(pl.Layer))
                             continue;
 
+                        string plHandle = pl.ObjectId.Handle.ToString();
                         Dictionary<string, object> attributes = null;
-                        if (br != null)
+
+                        if (!matchSummary.MatchedAttributesByPipeHandle.TryGetValue(plHandle, out attributes) ||
+                            attributes == null || attributes.Count == 0)
                         {
-                            attributes = CollectAttributeValuesFromBlockReference(br, tr);
+                            if (br != null)
+                            {
+                                attributes = CollectAttributeValuesFromBlockReference(br, tr);
+                                PipeSpatialMatcher.NormalizeCanonicalAttributeAliases(attributes);
+                            }
                         }
 
                         var cadPolyline = ConvertAutoCadPolylineToPolyline(
                             pl,
                             pl.ObjectId,
-                            geometryFactory,
+                            gf,
                             datasetName,
                             attributes);
 
@@ -602,13 +519,16 @@ namespace process_pipeline.Geometry
                     }
                 }
 
-                // 2) 再处理 ModelSpace 里的普通 Polyline
+                // 2) 再处理 ModelSpace 里的普通 Polyline（通过三级优先级自动挂载 XData 或空间配对提取出的块属性）
                 BlockTable bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
                 BlockTableRecord modelSpace =
                     (BlockTableRecord)tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForRead);
 
                 foreach (ObjectId id in modelSpace)
                 {
+                    if (id.IsNull || id.IsErased)
+                        continue;
+
                     Entity ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
                     if (ent == null)
                         continue;
@@ -623,11 +543,14 @@ namespace process_pipeline.Geometry
                     if (addedKeys.Contains(key))
                         continue;
 
+                    matchSummary.MatchedAttributesByPipeHandle.TryGetValue(key, out Dictionary<string, object> attributes);
+
                     var cadPolyline = ConvertAutoCadPolylineToPolyline(
                         pl,
                         id,
-                        geometryFactory,
-                        datasetName);
+                        gf,
+                        datasetName,
+                        attributes);
 
                     if (cadPolyline != null &&
                         cadPolyline.Geometry != null &&
@@ -643,6 +566,57 @@ namespace process_pipeline.Geometry
             }
 
             return result;
+        }
+
+        /// <summary>
+        /// 根据目标管线图层集合与数据集标识，自动推导候选属性块图层集合（兼容上版数据 0污水-属性 与勘测数据同图层块）。
+        /// </summary>
+        private static HashSet<string> ResolveCandidateAttributeLayers(
+            HashSet<string> pipeLayerSet,
+            string datasetName,
+            IEnumerable<string> explicitAttributeLayers)
+        {
+            var attrSet = new HashSet<string>(pipeLayerSet, StringComparer.OrdinalIgnoreCase);
+
+            if (explicitAttributeLayers != null)
+            {
+                foreach (string layer in explicitAttributeLayers)
+                {
+                    if (!string.IsNullOrWhiteSpace(layer))
+                        attrSet.Add(layer.Trim());
+                }
+            }
+
+            var prevDataCfg = CadConfig.PreviousData;
+            var surveyDataCfg = CadConfig.SurveyData;
+            var planPipeLayers = CadConfig.PlanningData?.GetAllPipeLayers() ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            bool isPrevDataset = string.Equals(datasetName, "previous", StringComparison.OrdinalIgnoreCase) ||
+                                 (prevDataCfg?.PipeLayers != null && prevDataCfg.PipeLayers.Any(l => pipeLayerSet.Contains(l))) ||
+                                 pipeLayerSet.Any(l => !planPipeLayers.Contains(l) && l.StartsWith("0", StringComparison.OrdinalIgnoreCase));
+
+            if (isPrevDataset && prevDataCfg?.AttributeLayers != null)
+            {
+                foreach (string attrLayer in prevDataCfg.AttributeLayers)
+                {
+                    if (!string.IsNullOrWhiteSpace(attrLayer))
+                        attrSet.Add(attrLayer.Trim());
+                }
+            }
+
+            bool isSurveyDataset = string.Equals(datasetName, "survey", StringComparison.OrdinalIgnoreCase) ||
+                                   (surveyDataCfg?.PipeLayers != null && surveyDataCfg.PipeLayers.Any(l => pipeLayerSet.Contains(l)));
+
+            if (isSurveyDataset && surveyDataCfg?.AttributeLayers != null)
+            {
+                foreach (string attrLayer in surveyDataCfg.AttributeLayers)
+                {
+                    if (!string.IsNullOrWhiteSpace(attrLayer))
+                        attrSet.Add(attrLayer.Trim());
+                }
+            }
+
+            return attrSet;
         }
 
         private static string BuildPolylineDedupKey(ObjectId id)

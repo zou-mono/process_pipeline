@@ -365,9 +365,27 @@ namespace process_pipeline.Geometry
                             foreach (ObjectId eid in entIds)
                             {
                                 if (pipesById.TryGetValue(eid, out SpatialPipeTarget p))
+                                {
                                     groupPipes.Add(p);
-                                if (attachmentsById.TryGetValue(eid, out SpatialAttachmentItem a))
+                                }
+                                else if (attachmentsById.TryGetValue(eid, out SpatialAttachmentItem a))
+                                {
                                     groupAttachments.Add(a);
+                                }
+                                else if (!eid.IsNull && !eid.IsErased)
+                                {
+                                    // 兼容处理：若 Group 内包含目标管线，但配对的 BlockReference 位于其他未顯式声明图层，也尝试按块属性提取
+                                    if (tr.GetObject(eid, OpenMode.ForRead, false) is BlockReference fallbackBr)
+                                    {
+                                        SpatialAttachmentItem fallbackAtt = CreateAttachmentFromBlock(fallbackBr, eid, tr, options);
+                                        if (fallbackAtt != null && fallbackAtt.Attributes.Count > 0)
+                                        {
+                                            attachmentsById[eid] = fallbackAtt;
+                                            attachmentsByHandle[fallbackAtt.Handle] = fallbackAtt;
+                                            groupAttachments.Add(fallbackAtt);
+                                        }
+                                    }
+                                }
                             }
 
                             // 若该 Group 与目标管线/属性块图层均无关，则跳过
@@ -399,6 +417,10 @@ namespace process_pipeline.Geometry
                                         DistanceToCurve = distCurve,
                                         DistanceToExtentsCenter = distCenter,
                                         ClosestPointOnPipe = closestPt,
+                                        PossibleMatches = new List<MatchItem>
+                                        {
+                                            new MatchItem(a.AttachmentId, a.Position, distCurve, closestPt, a.RotationDegrees ?? 0.0, 0.0, true)
+                                        },
                                         Description = $"已通过 CAD Group [{entry.Key}] 1:1 绑定"
                                     };
 
@@ -415,21 +437,35 @@ namespace process_pipeline.Geometry
                                         MatchedAttachment = a,
                                         GroupId = entry.Value,
                                         GroupName = entry.Key,
+                                        ClosestPointOnPipe = p != null ? p.MidPoint : a.Position,
                                         Description = $"Group [{entry.Key}] 中的管线 [{p.Handle}] 或属性块 [{a.Handle}] 已被其他 Group 重复引用"
                                     });
                                 }
                             }
                             else
                             {
+                                SpatialPipeTarget firstPipe = groupPipes.FirstOrDefault();
+                                SpatialAttachmentItem firstAtt = groupAttachments.FirstOrDefault();
                                 summary.InvalidGroupCount++;
                                 summary.InvalidGroups.Add(new PipeAttachmentMatchItem
                                 {
                                     Status = SpatialMatchStatus.InvalidGroupStructure,
                                     Channel = SpatialMatchChannel.CadGroup,
-                                    Pipe = groupPipes.FirstOrDefault(),
-                                    MatchedAttachment = groupAttachments.FirstOrDefault(),
+                                    Pipe = firstPipe,
+                                    MatchedAttachment = firstAtt,
                                     GroupId = entry.Value,
                                     GroupName = entry.Key,
+                                    ClosestPointOnPipe = firstPipe != null ? firstPipe.MidPoint : (firstAtt != null ? firstAtt.Position : Point3d.Origin),
+                                    PossibleMatches = groupAttachments
+                                        .Select(att => new MatchItem(
+                                            att.AttachmentId,
+                                            att.Position,
+                                            firstPipe != null ? Distance2D(att.Position, firstPipe.MidPoint) : 0.0,
+                                            firstPipe != null ? firstPipe.MidPoint : att.Position,
+                                            att.RotationDegrees ?? 0.0,
+                                            0.0,
+                                            true))
+                                        .ToList(),
                                     Description = $"Group [{entry.Key}] 成员结构异常：包含 {groupPipes.Count} 条管线、{groupAttachments.Count} 个属性块（应为 1:1）"
                                 });
                             }
@@ -437,43 +473,110 @@ namespace process_pipeline.Geometry
                     }
                 }
 
-                tr.Commit();
-            }
-
-            // 3. 第二级：对尚未通过 Group 匹配的管线，尝试通过 XData (PIPE_CHECK_LINK) 恢复配对
-            if (options.UseXDataLinks)
-            {
-                foreach (SpatialPipeTarget pipe in pipesById.Values)
+                // 3. 第二级：对尚未通过 Group 匹配的管线，尝试通过 XData (PIPE_CHECK_LINK) 双向恢复配对
+                if (options.UseXDataLinks)
                 {
-                    if (matchedPipeIds.Contains(pipe.PipeId))
-                        continue;
-
-                    if (!string.IsNullOrWhiteSpace(pipe.XDataLinkedAttachmentHandle) &&
-                        attachmentsByHandle.TryGetValue(pipe.XDataLinkedAttachmentHandle, out SpatialAttachmentItem linkedAtt) &&
-                        !matchedAttachmentIds.Contains(linkedAtt.AttachmentId))
+                    // 3.1 正向：通过管线上的 XDataLinkedAttachmentHandle 查找属性块
+                    foreach (SpatialPipeTarget pipe in pipesById.Values)
                     {
-                        matchedPipeIds.Add(pipe.PipeId);
-                        matchedAttachmentIds.Add(linkedAtt.AttachmentId);
-                        summary.XDataMatchedCount++;
+                        if (matchedPipeIds.Contains(pipe.PipeId))
+                            continue;
 
-                        double distCurve = ComputePointToLineStringDistance(linkedAtt.Position, pipe.Geometry, out Point3d closestPt, out _);
-                        double distCenter = Distance2D(linkedAtt.Position, pipe.ExtentsCenter);
+                        if (string.IsNullOrWhiteSpace(pipe.XDataLinkedAttachmentHandle))
+                            continue;
 
-                        var matchItem = new PipeAttachmentMatchItem
+                        if (!attachmentsByHandle.TryGetValue(pipe.XDataLinkedAttachmentHandle, out SpatialAttachmentItem linkedAtt))
                         {
-                            Status = SpatialMatchStatus.UniqueMatch,
-                            Channel = SpatialMatchChannel.XDataLink,
-                            Pipe = pipe,
-                            MatchedAttachment = linkedAtt,
-                            DistanceToCurve = distCurve,
-                            DistanceToExtentsCenter = distCenter,
-                            ClosestPointOnPipe = closestPt,
-                            Description = $"通过 XData ({XDataRegAppName}) 恢复配对 [{linkedAtt.Handle}]"
-                        };
+                            // 尝试直接按 Handle 在数据库中定位块参照（兼容块图层未显式传入的情况）
+                            try
+                            {
+                                long handleVal = Convert.ToInt64(pipe.XDataLinkedAttachmentHandle.Trim(), 16);
+                                if (db.TryGetObjectId(new Handle(handleVal), out ObjectId linkedObjId) &&
+                                    !linkedObjId.IsNull && !linkedObjId.IsErased &&
+                                    tr.GetObject(linkedObjId, OpenMode.ForRead, false) is BlockReference linkedBr)
+                                {
+                                    linkedAtt = CreateAttachmentFromBlock(linkedBr, linkedObjId, tr, options);
+                                    if (linkedAtt != null)
+                                    {
+                                        attachmentsById[linkedObjId] = linkedAtt;
+                                        attachmentsByHandle[linkedAtt.Handle] = linkedAtt;
+                                    }
+                                }
+                            }
+                            catch
+                            {
+                                // 忽略无效 Handle 解析异常
+                            }
+                        }
 
-                        RegisterUniqueMatch(summary, matchItem);
+                        if (linkedAtt != null && !matchedAttachmentIds.Contains(linkedAtt.AttachmentId))
+                        {
+                            matchedPipeIds.Add(pipe.PipeId);
+                            matchedAttachmentIds.Add(linkedAtt.AttachmentId);
+                            summary.XDataMatchedCount++;
+
+                            double distCurve = ComputePointToLineStringDistance(linkedAtt.Position, pipe.Geometry, out Point3d closestPt, out _);
+                            double distCenter = Distance2D(linkedAtt.Position, pipe.ExtentsCenter);
+
+                            var matchItem = new PipeAttachmentMatchItem
+                            {
+                                Status = SpatialMatchStatus.UniqueMatch,
+                                Channel = SpatialMatchChannel.XDataLink,
+                                Pipe = pipe,
+                                MatchedAttachment = linkedAtt,
+                                DistanceToCurve = distCurve,
+                                DistanceToExtentsCenter = distCenter,
+                                ClosestPointOnPipe = closestPt,
+                                PossibleMatches = new List<MatchItem>
+                                {
+                                    new MatchItem(linkedAtt.AttachmentId, linkedAtt.Position, distCurve, closestPt, linkedAtt.RotationDegrees ?? 0.0, 0.0, true)
+                                },
+                                Description = $"通过 XData ({XDataRegAppName}) 恢复配对 [{linkedAtt.Handle}]"
+                            };
+
+                            RegisterUniqueMatch(summary, matchItem);
+                        }
+                    }
+
+                    // 3.2 反向：通过属性块上的 XDataLinkedPipeHandle 查找管线
+                    foreach (SpatialAttachmentItem att in attachmentsById.Values)
+                    {
+                        if (matchedAttachmentIds.Contains(att.AttachmentId))
+                            continue;
+
+                        if (!string.IsNullOrWhiteSpace(att.XDataLinkedPipeHandle) &&
+                            pipesByHandle.TryGetValue(att.XDataLinkedPipeHandle, out SpatialPipeTarget linkedPipe) &&
+                            !matchedPipeIds.Contains(linkedPipe.PipeId))
+                        {
+                            matchedPipeIds.Add(linkedPipe.PipeId);
+                            matchedAttachmentIds.Add(att.AttachmentId);
+                            summary.XDataMatchedCount++;
+
+                            double distCurve = ComputePointToLineStringDistance(att.Position, linkedPipe.Geometry, out Point3d closestPt, out _);
+                            double distCenter = Distance2D(att.Position, linkedPipe.ExtentsCenter);
+
+                            var matchItem = new PipeAttachmentMatchItem
+                            {
+                                Status = SpatialMatchStatus.UniqueMatch,
+                                Channel = SpatialMatchChannel.XDataLink,
+                                Pipe = linkedPipe,
+                                MatchedAttachment = att,
+                                DistanceToCurve = distCurve,
+                                DistanceToExtentsCenter = distCenter,
+                                ClosestPointOnPipe = closestPt,
+                                PossibleMatches = new List<MatchItem>
+                                {
+                                    new MatchItem(att.AttachmentId, att.Position, distCurve, closestPt, att.RotationDegrees ?? 0.0, 0.0, true)
+                                },
+                                Description = $"通过属性块 XData ({XDataRegAppName}) 恢复配对 [{att.Handle}]"
+                            };
+
+                            RegisterUniqueMatch(summary, matchItem);
+                        }
                     }
                 }
+
+                tr.Commit();
             }
 
             // 4. 第三级：对剩余未绑定管线与属性块执行空间双判据邻近配对
@@ -1066,6 +1169,35 @@ namespace process_pipeline.Geometry
                 new TypedValue((int)DxfCode.ExtendedDataAsciiString, linkedHandle.Trim())))
             {
                 obj.XData = rb;
+            }
+        }
+
+        /// <summary>
+        /// 清除实体上的 PIPE_CHECK_LINK XData 配对句柄（用于 Undo 恢复执行前无 XData 的原始状态）。
+        /// 在 ObjectARX 中，向 XData 赋值仅包含 ExtendedDataRegAppName 的空 ResultBuffer 即可移除该应用下的扩展数据。
+        /// </summary>
+        public static void ClearLinkedHandleFromXData(DBObject obj)
+        {
+            if (obj == null)
+                return;
+
+            try
+            {
+                using (ResultBuffer existing = obj.GetXDataForApplication(XDataRegAppName))
+                {
+                    if (existing == null)
+                        return;
+                }
+
+                using (var rb = new ResultBuffer(
+                    new TypedValue((int)DxfCode.ExtendedDataRegAppName, XDataRegAppName)))
+                {
+                    obj.XData = rb;
+                }
+            }
+            catch
+            {
+                // 忽略清理异常
             }
         }
 

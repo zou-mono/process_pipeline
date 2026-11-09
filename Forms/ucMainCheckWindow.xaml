@@ -492,6 +492,11 @@
                           Command="{Binding ReverseSelectedPipeCommand}"
                           Visibility="{Binding ReversePipeMenuVisibility}" />
                 <Separator Visibility="{Binding ReversePipeMenuVisibility}" />
+                <!-- 专属修复区：当选中行（单行或多行）属于图属 Group 核查（MatchGroup）且存在可绑定候选属性块时动态显示 -->
+                <MenuItem Header="{Binding BindGroupMenuHeader}"
+                          Command="{Binding BindSelectedGroupCommand}"
+                          Visibility="{Binding BindGroupMenuVisibility}" />
+                <Separator Visibility="{Binding BindGroupMenuVisibility}" />
                 <MenuItem Header="人工判定：标记为【已修复】" Command="{Binding MarkModifiedCommand}" />
                 <MenuItem Header="人工判定：标记为【待复核】" Command="{Binding MarkToRecheckCommand}" />
                 <MenuItem Header="人工判定：标记为【已忽略】" Command="{Binding MarkIgnoredCommand}" />
