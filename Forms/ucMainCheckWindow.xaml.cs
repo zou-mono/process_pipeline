@@ -373,9 +373,10 @@ namespace process_pipeline.Forms
                 _rowsView.Filter = FilterRow;
             }
 
-            // 初始化 mock 数据（在实际应用中，可以从服务加载）
-            InitializeMockData();
+            // Stage 6 Commit 6.6：移除初始化时的 Mock 假数据（PL001~PL003），保持初始空状态干净（Rows.Count == 0）
+            RebuildNavigationTreeNodes();
             RefreshDataSourceSummaryText();
+            StatusText = "就绪（请加载管线图纸后执行核查）";
         }
 
         private void InitializeMockData()
@@ -1617,6 +1618,14 @@ namespace process_pipeline.Forms
                 showPalette: showPalette,
                 customDialogLauncher: CustomDataSourceDialogLauncher);
 
+            if (summary.PreCheckBlocked)
+            {
+                UpdateFromIssueItems(Array.Empty<CheckIssueItem>(), isIncremental: false);
+                RefreshDataSourceSummaryText(db);
+                StatusText = "当前图纸未检测到合规的规划管线数据，已中止全量核查";
+                return summary;
+            }
+
             UpdateFromIssueItems(summary.AllMergedIssues, isIncremental: false);
             RefreshDataSourceSummaryText(db);
             StatusText = $"一键全量核查完成：共执行 {summary.ExecutedRuleIds.Count} 项规则，检出 {Rows.Count} 条记录（{summary.ElapsedMilliseconds}ms）";
@@ -1653,9 +1662,18 @@ namespace process_pipeline.Forms
                 showPalette: showPalette,
                 customDialogLauncher: CustomDataSourceDialogLauncher);
 
-            UpdateFromIssueItems(mergedIssues, isIncremental: false);
+            UpdateFromIssueItems(mergedIssues ?? Array.Empty<CheckIssueItem>(), isIncremental: false);
             RefreshDataSourceSummaryText(db);
-            StatusText = $"单项核查 [{ruleOption.DisplayName}] 完成：当前共 {Rows.Count} 条记录";
+
+            if ((mergedIssues == null || mergedIssues.Count == 0) &&
+                process_pipeline.Core.PreCheck.PreCheckService.ValidateFullPipelinePreConditions(db, showDialogOnBlocking: false).HasBlockingIssues)
+            {
+                StatusText = $"当前图纸未检测到合规的规划管线数据，已中止 [{ruleOption.DisplayName}]";
+            }
+            else
+            {
+                StatusText = $"单项核查 [{ruleOption.DisplayName}] 完成：当前共 {Rows.Count} 条记录";
+            }
             return mergedIssues;
         }
 
@@ -2140,9 +2158,13 @@ namespace process_pipeline.Forms
             {
                 UpdateIssueItems(session.GetAllIssueItems(), isIncremental: false);
             }
+            else if (session != null && session.CurrentIssues.Count > 0)
+            {
+                UpdateData(session.CurrentIssues);
+            }
             else
             {
-                UpdateData(session?.CurrentIssues ?? new Dictionary<ObjectId, CheckIssueItem>());
+                UpdateIssueItems(Array.Empty<CheckIssueItem>(), isIncremental: false);
             }
         }
 

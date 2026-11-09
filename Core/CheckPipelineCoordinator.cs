@@ -312,6 +312,11 @@ namespace process_pipeline.Core
 
                 if (planPreCheck.HasBlockingIssues)
                 {
+                    session?.ClearAll();
+                    if (!ConfigManager.IsHeadlessOrSuppressedUi && palCheckPipe.Instance.IsVisible)
+                    {
+                        palCheckPipe.Instance.UpdateIssueItems(Array.Empty<CheckIssueItem>(), isIncremental: false);
+                    }
                     ed?.WriteMessage($"\n[{ruleId}] 当前图纸未检测到有效规划管线数据，已中止核查。\n");
                     return Array.Empty<CheckIssueItem>();
                 }
@@ -340,7 +345,13 @@ namespace process_pipeline.Core
             var ruleResult = rule.CheckAll(progress);
             if (ruleResult == null)
             {
-                // 子规则因前置数据缺失返回 null 时直接终止
+                // 子规则因前置数据缺失返回 null 时直接终止（严禁弹出主核查面板；若面板已停靠打开则同步刷新会话状态）
+                if (!ConfigManager.IsHeadlessOrSuppressedUi && palCheckPipe.Instance.IsVisible)
+                {
+                    palCheckPipe.Instance.UpdateIssueItems(
+                        session?.GetAllIssueItems() ?? Array.Empty<CheckIssueItem>(),
+                        isIncremental: false);
+                }
                 return Array.Empty<CheckIssueItem>();
             }
 
@@ -381,8 +392,9 @@ namespace process_pipeline.Core
             var session = DocumentSessionManager.GetOrCreateSession(db);
             var ctx = session?.DatasetContext ?? new PipeDatasetContext();
 
-            // 0. 顶层统一前置预核查（Stage 6 Commit 6.4）：
-            // 若当前主图未加载任何有效规划管线，仅弹出 1 个合并提示框并立即中止（Fail-Fast），杜绝连续弹出 3 个对话框
+            // 0. 顶层统一前置预核查（Stage 6 Commit 6.4 & Commit 6.6）：
+            // 若当前主图未加载任何有效规划管线，仅弹出 1 个合并提示框并立即中止（Fail-Fast），
+            // 清空当前文档会话残留数据且严禁弹出主核查面板 ucMainCheckWindow（若面板此前已停靠打开则清空其表格）
             PreCheckSummary preCheck = PreCheckService.ValidateFullPipelinePreConditions(
                 db,
                 showDialogOnBlocking: allowInteractiveDialog && !ConfigManager.IsHeadlessOrSuppressedUi);
@@ -390,6 +402,11 @@ namespace process_pipeline.Core
             if (preCheck.HasBlockingIssues)
             {
                 summary.PreCheckBlocked = true;
+                session?.ClearAll();
+                if (!ConfigManager.IsHeadlessOrSuppressedUi && palCheckPipe.Instance.IsVisible)
+                {
+                    palCheckPipe.Instance.UpdateIssueItems(Array.Empty<CheckIssueItem>(), isIncremental: false);
+                }
                 sw.Stop();
                 summary.ElapsedMilliseconds = sw.ElapsedMilliseconds;
                 ed?.WriteMessage("\n[一键全量核查] 当前图纸未检测到合规的规划管线数据，已中止核查。\n");

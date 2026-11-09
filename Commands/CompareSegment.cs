@@ -624,14 +624,20 @@ namespace process_pipeline.Commands
                 return;
             }
 
-            if (LastReport != null)
+            if (LastReport == null || LastReport.TotalPlanPolylines <= 0)
             {
-                Ed?.WriteMessage(
-                    $"\n[{RuleName}] 核查完成：规划管线 {LastReport.TotalPlanPolylines} 条（{LastReport.TotalPlanSegments} 折线段） vs " +
-                    $"上版管线 {LastReport.TotalPreviousPolylines} 条（{LastReport.TotalPreviousSegments} 折线段）；" +
-                    $"同源管线配对 {LastReport.HomologousPairs.Count} 组（属性一致={LastReport.ConsistentHomologousPairs.Count}，属性不符={LastReport.AttributeMismatchPairs.Count}），" +
-                    $"规划新增折线段 {LastReport.PlanUncoveredSegmentIssues.Count} 处，上版缺失折线段 {LastReport.PreviousMissingSegmentIssues.Count} 处。\n");
+                if (palCheckPipe.Instance.IsVisible)
+                {
+                    palCheckPipe.Instance.UpdateIssueItems(Array.Empty<CheckIssueItem>(), isIncremental: false);
+                }
+                return;
             }
+
+            Ed?.WriteMessage(
+                $"\n[{RuleName}] 核查完成：规划管线 {LastReport.TotalPlanPolylines} 条（{LastReport.TotalPlanSegments} 折线段） vs " +
+                $"上版管线 {LastReport.TotalPreviousPolylines} 条（{LastReport.TotalPreviousSegments} 折线段）；" +
+                $"同源管线配对 {LastReport.HomologousPairs.Count} 组（属性一致={LastReport.ConsistentHomologousPairs.Count}，属性不符={LastReport.AttributeMismatchPairs.Count}），" +
+                $"规划新增折线段 {LastReport.PlanUncoveredSegmentIssues.Count} 处，上版缺失折线段 {LastReport.PreviousMissingSegmentIssues.Count} 处。\n");
 
             if (session != null && session.IssuesById.Count > 0)
             {
@@ -657,8 +663,14 @@ namespace process_pipeline.Commands
             var report = new CompareSegmentCheckReport();
 
             // 1. 组装规划管线（颜色优先分类 + 规划文字标注 WIDTH/PD/LEN 提取）
-            var planCheckSvc = new PlanDataCheckService(_db, _ed);
+            var planCheckSvc = new PlanDataCheckService(_db, _ed) { SuppressBlockingDialog = true };
             planCheckSvc.InspectPlanningData(CadConfig.PlanningData, ctx, null, progress);
+
+            // Stage 6 Commit 6.6：若当前主图没有任何有效规划管线，严禁拿 0 条规划管与上版数据比对（避免误产生 hundreds 条“上版缺失”假阳性记录）
+            if (ctx.PlanPipesById == null || ctx.PlanPipesById.Count == 0)
+            {
+                return report;
+            }
 
             PipeSpatialMatchSummary planTextSummary = _spatialMatcher.MatchAndEnrichPlanTextLabels(
                 _db,

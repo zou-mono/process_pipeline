@@ -394,6 +394,9 @@ namespace Cad.Plugin
 
                         // 验证 MainCheckWindowViewModel 顶部工具栏命令绑定：[数据源]、[单项核查]、[一键全量核查]
                         var mainVm = new process_pipeline.Forms.MainCheckWindowViewModel();
+                        AssertTrue(mainVm.Rows.Count == 0,
+                            $"[MainCheckWindowViewModel 初始状态] 已清理 Mock 假数据 (PL001~PL003)，初始表格行数={mainVm.Rows.Count} (期望=0)");
+
                         int dialogLaunchCount = 0;
                         mainVm.CustomDataSourceDialogLauncher = vm =>
                         {
@@ -484,6 +487,37 @@ namespace Cad.Plugin
                                 $"[CadMessageDialog 浅色主题] COLORTHEME=1(Light) 下窗口背景={lightWinBg?.Color} (#FFF0F0F0)，内嵌卡片背景={lightCardBg?.Color} (#FFFFFFFF)");
 
                             msgDialog.Close();
+
+                            // ──────────────────────────────────────────────────
+                            // 12. Commit 6.6：空图纸阻断跨图比对（杜绝 316 条上版缺失假阳性）与面板残留清空验证
+                            // ──────────────────────────────────────────────────
+                            Logger.Info("[测试阶段 12] 验证空图纸下 CompareSegment / MatchPipe 短路阻断与主面板残留清空...");
+                            var emptyCompareSvc = new CompareSegmentService(emptyDb, null)
+                            {
+                                OverridePreviousDatabase = prevDb
+                            };
+                            var emptyCompareMap = emptyCompareSvc.CheckAll();
+                            AssertTrue(
+                                emptyCompareMap != null &&
+                                emptyCompareMap.Count == 0 &&
+                                emptyCompareSvc.LastReport != null &&
+                                emptyCompareSvc.LastReport.AllIssueItems.Count == 0,
+                                "[空图纸跨图比对阻断] 空主图下 CompareSegmentService 立即短路返回 0 条问题，杜绝把 316 条上版管线误报为缺失");
+
+                            var emptyMatchPipeSvc = new MatchPipeService(emptyDb, null);
+                            var emptyMatchPipeMap = emptyMatchPipeSvc.CheckAll();
+                            AssertTrue(
+                                emptyMatchPipeMap != null &&
+                                emptyMatchPipeMap.Count == 0 &&
+                                emptyMatchPipeSvc.LastReport != null &&
+                                emptyMatchPipeSvc.LastReport.AllIssueItems.Count == 0,
+                                "[空图纸跨图匹配阻断] 空主图下 MatchPipeService 立即短路返回 0 条问题");
+
+                            var emptyVmSummary = mainVm.ExecuteRunFullCheck(emptyDb, null, showPalette: false);
+                            AssertTrue(
+                                emptyVmSummary.PreCheckBlocked &&
+                                mainVm.Rows.Count == 0,
+                                $"[主面板空图纸清空] 在空图纸上执行全量核查后，主核查面板残留记录已清空 (Rows.Count={mainVm.Rows.Count})");
                         }
                     }
                 }

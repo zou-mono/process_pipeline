@@ -423,14 +423,20 @@ namespace process_pipeline.Commands
                 return;
             }
 
-            if (LastReport != null)
+            if (LastReport == null || LastReport.TotalPlanPipeCount <= 0)
             {
-                Ed?.WriteMessage(
-                    $"\n[{RuleName}] 核查完成：共扫描三类规划管线 {LastReport.TotalPlanPipeCount} 条，" +
-                    $"勘测管 {LastReport.SurveyRawPolylineCount} 条（按管径合并后 {LastReport.SurveyMergedPolylineCount} 条）；" +
-                    $"管径一致分段 {LastReport.DiameterConsistentItems.Count} 处，" +
-                    $"检出待核查问题 {LastReport.AllIssueItems.Count} 项（管径不符：{LastReport.DiameterMismatchItems.Count}，匹配段缺标注：{LastReport.MissingPlanLabelOnMatchedItems.Count}，现状管未匹配勘测管：{LastReport.UnmatchedExistingPipeItems.Count}）。\n");
+                if (palCheckPipe.Instance.IsVisible)
+                {
+                    palCheckPipe.Instance.UpdateIssueItems(Array.Empty<CheckIssueItem>(), isIncremental: false);
+                }
+                return;
             }
+
+            Ed?.WriteMessage(
+                $"\n[{RuleName}] 核查完成：共扫描三类规划管线 {LastReport.TotalPlanPipeCount} 条，" +
+                $"勘测管 {LastReport.SurveyRawPolylineCount} 条（按管径合并后 {LastReport.SurveyMergedPolylineCount} 条）；" +
+                $"管径一致分段 {LastReport.DiameterConsistentItems.Count} 处，" +
+                $"检出待核查问题 {LastReport.AllIssueItems.Count} 项（管径不符：{LastReport.DiameterMismatchItems.Count}，匹配段缺标注：{LastReport.MissingPlanLabelOnMatchedItems.Count}，现状管未匹配勘测管：{LastReport.UnmatchedExistingPipeItems.Count}）。\n");
 
             if (session != null && session.IssuesById.Count > 0)
             {
@@ -456,8 +462,14 @@ namespace process_pipeline.Commands
             var report = new MatchPipeCheckReport();
 
             // 1. 组装规划管线（颜色优先分类 + 文字标注管径提取）
-            var planCheckSvc = new PlanDataCheckService(_db, _ed);
+            var planCheckSvc = new PlanDataCheckService(_db, _ed) { SuppressBlockingDialog = true };
             planCheckSvc.InspectPlanningData(CadConfig.PlanningData, ctx, null, progress);
+
+            // Stage 6 Commit 6.6：若当前主图没有任何有效规划管线，直接返回空报告，不加载勘测缓存或执行跨图比对
+            if (ctx.PlanPipesById == null || ctx.PlanPipesById.Count == 0)
+            {
+                return report;
+            }
 
             PipeSpatialMatchSummary textMatchSummary = _spatialMatcher.MatchAndEnrichPlanTextLabels(
                 _db,
