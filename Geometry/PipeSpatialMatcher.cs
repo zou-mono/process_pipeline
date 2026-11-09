@@ -8,6 +8,7 @@ using NetTopologySuite.Geometries;
 using NetTopologySuite.Index.Strtree;
 using process_pipeline.Core;
 using process_pipeline.Core.Config;
+using process_pipeline.Core.DataSource;
 using process_pipeline.Models;
 using process_pipeline.Utils;
 using Database = Autodesk.AutoCAD.DatabaseServices.Database;
@@ -592,6 +593,225 @@ namespace process_pipeline.Geometry
         }
 
         /// <summary>
+        /// 对指定 CAD 数据库中的管线图层与文字标注图层（DBText / MText）执行空间邻近 + 走向平行角配对（Stage 5 Commit 5.1）。
+        /// 自动调用 PipeLabelParser 解析管径（WIDTH）、坡度（PD）与标注管长（LEN）。
+        /// </summary>
+        public PipeSpatialMatchSummary MatchDatabaseTextLabels(
+            Database db,
+            IEnumerable<string> pipeLayers,
+            IEnumerable<string> textLayers,
+            PipeSpatialMatchOptions options = null)
+        {
+            if (db == null)
+                throw new ArgumentNullException(nameof(db));
+
+            var baseOpts = options ?? PipeSpatialMatchOptions.FromConfig();
+            double textMaxDist = options != null && options.MaxCurveDistance > 0
+                ? options.MaxCurveDistance
+                : Math.Max(baseOpts.MaxCurveDistance, 85.0);
+            var textMatchOpts = new PipeSpatialMatchOptions
+            {
+                MaxCurveDistance = textMaxDist,
+                // 文字标注沿管线曲线平行摆放，不启用 GIS 块专用的外包框中心重合判据
+                ExtentsCenterTolerance = 0.0,
+                AmbiguityDistanceMargin = baseOpts.AmbiguityDistanceMargin,
+                LengthMatchTolerance = baseOpts.LengthMatchTolerance,
+                CheckParallelAngle = true,
+                ParallelAngleToleranceDegrees = baseOpts.ParallelAngleToleranceDegrees > 0 ? baseOpts.ParallelAngleToleranceDegrees : 35.0,
+                UseExistingCadGroups = baseOpts.UseExistingCadGroups,
+                UseXDataLinks = baseOpts.UseXDataLinks,
+                LengthAttributeAliases = baseOpts.LengthAttributeAliases,
+                WidthAttributeAliases = baseOpts.WidthAttributeAliases,
+                HeightAttributeAliases = baseOpts.HeightAttributeAliases
+            };
+
+            var pipeLayerSet = new HashSet<string>(
+                (pipeLayers ?? Enumerable.Empty<string>()).Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()),
+                StringComparer.OrdinalIgnoreCase);
+
+            var textLayerSet = new HashSet<string>(
+                (textLayers ?? Enumerable.Empty<string>()).Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()),
+                StringComparer.OrdinalIgnoreCase);
+
+            var pipes = new List<SpatialPipeTarget>();
+            var textAttachments = new List<SpatialAttachmentItem>();
+
+            using (Transaction tr = db.TransactionManager.StartOpenCloseTransaction())
+            {
+                BlockTable bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
+                BlockTableRecord ms = (BlockTableRecord)tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForRead);
+
+                foreach (ObjectId objId in ms)
+                {
+                    if (objId.IsNull || objId.IsErased) continue;
+
+                    Entity ent = tr.GetObject(objId, OpenMode.ForRead, false) as Entity;
+                    if (ent == null || string.IsNullOrWhiteSpace(ent.Layer))
+                        continue;
+
+                    string layer = ent.Layer.Trim();
+
+                    if (pipeLayerSet.Contains(layer))
+                    {
+                        if (ent is Polyline pl)
+                        {
+                            SpatialPipeTarget target = CreatePipeTarget(pl, objId, _geometryFactory);
+                            if (target != null && target.Length > 1e-4)
+                            {
+                                pipes.Add(target);
+                            }
+                        }
+                        else if (ent is Line line)
+                        {
+                            SpatialPipeTarget target = CreatePipeTargetFromLine(line, objId, _geometryFactory);
+                            if (target != null && target.Length > 1e-4)
+                            {
+                                pipes.Add(target);
+                            }
+                        }
+                    }
+
+                    if (textLayerSet.Contains(layer) && (ent is DBText || ent is MText))
+                    {
+                        SpatialAttachmentItem att = PipeLabelParser.CreateAttachmentFromTextEntity(ent, objId, out _);
+                        if (att != null)
+                        {
+                            textAttachments.Add(att);
+                        }
+                    }
+                }
+
+                tr.Commit();
+            }
+
+            return MatchInMemory(pipes, textAttachments, textMatchOpts);
+        }
+
+        /// <summary>
+        /// 按规划数据配置（PlanningDataSettings）执行三类规划管线与对应文字标注图层的空间+平行角匹配，
+        /// 并将解析出的管径（WIDTH）、坡度（PD）、标注管长（LEN）自动组装写入 PipeDatasetContext（Stage 5 Commit 5.1）。
+        /// </summary>
+        public PipeSpatialMatchSummary MatchAndEnrichPlanTextLabels(
+            Database db,
+            PipeDatasetContext datasetContext,
+            PlanningDataSettings planningSettings = null,
+            PipeSpatialMatchOptions options = null)
+        {
+            if (db == null)
+                throw new ArgumentNullException(nameof(db));
+
+            var cfg = planningSettings ?? CadConfig.PlanningData ?? new PlanningDataSettings();
+            PipeSpatialMatchSummary summary;
+
+            // 若配置了标准三类规划管线分类规则，则按类别（新建 / 现状 / 改扩建）隔离配对再汇总，
+            // 避免交叉路口处不同类别的管线（如现状管与 2025 新建管）跨图层误抢文字标注。
+            if (cfg.Categories != null && cfg.Categories.Count > 0)
+            {
+                summary = new PipeSpatialMatchSummary();
+                foreach (PlanPipeCategoryRule cat in cfg.Categories)
+                {
+                    if (cat == null) continue;
+                    var catSummary = MatchDatabaseTextLabels(db, cat.PipeLayers, cat.TextLayers, options);
+                    MergeMatchSummaries(summary, catSummary);
+                }
+            }
+            else
+            {
+                var allPipeLayers = cfg.GetAllPipeLayers();
+                var allTextLayers = cfg.GetAllTextLayers();
+                summary = MatchDatabaseTextLabels(db, allPipeLayers, allTextLayers, options);
+            }
+
+            if (datasetContext != null)
+            {
+                // 将唯一匹配与有首选候选的歧义项同步写入 PipeDatasetContext
+                var matchedItems = summary.UniqueMatches.Concat(summary.ConflictMatches);
+                foreach (PipeAttachmentMatchItem item in matchedItems)
+                {
+                    if (item?.Pipe == null || item.MatchedAttachment == null)
+                        continue;
+
+                    EnrichedPlanPipeInfo enriched = datasetContext.GetOrCreatePlanPipeInfo(item.Pipe.PipeId, item.Pipe.Handle);
+                    if (string.IsNullOrWhiteSpace(enriched.LayerName))
+                    {
+                        enriched.LayerName = item.Pipe.LayerName ?? string.Empty;
+                    }
+
+                    if (enriched.Polyline == null)
+                    {
+                        enriched.Polyline = new CadPolyline
+                        {
+                            SourceHandles = new List<string> { item.Pipe.Handle },
+                            LayerName = item.Pipe.LayerName ?? string.Empty,
+                            DatasetName = "plan",
+                            Geometry = item.Pipe.Geometry,
+                            Attributes = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase)
+                        };
+                    }
+
+                    var attrs = item.MatchedAttachment.Attributes;
+                    if (attrs != null)
+                    {
+                        if (attrs.TryGetValue("WIDTH", out object wObj) && wObj != null &&
+                            double.TryParse(wObj.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out double wVal))
+                        {
+                            enriched.TextDiameter = wVal;
+                        }
+
+                        if (attrs.TryGetValue("PD", out object pdObj) && pdObj != null &&
+                            double.TryParse(pdObj.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out double pdVal))
+                        {
+                            enriched.TextSlope = pdVal;
+                        }
+
+                        if (attrs.TryGetValue("LEN", out object lenObj) && lenObj != null &&
+                            double.TryParse(lenObj.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out double lenVal))
+                        {
+                            enriched.TextLength = lenVal;
+                        }
+                    }
+
+                    enriched.RawLabelText = item.MatchedAttachment.BlockNameOrText ?? string.Empty;
+                    enriched.MatchedTextHandle = item.MatchedAttachment.Handle ?? string.Empty;
+                    enriched.SyncToPolylineAttributes();
+                }
+            }
+
+            return summary;
+        }
+
+        private static void MergeMatchSummaries(PipeSpatialMatchSummary target, PipeSpatialMatchSummary source)
+        {
+            if (target == null || source == null)
+                return;
+
+            target.TotalPipeCount += source.TotalPipeCount;
+            target.TotalAttachmentCount += source.TotalAttachmentCount;
+            target.TotalExistingGroupCount += source.TotalExistingGroupCount;
+            target.ValidGroupPairCount += source.ValidGroupPairCount;
+            target.InvalidGroupCount += source.InvalidGroupCount;
+            target.XDataMatchedCount += source.XDataMatchedCount;
+            target.ExtentsCenterMatchedCount += source.ExtentsCenterMatchedCount;
+            target.CurveProximityMatchedCount += source.CurveProximityMatchedCount;
+
+            target.UniqueMatches.AddRange(source.UniqueMatches);
+            target.ConflictMatches.AddRange(source.ConflictMatches);
+            target.UnmatchedPipes.AddRange(source.UnmatchedPipes);
+            target.OrphanAttachments.AddRange(source.OrphanAttachments);
+            target.InvalidGroups.AddRange(source.InvalidGroups);
+
+            foreach (var kv in source.MatchedAttributesByPipeHandle)
+            {
+                target.MatchedAttributesByPipeHandle[kv.Key] = kv.Value;
+            }
+
+            foreach (var kv in source.MatchByPipeId)
+            {
+                target.MatchByPipeId[kv.Key] = kv.Value;
+            }
+        }
+
+        /// <summary>
         /// 对内存中的管线集合与附属要素集合（属性块或文字标注）直接执行空间双判据匹配。
         /// </summary>
         public PipeSpatialMatchSummary MatchInMemory(
@@ -699,7 +919,19 @@ namespace process_pipeline.Geometry
                         channel = SpatialMatchChannel.CurveProximityMatch;
                         double lenPenalty = lenDiff.HasValue ? Math.Min(lenDiff.Value, 50.0) * 0.25 : 0.0;
                         double angPenalty = angleDiff.HasValue ? angleDiff.Value * 0.02 : 0.0;
-                        score = 100.0 + distCurve + lenPenalty + angPenalty;
+                        double regimePenalty = 0.0;
+                        if (options.CheckParallelAngle &&
+                            !string.IsNullOrWhiteSpace(pipe.LayerName) &&
+                            !string.IsNullOrWhiteSpace(att.BlockNameOrText))
+                        {
+                            bool isPressurePipe = pipe.LayerName.IndexOf("压力", StringComparison.OrdinalIgnoreCase) >= 0;
+                            bool isDnLabel = att.BlockNameOrText.IndexOf("DN", StringComparison.OrdinalIgnoreCase) >= 0;
+                            if (isPressurePipe != isDnLabel)
+                            {
+                                regimePenalty = 35.0;
+                            }
+                        }
+                        score = 100.0 + distCurve + lenPenalty + angPenalty + regimePenalty;
                     }
 
                     var pair = new CandidatePair

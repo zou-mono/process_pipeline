@@ -47,6 +47,7 @@
             "type": "pickString",
             "description": "选择要调试执行的 Cad.Plugin 测试命令 (回车默认执行第一项)",
             "options": [
+                "test_match_text",
                 "test_check_plan",
                 "test_match_group",
                 "test_config",
