@@ -23,6 +23,11 @@ namespace process_pipeline.Core
         public static AppConfig Current => ConfigManager.Current;
 
         /// <summary>
+        /// 通用系统参数配置。
+        /// </summary>
+        public static GeneralSettings General => ConfigManager.Current.General;
+
+        /// <summary>
         /// 各命令与面板的任务中文名称配置（替代原 Properties.Settings.Default）。
         /// </summary>
         public static TaskNameSettings TaskNames => ConfigManager.Current.TaskNames;

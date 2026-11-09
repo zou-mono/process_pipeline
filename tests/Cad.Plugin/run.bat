@@ -27,9 +27,10 @@ echo   [4] test_read_dwg         (Test_Read_Dwg)
 echo   [5] test_dwg_stats        (Test_Dwg_Stats)
 echo   [6] test_config           (Test_Config)
 echo   [7] test_match_group      (Test_Match_Group)
-echo   [8] list                  (List all test commands)
+echo   [8] test_check_plan       (Test_Check_Plan)
+echo   [9] list                  (List all test commands)
 echo ============================================================
-set /p "USER_INPUT=Select [1-8] or enter command name (default 1): "
+set /p "USER_INPUT=Select [1-9] or enter command name (default 1): "
 
 if "%USER_INPUT%"=="" set "USER_INPUT=1"
 if "%USER_INPUT%"=="1" set "TARGET_CMD=test_match_pipe"
@@ -39,7 +40,8 @@ if "%USER_INPUT%"=="4" set "TARGET_CMD=test_read_dwg"
 if "%USER_INPUT%"=="5" set "TARGET_CMD=test_dwg_stats"
 if "%USER_INPUT%"=="6" set "TARGET_CMD=test_config"
 if "%USER_INPUT%"=="7" set "TARGET_CMD=test_match_group"
-if "%USER_INPUT%"=="8" set "TARGET_CMD=list"
+if "%USER_INPUT%"=="8" set "TARGET_CMD=test_check_plan"
+if "%USER_INPUT%"=="9" set "TARGET_CMD=list"
 if "%TARGET_CMD%"=="" set "TARGET_CMD=%USER_INPUT%"
 
 :RUN_CMD
