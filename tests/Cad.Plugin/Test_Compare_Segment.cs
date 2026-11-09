@@ -1,308 +1,423 @@
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
-using Autodesk.AutoCAD.Geometry;
 using Autodesk.AutoCAD.Runtime;
-using Cad.Plugin;
 using NetTopologySuite.Geometries;
 using NLog;
 using process_pipeline.Commands;
 using process_pipeline.Core;
+using process_pipeline.Core.DataSource;
+using process_pipeline.Geometry;
 using process_pipeline.Models;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Cad.Plugin
 {
+    /// <summary>
+    /// 阶段六 Commit 6.2：规划数据与可编辑上版数据同源覆盖、19 项业务属性对比及双向编辑增量感知无 UI 自动化测试。
+    /// 命令：test_compare_segment
+    /// </summary>
     public class Test_Compare_Segment : CadCommandBase
     {
         private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
 
+        private int _passCount;
+        private int _failCount;
+
         [CommandMethod("test_compare_segment")]
         public override void Execute()
         {
-            Document doc = Application.DocumentManager.MdiActiveDocument;
-            Editor ed = doc.Editor;
-            Database currentDb = doc.Database;
+            _passCount = 0;
+            _failCount = 0;
 
-            /*
-             * ============================================================
-             * 1. 测试参数区
-             * ============================================================
-             * 
-             * 你先直接在这里写死路径和图层名。
-             * 等算法验证通过之后，再考虑做 UI、配置文件或命令行输入。
-             */
+            Logger.Info("========== 开始执行 [test_compare_segment] 规划与可编辑上版数据同源覆盖及 19 项属性双向增量核查测试 ==========");
 
-            // A.dwg 文件路径：基准数据所在 DWG。
-            string dwgAPath = @"D:\Codes\Tools\process_pipeline\Data\勘测管.dwg";
+            string projectRoot = FindProjectRoot();
+            string prevDwgPath = Path.Combine(projectRoot, "Data", "上版数据.dwg");
+            string planDwgPath = Path.Combine(projectRoot, "Data", "新版数据.dwg");
 
-            // B.dwg 文件路径：待比较数据所在 DWG。
-            string dwgBPath = @"D:\Codes\Tools\process_pipeline\Data\新版数据.dwg";
+            AssertTrue(File.Exists(prevDwgPath), $"上版数据图纸文件存在: {prevDwgPath}");
+            AssertTrue(File.Exists(planDwgPath), $"规划数据图纸文件存在: {planDwgPath}");
 
-            // A.dwg 中的基准图层。
-            string layerA = "勘测管";
-
-            // B.dwg 中的待比较图层。
-            string layerB = "3-污水管-现状";
-
-            // 判断容差，单位与 CAD 图纸单位一致。
-            // 如果图纸单位是米，0.001 就是 1mm。
-            // 如果图纸单位是毫米，0.001 就是 0.001mm。
-            double tolerance = 0.1;
-
-            // 弧线离散最大段长。
-            // 如果数据里没有 bulge 弧段，这个参数影响不大。
-            // 如果有弧线，值越小，离散越密，结果越接近原弧线，但线段数量越多。
-            double arcMaxSegmentLength = 1.0;
-
-            /*
-             * ============================================================
-             * 2. 正式执行
-             * ============================================================
-             */
+            if (!File.Exists(prevDwgPath) || !File.Exists(planDwgPath))
+            {
+                Logger.Error("测试图纸缺失，中止 test_compare_segment。");
+                return;
+            }
 
             try
             {
-                ed.WriteMessage("========== CADCOMPARE_2SIDEDB_TEST 开始 ==========\n");
-
-                ed.WriteMessage($"A 文件：{dwgAPath}\n");
-                ed.WriteMessage($"B 文件：{dwgBPath}\n");
-                ed.WriteMessage($"A 图层：{layerA}\n");
-                ed.WriteMessage($"B 图层：{layerB}\n");
-                ed.WriteMessage($"容差：{tolerance}\n");
-                ed.WriteMessage($"弧线离散最大段长：{arcMaxSegmentLength}\n");
-
-                var geometryFactory = new GeometryFactory();
-
-                /*
-                 * 从 A.dwg 的 Side Database 提取 layerA。
-                 * 
-                 * 注意：
-                 * 这里 transform 传 Matrix3d.Identity。
-                 * 也就是说，假设 A.dwg 和 B.dwg 的坐标本身已经在同一坐标系下。
-                 */
-                ed.WriteMessage("正在从 A.dwg 读取基准图层...\n");
-
-                List<CadSegment> segmentsA = ReadSegmentsFromSideDatabase(
-                    dwgAPath,
-                    layerA,
-                    "A",
-                    geometryFactory,
-                    arcMaxSegmentLength,
-                    Matrix3d.Identity,
-                    ed);
-
-                ed.WriteMessage($"A 提取线段数量：{segmentsA.Count}\n");
-
-                /*
-                 * 从 B.dwg 的 Side Database 提取 layerB。
-                 */
-                ed.WriteMessage("正在从 B.dwg 读取待比较图层...\n");
-
-                List<CadSegment> segmentsB = ReadSegmentsFromSideDatabase(
-                    dwgBPath,
-                    layerB,
-                    "B",
-                    geometryFactory,
-                    arcMaxSegmentLength,
-                    Matrix3d.Identity,
-                    ed);
-
-                ed.WriteMessage($"B 提取线段数量：{segmentsB.Count}\n");
-
-                if (segmentsA.Count == 0)
+                using (Database prevDb = new Database(false, true))
+                using (Database planDb = new Database(false, true))
                 {
-                    ed.WriteMessage("A 没有提取到任何线段，请检查 A 文件路径和 layerA 图层名。\n");
-                    return;
+                    prevDb.ReadDwgFile(prevDwgPath, FileOpenMode.OpenForReadAndAllShare, true, "");
+                    prevDb.CloseInput(true);
+
+                    planDb.ReadDwgFile(planDwgPath, FileOpenMode.OpenForReadAndAllShare, true, "");
+                    planDb.CloseInput(true);
+
+                    var session = DocumentSessionManager.GetOrCreateSession(planDb);
+                    session.DatasetContext.ClearSessionData();
+                    var datasetContext = session.DatasetContext;
+
+                    datasetContext.PreviousDataSource = new DataSourceDescriptor
+                    {
+                        Kind = DataSourceKind.OpenMdiDocument,
+                        InMemoryDatabase = prevDb,
+                        FilePath = prevDwgPath,
+                        DisplayName = "上版数据.dwg"
+                    };
+
+                    var compareSvc = new CompareSegmentService(planDb)
+                    {
+                        OverridePreviousDatabase = prevDb
+                    };
+
+                    // =========================================================================
+                    // 场景 1 & 2：验证双向同源折线段覆盖 (CompareCoverage) 与 19 项属性提取/对比
+                    // =========================================================================
+                    Logger.Info("--- 场景 1 & 2：验证规划数据与上版数据同源覆盖比较及 19 项业务属性继承/对比 ---");
+
+                    var swCheck = Stopwatch.StartNew();
+                    Dictionary<ObjectId, CheckIssueItem> initialIssues = compareSvc.CheckAll();
+                    swCheck.Stop();
+
+                    CompareSegmentCheckReport report = compareSvc.LastReport;
+                    AssertTrue(report != null, $"CompareSegmentService.CheckAll 成功生成结构化核查报告 (耗时={swCheck.ElapsedMilliseconds}ms)");
+
+                    if (report != null)
+                    {
+                        Logger.Info(
+                            $"  [数据集规模统计] 规划多段线={report.TotalPlanPolylines} 条 ({report.TotalPlanSegments} 折线段), " +
+                            $"上版多段线={report.TotalPreviousPolylines} 条 ({report.TotalPreviousSegments} 折线段, " +
+                            $"具备完整19项属性={report.PreviousPolylinesWithAll19Attrs} 条)");
+
+                        Logger.Info(
+                            $"  [双向同源覆盖统计] " +
+                            $"Compare(Plan,Prev): 同源覆盖段={report.PlanToPreviousCoverage.CoveredSegments.Count}, 规划新增/改线段={report.PlanToPreviousCoverage.MissingSegments.Count}; " +
+                            $"Compare(Prev,Plan): 上版被保留段={report.PreviousToPlanCoverage.CoveredSegments.Count}, 上版缺失/删减段={report.PreviousToPlanCoverage.MissingSegments.Count}");
+
+                        Logger.Info(
+                            $"  [同源管线与19项属性对比] 同源配对总数={report.HomologousPairs.Count}, " +
+                            $"属性一致={report.ConsistentHomologousPairs.Count}, 属性不符(WIDTH/PD)={report.AttributeMismatchPairs.Count}, " +
+                            $"规划新增管段问题={report.PlanUncoveredSegmentIssues.Count}, 上版缺失管段问题={report.PreviousMissingSegmentIssues.Count}, " +
+                            $"总问题项(AllIssueItems)={report.AllIssueItems.Count}");
+
+                        foreach (var mm in report.AttributeMismatchPairs.Take(10))
+                        {
+                            Logger.Info(
+                                $"    [同源属性差异明细] 规划管=[{mm.PlanHandle}]({mm.PlanCategoryName}, '{mm.PlanRawLabel}') <-> " +
+                                $"上版管=[{mm.PreviousHandle}]({mm.PreviousLayerName}, 重合={mm.OverlapLength:F1}m) -> " +
+                                $"{string.Join("；", mm.AttributeDifferences)}");
+                        }
+
+                        AssertTrue(report.TotalPlanPolylines == 256 && report.TotalPreviousPolylines == 317,
+                            $"准确加载 256 条规划管线与 317 条上版管线 (Plan={report.TotalPlanPolylines}, Prev={report.TotalPreviousPolylines})");
+
+                        AssertTrue(report.PreviousPolylinesWithAll19Attrs == 317,
+                            $"全部 317 条上版管线均完整提取并挂载 ws 块的 19 项业务属性 (实际={report.PreviousPolylinesWithAll19Attrs})");
+
+                        AssertTrue(
+                            report.PlanToPreviousCoverage.CoveredSegments.Count > 0 &&
+                            report.PlanToPreviousCoverage.MissingSegments.Count > 0 &&
+                            report.PreviousToPlanCoverage.CoveredSegments.Count > 0 &&
+                            report.PreviousToPlanCoverage.MissingSegments.Count > 0,
+                            "正向 Compare(Plan,Prev) 与反向 Compare(Prev,Plan) 均准确识别同源覆盖段与新增/缺失折线段");
+
+                        AssertTrue(
+                            report.HomologousPairs.Count > 0 &&
+                            report.HomologousPairs.All(h => h.Inherited19Attributes != null && h.Inherited19Attributes.Count == 19),
+                            $"全部 {report.HomologousPairs.Count} 组同源配对管线均完整继承上版 19 项标准属性 (QSBG..SHAPE_TYPE)");
+
+                        AssertTrue(report.ConsistentHomologousPairs.Count > 0 && report.AttributeMismatchPairs.Count > 0,
+                            $"准确区分同源属性一致管线 ({report.ConsistentHomologousPairs.Count} 组) 与同源属性差异管线 ({report.AttributeMismatchPairs.Count} 组)");
+
+                        AssertTrue(
+                            report.PreviousMissingSegmentIssues.Count > 0 &&
+                            report.PreviousMissingSegmentIssues.All(i =>
+                                i.TargetObjectId.IsNull &&
+                                (Math.Abs(i.Location.X) > 1.0 || Math.Abs(i.Location.Y) > 1.0)),
+                            $"全部 {report.PreviousMissingSegmentIssues.Count} 条上版缺失管段问题均支持 TargetObjectId == ObjectId.Null 跨图存储并具备有效定位坐标");
+
+                        AssertTrue(session.IssuesById.Count == report.AllIssueItems.Count,
+                            $"DocumentCheckSession.IssuesById 完整保存全部 {report.AllIssueItems.Count} 条核查问题（含同管线多子项及 ObjectId.Null 上版缺失项，零键冲突）");
+                    }
+
+                    // =========================================================================
+                    // 场景 3：验证双向编辑增量感知（方向 A：修改规划文字；方向 B：修改上版 ws 属性块字段）
+                    // =========================================================================
+                    Logger.Info("--- 场景 3：验证 CompareSegmentService 双向编辑增量感知（修改规划数据 & 修改可编辑上版数据） ---");
+
+                    HomologousPipeComparisonItem testMismatch = report?.AttributeMismatchPairs.FirstOrDefault(m =>
+                        !m.IsDiameterConsistent &&
+                        m.PlanDiameter.HasValue &&
+                        m.PreviousDiameter.HasValue &&
+                        datasetContext.PlanPipesByHandle.TryGetValue(m.PlanHandle, out var pInfo) &&
+                        !string.IsNullOrWhiteSpace(pInfo.MatchedTextHandle));
+
+                    AssertTrue(testMismatch != null,
+                        $"找到用于双向增量验证的同源属性差异管线对: 规划管=[{testMismatch?.PlanHandle}](DN{testMismatch?.PlanDiameter:0}) <-> 上版管=[{testMismatch?.PreviousHandle}](DN{testMismatch?.PreviousDiameter:0})");
+
+                    if (testMismatch != null &&
+                        datasetContext.PlanPipesByHandle.TryGetValue(testMismatch.PlanHandle, out EnrichedPlanPipeInfo planInfo))
+                    {
+                        string targetIssueId = $"CompareSegment:{testMismatch.PlanHandle}:ATTR_0";
+                        ObjectId planTextId = FindObjectIdByHandle(planDb, planInfo.MatchedTextHandle);
+
+                        // ---------------------------------------------------------------------
+                        // 3.1 方向 A：修改【规划数据】的管径文字标注，使其与上版 ws 块一致
+                        // ---------------------------------------------------------------------
+                        string origPlanText = string.Empty;
+                        string alignedPlanText = testMismatch.PreviousSlope.HasValue && testMismatch.PlanSlope.HasValue
+                            ? $"d{testMismatch.PreviousDiameter.Value:0}-i{testMismatch.PreviousSlope.Value:0.##}"
+                            : $"d{testMismatch.PreviousDiameter.Value:0}";
+
+                        using (Transaction tr = planDb.TransactionManager.StartTransaction())
+                        {
+                            Entity txtEnt = tr.GetObject(planTextId, OpenMode.ForWrite) as Entity;
+                            if (txtEnt is DBText dbTxt)
+                            {
+                                origPlanText = dbTxt.TextString;
+                                dbTxt.TextString = alignedPlanText;
+                            }
+                            else if (txtEnt is MText mTxt)
+                            {
+                                origPlanText = mTxt.Contents;
+                                mTxt.Contents = alignedPlanText;
+                            }
+
+                            var affectedFromPlanEdit = compareSvc.GetAffectedTargetIds(txtEnt).ToList();
+                            AssertTrue(affectedFromPlanEdit.Contains(testMismatch.PlanPipeId),
+                                $"[方向 A - 规划端编辑] GetAffectedTargetIds 准确追踪到修改规划文字 [{planInfo.MatchedTextHandle}] 受影响的规划管 [{testMismatch.PlanHandle}]");
+
+                            tr.Commit();
+                        }
+
+                        var afterPlanEditIssues = compareSvc.CheckIncremental(
+                            new List<ObjectId> { testMismatch.PlanPipeId },
+                            initialIssues);
+
+                        bool resolvedByPlanEdit =
+                            session.IssuesById.TryGetValue(targetIssueId, out CheckIssueItem itemAfterPlanEdit) &&
+                            itemAfterPlanEdit != null &&
+                            itemAfterPlanEdit.Status == IssueReviewStatus.Resolved;
+
+                        Logger.Info(
+                            $"  [方向 A 增量验证] 修改规划文字 '{origPlanText}' -> '{alignedPlanText}' 后, " +
+                            $"问题 [{targetIssueId}] 状态={itemAfterPlanEdit?.Status}, 备注={itemAfterPlanEdit?.Remark}");
+
+                        AssertTrue(resolvedByPlanEdit,
+                            $"[方向 A - 规划端编辑] 修改规划文字使管径对齐上版后，CheckIncremental 自动将 [{targetIssueId}] 归档为 Resolved");
+
+                        // 还原规划文字，恢复 Pending 状态
+                        using (Transaction tr = planDb.TransactionManager.StartTransaction())
+                        {
+                            Entity txtEnt = tr.GetObject(planTextId, OpenMode.ForWrite) as Entity;
+                            if (txtEnt is DBText dbTxt)
+                                dbTxt.TextString = origPlanText;
+                            else if (txtEnt is MText mTxt)
+                                mTxt.Contents = origPlanText;
+                            tr.Commit();
+                        }
+
+                        compareSvc.CheckIncremental(new List<ObjectId> { testMismatch.PlanPipeId }, afterPlanEditIssues);
+                        AssertTrue(
+                            session.IssuesById.TryGetValue(targetIssueId, out CheckIssueItem restoredItem) &&
+                            restoredItem?.Status == IssueReviewStatus.Pending,
+                            $"[方向 A - 还原验证] 还原规划文字为 '{origPlanText}' 后，问题 [{targetIssueId}] 准确恢复为 Pending");
+
+                        // ---------------------------------------------------------------------
+                        // 3.2 方向 B：修改【可编辑上版数据】ws 属性块内的 AttributeReference (WIDTH / PD)
+                        // ---------------------------------------------------------------------
+                        var prevMatcher = new PipeSpatialMatcher();
+                        var prevMatchSummary = prevMatcher.MatchDatabaseBlockAttributes(
+                            prevDb,
+                            new[] { "0污水-待补测现状管", "0污水-规划新建", "0污水-规划改建", "0污水-已核实需新增" },
+                            new[] { "0污水-属性" });
+
+                        ObjectId prevPipeObjId = FindObjectIdByHandle(prevDb, testMismatch.PreviousHandle);
+                        PipeAttachmentMatchItem prevBlockMatch = null;
+                        if (!prevPipeObjId.IsNull)
+                        {
+                            prevMatchSummary.MatchByPipeId.TryGetValue(prevPipeObjId, out prevBlockMatch);
+                        }
+
+                        ObjectId wsBlockId = prevBlockMatch?.MatchedAttachment?.AttachmentId ?? ObjectId.Null;
+                        AssertTrue(!wsBlockId.IsNull && wsBlockId.IsValid,
+                            $"[方向 B - 上版端编辑] 定位上版管 [{testMismatch.PreviousHandle}] 配对的 ws 属性块 Handle=[{prevBlockMatch?.MatchedAttachment?.Handle}]");
+
+                        if (!wsBlockId.IsNull && wsBlockId.IsValid)
+                        {
+                            string origPrevWidthStr = string.Empty;
+                            string origPrevSlopeStr = string.Empty;
+                            string newPrevWidthStr = $"{testMismatch.PlanDiameter.Value:0}";
+                            string newPrevSlopeStr = testMismatch.PlanSlope.HasValue ? $"{testMismatch.PlanSlope.Value:0.##}" : null;
+
+                            using (Transaction tr = prevDb.TransactionManager.StartTransaction())
+                            {
+                                BlockReference wsBr = tr.GetObject(wsBlockId, OpenMode.ForRead) as BlockReference;
+                                AttributeReference widthAttrRef = null;
+                                AttributeReference pdAttrRef = null;
+
+                                if (wsBr != null)
+                                {
+                                    foreach (ObjectId attId in wsBr.AttributeCollection)
+                                    {
+                                        AttributeReference ar = tr.GetObject(attId, OpenMode.ForWrite) as AttributeReference;
+                                        if (ar == null) continue;
+                                        if (string.Equals(ar.Tag, "WIDTH", StringComparison.OrdinalIgnoreCase))
+                                        {
+                                            widthAttrRef = ar;
+                                            origPrevWidthStr = ar.TextString;
+                                            ar.TextString = newPrevWidthStr;
+                                        }
+                                        else if (newPrevSlopeStr != null && string.Equals(ar.Tag, "PD", StringComparison.OrdinalIgnoreCase))
+                                        {
+                                            pdAttrRef = ar;
+                                            origPrevSlopeStr = ar.TextString;
+                                            ar.TextString = newPrevSlopeStr;
+                                        }
+                                    }
+                                }
+
+                                AssertTrue(widthAttrRef != null,
+                                    $"[方向 B - 上版端编辑] 成功修改上版 ws 属性块内 WIDTH 字段 ('{origPrevWidthStr}' -> '{newPrevWidthStr}')");
+
+                                // 验证修改上版 ws 块内 AttributeReference 时：
+                                // 1. 自动使 PipeDatasetContext 的上版动态缓存失效 (IsPreviousDataCacheValid = false)
+                                // 2. 反向查出同源关联的规划管线 ObjectId
+                                var affectedFromPrevEdit = compareSvc.GetAffectedTargetIds(widthAttrRef).ToList();
+
+                                AssertTrue(!datasetContext.IsPreviousDataCacheValid,
+                                    "[方向 B - 上版端编辑] 修改上版 ws 属性块字段后，自动触发 PipeDatasetContext.InvalidatePreviousData() 使缓存失效");
+
+                                AssertTrue(affectedFromPrevEdit.Contains(testMismatch.PlanPipeId),
+                                    $"[方向 B - 上版端编辑] GetAffectedTargetIds 通过上版 ws 块反向追踪到同源规划管 [{testMismatch.PlanHandle}]");
+
+                                tr.Commit();
+                            }
+
+                            var swPrevInc = Stopwatch.StartNew();
+                            compareSvc.CheckIncremental(new List<ObjectId> { testMismatch.PlanPipeId }, initialIssues);
+                            swPrevInc.Stop();
+
+                            session.IssuesById.TryGetValue(targetIssueId, out CheckIssueItem itemAfterPrevEdit);
+                            bool resolvedByPrevEdit =
+                                datasetContext.IsPreviousDataCacheValid &&
+                                itemAfterPrevEdit != null &&
+                                itemAfterPrevEdit.Status == IssueReviewStatus.Resolved;
+
+                            Logger.Info(
+                                $"  [方向 B 增量验证] 修改上版 ws 块 WIDTH='{newPrevWidthStr}' 后, " +
+                                $"上版缓存已重建={datasetContext.IsPreviousDataCacheValid}, 问题 [{targetIssueId}] 状态={itemAfterPrevEdit?.Status}, " +
+                                $"耗时={swPrevInc.ElapsedMilliseconds}ms, 备注={itemAfterPrevEdit?.Remark}");
+
+                            AssertTrue(resolvedByPrevEdit,
+                                $"[方向 B - 上版端编辑] 修改上版 ws 属性块字段后，CheckIncremental 自动重载上版数据并将 [{targetIssueId}] 归档为 Resolved");
+
+                            // 还原上版 ws 块字段
+                            using (Transaction tr = prevDb.TransactionManager.StartTransaction())
+                            {
+                                BlockReference wsBr = tr.GetObject(wsBlockId, OpenMode.ForRead) as BlockReference;
+                                if (wsBr != null)
+                                {
+                                    foreach (ObjectId attId in wsBr.AttributeCollection)
+                                    {
+                                        AttributeReference ar = tr.GetObject(attId, OpenMode.ForWrite) as AttributeReference;
+                                        if (ar == null) continue;
+                                        if (string.Equals(ar.Tag, "WIDTH", StringComparison.OrdinalIgnoreCase))
+                                        {
+                                            ar.TextString = origPrevWidthStr;
+                                            compareSvc.GetAffectedTargetIds(ar);
+                                        }
+                                        else if (newPrevSlopeStr != null && string.Equals(ar.Tag, "PD", StringComparison.OrdinalIgnoreCase))
+                                        {
+                                            ar.TextString = origPrevSlopeStr;
+                                        }
+                                    }
+                                }
+                                tr.Commit();
+                            }
+
+                            compareSvc.CheckIncremental(new List<ObjectId> { testMismatch.PlanPipeId }, initialIssues);
+                            AssertTrue(
+                                session.IssuesById.TryGetValue(targetIssueId, out CheckIssueItem restoredAfterPrev) &&
+                                restoredAfterPrev?.Status == IssueReviewStatus.Pending,
+                                $"[方向 B - 还原验证] 还原上版 ws 属性块字段为 '{origPrevWidthStr}' 后，问题 [{targetIssueId}] 准确恢复为 Pending");
+                        }
+                    }
                 }
-
-                if (segmentsB.Count == 0)
-                {
-                    ed.WriteMessage("B 没有提取到任何线段，请检查 B 文件路径和 layerB 图层名。\n");
-                    return;
-                }
-
-                /*
-                 * 执行比较。
-                 */
-                var compareService = new CompareSegmentService(currentDb, ed, geometryFactory);
-
-                /*
-                 * Compare(A, B)
-                 * 含义：
-                 * 以 A 为基准，看 A 中哪些部分没有被 B 覆盖。
-                 */
-                ed.WriteMessage("正在执行 Compare(A, B)：检查 A 有、B 没有的部分...\n");
-
-                var compareRes_A_to_B = compareService.CompareCoverage(
-                    segmentsA,
-                    segmentsB,
-                    tolerance);
-
-                /*
-                 * Compare(B, A)
-                 * 含义：
-                 * 反向比较，看 B 中哪些部分没有被 A 覆盖。
-                 * 这可以理解为 B 相对于 A 的多余部分。
-                 */
-                ed.WriteMessage("正在执行 Compare(B, A)：检查 B 有、A 没有的部分...\n");
-
-                var compareRes_B_to_A = compareService.CompareCoverage(
-                    segmentsB,
-                    segmentsA,
-                    tolerance);
-
-                ed.WriteMessage($"A 有、B 没有的线段数量：{compareRes_A_to_B.MissingSegments.Count}\n");
-                ed.WriteMessage($"B 有、A 没有的线段数量：{compareRes_B_to_A.MissingSegments.Count}\n");
-
-                /*
-                 * 把结果画到当前打开的 CAD 图中。
-                 * 
-                 * 红色：
-                 *     A 有、B 没有。
-                 * 
-                 * 蓝色：
-                 *     B 有、A 没有。
-                 */
-                using (Transaction tr = currentDb.TransactionManager.StartTransaction())
-                {
-                    ResultDrawer.DrawSegments(
-                        currentDb,
-                        tr,
-                        compareRes_A_to_B.CoveredSegments,
-                        "_OVERLAP_A_TO_B",
-                        2); // 黄色
-                    ResultDrawer.DrawSegments(
-                        currentDb,
-                        tr,
-                        compareRes_A_to_B.MissingSegments,
-                        "_CADCOMPARE_A_NOT_IN_B",
-                        1); // 红色
-
-                    ResultDrawer.DrawSegments(
-                        currentDb,
-                        tr,
-                        compareRes_B_to_A.MissingSegments,
-                        "_CADCOMPARE_B_NOT_IN_A",
-                        5); // 蓝色
-
-                    tr.Commit();
-                }
-
-                ed.WriteMessage("\n\n结果已经绘制到当前图：");
-                ed.WriteMessage("\n红色图层 _CADCOMPARE_A_NOT_IN_B：A 有、B 没有");
-                ed.WriteMessage("\n蓝色图层 _CADCOMPARE_B_NOT_IN_A：B 有、A 没有");
-                ed.WriteMessage("\n黄色图层 _OVERLAP_A_TO_B：A和B重叠");
-
-
-                ed.WriteMessage("========== CADCOMPARE_2SIDEDB_TEST 完成 ==========\n");
             }
             catch (System.Exception ex)
             {
-                ed.WriteMessage("CADCOMPARE_2SIDEDB_TEST 执行异常：\n");
-                ed.WriteMessage(ex.Message + "\n");
-                ed.WriteMessage(ex.StackTrace + "\n");
+                _failCount++;
+                Logger.Error(ex, "[test_compare_segment] 执行过程中发生未捕获异常");
+            }
+
+            if (_failCount == 0)
+            {
+                Logger.Info($"========== [test_compare_segment] 测试全部通过：通过 {_passCount} 项，失败 0 项。 ==========");
+            }
+            else
+            {
+                Logger.Error($"========== [test_compare_segment] 测试完成：通过 {_passCount} 项，失败 {_failCount} 项。 ==========");
             }
         }
 
-        /// <summary>
-        /// 从 Side Database 读取某个 DWG 文件中的指定图层，并提取为 CadSegment 集合。
-        /// 
-        /// 参数说明：
-        /// dwgPath:
-        ///     要读取的 DWG 文件路径。
-        /// 
-        /// targetLayer:
-        ///     要提取的图层名。
-        /// 
-        /// datasetName:
-        ///     数据集名称，例如 A 或 B。
-        /// 
-        /// geometryFactory:
-        ///     NetTopologySuite 的 GeometryFactory。
-        /// 
-        /// arcMaxSegmentLength:
-        ///     弧线离散最大段长。
-        /// 
-        /// transform:
-        ///     坐标变换矩阵。
-        ///     当前测试脚本默认传 Matrix3d.Identity。
-        /// 
-        /// ed:
-        ///     AutoCAD Editor，用于输出调试信息。
-        /// </summary>
-        private static List<CadSegment> ReadSegmentsFromSideDatabase(
-            string dwgPath,
-            string targetLayer,
-            string datasetName,
-            GeometryFactory geometryFactory,
-            double arcMaxSegmentLength,
-            Matrix3d transform,
-            Editor ed)
+        private static ObjectId FindObjectIdByHandle(Database db, string handleStr)
         {
-            var segments = new List<CadSegment>();
+            if (db == null || string.IsNullOrWhiteSpace(handleStr))
+                return ObjectId.Null;
 
-            /*
-             * Side Database 的标准读取方式：
-             * 
-             * new Database(false, true)
-             *     false 表示不创建默认图形；
-             *     true 表示 noDocument，适合 side database。
-             */
-            using (Database sideDb = new Database(false, true))
+            try
             {
-                /*
-                 * ReadDwgFile 参数说明：
-                 * 
-                 * dwgPath:
-                 *     DWG 文件路径。
-                 * 
-                 * FileOpenMode.OpenForReadAndAllShare:
-                 *     只读打开，并允许其他进程共享访问。
-                 * 
-                 * true:
-                 *     allowCPConversion，允许代码页转换。
-                 * 
-                 * "":
-                 *     密码，普通 DWG 留空。
-                 */
-                sideDb.ReadDwgFile(
-                    dwgPath,
-                    FileOpenMode.OpenForReadAndAllShare,
-                    true,
-                    "");
-
-                /*
-                 * 释放文件输入流。
-                 * 
-                 * 对批量读取 DWG 很重要，否则可能导致文件一直被占用。
-                 */
-                sideDb.CloseInput(true);
-
-                /*
-                 * 从 Side Database 的 ModelSpace 中提取指定图层。
-                 * 
-                 * 注意：
-                 * isFromSideDatabase = true
-                 */
-                segments = CadSegmentExtractionService.ExtractSegmentsFromDatabaseModelSpace(
-                    sideDb,
-                    targetLayer,
-                    datasetName,
-                    geometryFactory,
-                    arcMaxSegmentLength,
-                    transform,
-                    dwgPath,
-                    true);
+                long val = Convert.ToInt64(handleStr.Trim(), 16);
+                Handle h = new Handle(val);
+                if (db.TryGetObjectId(h, out ObjectId id))
+                {
+                    return id;
+                }
             }
+            catch
+            {
+                // 忽略非法句柄
+            }
+            return ObjectId.Null;
+        }
 
-            ed.WriteMessage($"文件 {dwgPath} 中图层 {targetLayer} 提取完成，线段数量：{segments.Count}\n");
+        private void AssertTrue(bool condition, string message)
+        {
+            if (condition)
+            {
+                _passCount++;
+                Logger.Info($"  [PASS] {message}");
+            }
+            else
+            {
+                _failCount++;
+                Logger.Error($"  [FAIL] {message}");
+            }
+        }
 
-            return segments;
+        private static string FindProjectRoot()
+        {
+            string dir = AppDomain.CurrentDomain.BaseDirectory;
+            for (int i = 0; i < 6; i++)
+            {
+                if (File.Exists(Path.Combine(dir, "process_pipeline.csproj")) ||
+                    Directory.Exists(Path.Combine(dir, "Data")))
+                {
+                    return dir;
+                }
+                DirectoryInfo parent = Directory.GetParent(dir);
+                if (parent == null) break;
+                dir = parent.FullName;
+            }
+            return @"D:\Codes\Tools\process_pipeline";
         }
     }
 }
