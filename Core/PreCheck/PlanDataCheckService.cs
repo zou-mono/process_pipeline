@@ -71,6 +71,11 @@ namespace process_pipeline.Core.PreCheck
         public bool CheckLegacyResidualLayers { get; set; } = true;
 
         /// <summary>
+        /// 在批量全量核查调度时，是否静默子规则自带的模态阻断弹窗（由顶层 CheckPipelineCoordinator 统一汇总弹窗，Stage 6 Commit 6.4）。
+        /// </summary>
+        public bool SuppressBlockingDialog { get; set; } = false;
+
+        /// <summary>
         /// 最近一次执行规划自检生成的完整结构化报告。
         /// </summary>
         public PlanDataCheckReport LastReport { get; private set; }
@@ -125,13 +130,16 @@ namespace process_pipeline.Core.PreCheck
 
             if (report.TotalScannedPlanCurves == 0 && report.LegacyResidualItems.Count == 0 && _ed != null)
             {
-                var planLayers = (Settings ?? CadConfig.PlanningData)?.GetAllPipeLayers() ?? new HashSet<string>();
-                CadDialogService.ShowMessage(
-                    "[Title]当前文档未找到可核查的规划管线数据。\n\n" +
-                    "[Hint]CHECKPLAN 命令针对当前激活文档核查规划管线颜色/图层一致性、退化几何与残留图层：\n" +
-                    $"1.Entity类型必须是Line或者Polyline;\n" +
-                    $"2.规划管线图层名称：{string.Join("、", planLayers)}.",
-                    type: MessageBoxType.Warning);
+                if (!SuppressBlockingDialog && !ConfigManager.IsHeadlessOrSuppressedUi)
+                {
+                    var planLayers = (Settings ?? CadConfig.PlanningData)?.GetAllPipeLayers() ?? new HashSet<string>();
+                    CadDialogService.ShowMessage(
+                        "[Title]当前文档未找到可核查的规划管线数据。\n\n" +
+                        "[Hint]CHECKPLAN 命令针对当前激活文档核查规划管线颜色/图层一致性、退化几何与残留图层：\n" +
+                        $"1.Entity类型必须是Line或者Polyline;\n" +
+                        $"2.规划管线图层名称：{string.Join("、", planLayers)}.",
+                        type: MessageBoxType.Warning);
+                }
                 return null;
             }
 

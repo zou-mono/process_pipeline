@@ -63,6 +63,11 @@ namespace process_pipeline.Commands
         public HashSet<string> ArrowLayerName { get; set; } = CadConfig.ArrowLayers;
         public HashSet<string> PipeLayerName { get; set; } = CadConfig.PipeLayers;
 
+        /// <summary>
+        /// 在批量全量核查调度时，是否静默子规则自带的模态阻断弹窗（由顶层 CheckPipelineCoordinator 统一汇总弹窗，Stage 6 Commit 6.4）。
+        /// </summary>
+        public bool SuppressBlockingDialog { get; set; } = false;
+
         //double maxBufferDistance = 50.0;   // 距离阈值
         //double angleTolerance = 30.0;      // 角度偏差阈值（度），e.g., ±45°
         //string auxLayerName = "核查辅助线";
@@ -118,14 +123,15 @@ namespace process_pipeline.Commands
 
             //DbgLog.Write(_ed, $"\n找到箭头: {arrowData.Count} 个，管线: {pipeIds.Count} 条");
 
-            // Stage 4 Commit 4.2：将流向核查前置条件检查统一迁移至 Core/PreCheck/PreCheckService
+            // Stage 4 Commit 4.2 & Stage 6 Commit 6.4：将流向核查前置条件检查统一迁移至 Core/PreCheck/PreCheckService，
+            // 在全量综合核查模式下通过 SuppressBlockingDialog 静默子规则独立弹窗
             PreCheckSummary preCheckReport = PreCheckService.ValidateFlowArrowPreConditions(
                 _db,
                 PipeLayerName,
                 ArrowLayerName,
                 preloadedPipeCount: pipeIds?.Count ?? 0,
                 preloadedArrowCount: arrowData?.Count ?? 0,
-                showDialogOnError: true);
+                showDialogOnError: !SuppressBlockingDialog && !Core.Config.ConfigManager.IsHeadlessOrSuppressedUi);
 
             if (preCheckReport == null || preCheckReport.HasBlockingIssues || arrowData == null || pipeIds == null)
             {

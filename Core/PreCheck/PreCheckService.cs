@@ -207,7 +207,7 @@ namespace process_pipeline.Core.PreCheck
                     });
                 }
 
-                if (summary.HasBlockingIssues && showDialogOnError)
+                if (summary.HasBlockingIssues && showDialogOnError && !Config.ConfigManager.IsHeadlessOrSuppressedUi)
                 {
                     CadDialogService.ShowMessage(
                         summary.FormatBlockingDialogMessage(title),
@@ -238,7 +238,7 @@ namespace process_pipeline.Core.PreCheck
             };
 
             PreCheckSummary result = ValidateLayerGroups(db, requirements, title);
-            if (result.HasBlockingIssues && showDialogOnError)
+            if (result.HasBlockingIssues && showDialogOnError && !Config.ConfigManager.IsHeadlessOrSuppressedUi)
             {
                 CadDialogService.ShowMessage(
                     result.FormatBlockingDialogMessage(title),
@@ -246,6 +246,70 @@ namespace process_pipeline.Core.PreCheck
             }
 
             return result;
+        }
+
+        /// <summary>
+        /// 一键全量核查（CHECKPIPE）顶层统一前置预核查（Stage 6 Commit 6.4）：
+        /// 一次性扫描当前激活主图的【规划管线图层】、【管径文字标注图层】与【流向箭头图层】，
+        /// 当主图未加载任何有效规划管线时，将缺失提示合并为唯一一个综合对话框弹出并立即阻断后续规则，
+        /// 彻底消除多个子规则连续弹出 3 个对话框的问题。
+        /// </summary>
+        public static PreCheckSummary ValidateFullPipelinePreConditions(
+            AcadDb.Database db,
+            bool showDialogOnBlocking = true)
+        {
+            var planPipeLayers = CadConfig.PlanningData.GetAllPipeLayers().Where(l => !string.IsNullOrWhiteSpace(l)).ToList();
+            var planTextLayers = CadConfig.PlanningData.GetAllTextLayers().Where(l => !string.IsNullOrWhiteSpace(l)).ToList();
+            var arrowLayers = CadConfig.PlanningData.GetArrowLayersSet().Where(l => !string.IsNullOrWhiteSpace(l)).ToList();
+
+            var requirements = new List<LayerGroupRequirement>
+            {
+                new LayerGroupRequirement
+                {
+                    GroupTitle = "规划管线数据",
+                    LayerNames = planPipeLayers,
+                    AllowedDxfNames = new List<string> { "LINE", "LWPOLYLINE", "POLYLINE" },
+                    EntityTypeHint = "Line 或 Polyline（多段线）",
+                    MinRequiredEntityCount = 1
+                }
+            };
+
+            string title = "当前图纸未检测到合规的规划管线数据，无法执行综合核查。";
+            PreCheckSummary summary = ValidateLayerGroups(db, requirements, title);
+
+            if (summary.HasBlockingIssues)
+            {
+                // 将规划管线、管径文字标注、流向箭头的图层要求合并到同一条提示信息中，只弹一次窗
+                summary.BlockingItems.Clear();
+                string mergedDesc =
+                    $"[Hint]1. 规划管线数据要求（核心必选）：\n" +
+                    $"   • 图元类型：Line 或 Polyline（多段线）\n" +
+                    $"   • 图层名称：{string.Join("、", planPipeLayers)}\n" +
+                    $"[Hint]2. 管径文字标注要求（用于图属文字配对与管径提取）：\n" +
+                    $"   • 图元类型：DBText（单行文字）或 MText（多行文字）\n" +
+                    $"   • 图层名称：{string.Join("、", planTextLayers)}\n" +
+                    $"[Hint]3. 流向箭头数据要求（用于管线流向一致性核查）：\n" +
+                    $"   • 图元类型：BlockReference（块参照）或 Line/Polyline\n" +
+                    $"   • 图层名称：{string.Join("、", arrowLayers)}";
+
+                summary.BlockingItems.Add(new PreCheckItem
+                {
+                    Code = "FULL_CHECK_PLAN_DATA_EMPTY",
+                    Severity = PreCheckSeverity.Blocking,
+                    Title = title,
+                    Description = mergedDesc
+                });
+
+                if (showDialogOnBlocking && !Config.ConfigManager.IsHeadlessOrSuppressedUi)
+                {
+                    CadDialogService.ShowMessage(
+                        summary.FormatBlockingDialogMessage(title),
+                        title: "管线综合核查 - 数据预检提示",
+                        type: MessageBoxType.Warning);
+                }
+            }
+
+            return summary;
         }
 
         /// <summary>

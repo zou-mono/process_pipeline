@@ -100,6 +100,11 @@ namespace process_pipeline.Commands
         public bool IsPlanningTextMode { get; private set; }
 
         /// <summary>
+        /// 在批量全量核查调度时，是否静默子规则自带的模态阻断弹窗（由顶层 CheckPipelineCoordinator 统一汇总弹窗，Stage 6 Commit 6.4）。
+        /// </summary>
+        public bool SuppressBlockingDialog { get; set; } = false;
+
+        /// <summary>
         /// 最近一次核查产出的完整空间配对汇总报告。
         /// </summary>
         public PipeSpatialMatchSummary LastSummary { get; private set; }
@@ -145,7 +150,7 @@ namespace process_pipeline.Commands
 
             if (summary.TotalPipeCount == 0 && summary.TotalAttachmentCount == 0)
             {
-                if (_ed != null)
+                if (_ed != null && !SuppressBlockingDialog && !Core.Config.ConfigManager.IsHeadlessOrSuppressedUi)
                 {
                     CadDialogService.ShowMessage(
                         "[Title]当前文档未找到可核查的管线、属性块或文字标注数据。\n\n" +

@@ -427,6 +427,34 @@ namespace Cad.Plugin
                             mainVm.Rows.Count == fullSummary.AllMergedIssues.Count &&
                             mainVm.Rows.Count > 1000,
                             $"[ucMainCheckWindow 工具栏] 执行 [一键全量核查] 成功串联全部 5 项核查规则并汇聚 {mainVm.Rows.Count} 条记录至主核查面板");
+
+                        // ──────────────────────────────────────────────────
+                        // 10. Commit 6.4：空图纸顶层统一预核查拦截（Fail-Fast）与多弹窗合并验证
+                        // ──────────────────────────────────────────────────
+                        Logger.Info("[测试阶段 10] 验证空图纸顶层统一预核查拦截（Fail-Fast）与单次合并提示...");
+                        using (Database emptyDb = new Database(true, true))
+                        {
+                            var emptyPreCheck = PreCheckService.ValidateFullPipelinePreConditions(emptyDb, showDialogOnBlocking: false);
+                            AssertTrue(
+                                emptyPreCheck != null &&
+                                emptyPreCheck.HasBlockingIssues &&
+                                emptyPreCheck.BlockingItems.Count == 1 &&
+                                emptyPreCheck.BlockingItems[0].Code == "FULL_CHECK_PLAN_DATA_EMPTY",
+                                "[顶层统一预核查] 空图纸触发唯一一条合并预核查阻断项 (FULL_CHECK_PLAN_DATA_EMPTY)，避免连续弹出 3 个对话框");
+
+                            var emptyFullSummary = CheckPipelineCoordinator.ExecuteFullPipelineCheck(
+                                emptyDb,
+                                ed: null,
+                                allowInteractiveDialog: false,
+                                showPalette: false);
+
+                            AssertTrue(
+                                emptyFullSummary != null &&
+                                emptyFullSummary.PreCheckBlocked &&
+                                emptyFullSummary.ExecutedRuleIds.Count == 0 &&
+                                emptyFullSummary.AllMergedIssues.Count == 0,
+                                "[顶层统一预核查] 空图纸执行 ExecuteFullPipelineCheck 立即触发 Fail-Fast 阻断，后续子规则执行数=0");
+                        }
                     }
                 }
             }
