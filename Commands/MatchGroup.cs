@@ -90,6 +90,16 @@ namespace process_pipeline.Commands
         public bool IncludeUnboundUniqueMatches { get; set; } = true;
 
         /// <summary>
+        /// 是否强制启用规划文字标注配对模式（null 表示根据当前图纸内实有图元自动嗅探：若存在规划管线与规划文字标注且无属性块，则自动进入规划文字配对模式）。
+        /// </summary>
+        public bool? UsePlanningTextMode { get; set; }
+
+        /// <summary>
+        /// 最近一次核查是否运行在规划文字标注配对模式下（Stage 5 Commit 5.2）。
+        /// </summary>
+        public bool IsPlanningTextMode { get; private set; }
+
+        /// <summary>
         /// 最近一次核查产出的完整空间配对汇总报告。
         /// </summary>
         public PipeSpatialMatchSummary LastSummary { get; private set; }
@@ -117,13 +127,20 @@ namespace process_pipeline.Commands
 
         /// <summary>
         /// 执行全量图属与 Group 合法性核查（ICheckRule.CheckAll）。
+        /// 自动支持“上版/勘测属性块模式”与“规划文字标注配对复核模式（Stage 5 Commit 5.2）”。
         /// </summary>
         public Dictionary<ObjectId, CheckIssueItem> CheckAll(ProgressContext context = null)
         {
-            ResolveTargetLayers(out HashSet<string> pipeLayers, out HashSet<string> attrLayers);
+            ResolveTargetLayers(out HashSet<string> pipeLayers, out HashSet<string> attrLayers, out bool isPlanTextMode);
+            IsPlanningTextMode = isPlanTextMode;
 
+            var session = DocumentSessionManager.GetOrCreateSession(_db);
             var options = MatchOptions ?? PipeSpatialMatchOptions.FromConfig();
-            PipeSpatialMatchSummary summary = _matcher.MatchDatabaseBlockAttributes(_db, pipeLayers, attrLayers, options);
+            PipeSpatialMatchSummary summary = isPlanTextMode
+                ? (PipeLayerNames != null && PipeLayerNames.Count > 0 && AttributeLayerNames != null && AttributeLayerNames.Count > 0
+                    ? _matcher.MatchDatabaseTextLabels(_db, pipeLayers, attrLayers, options)
+                    : _matcher.MatchAndEnrichPlanTextLabels(_db, session?.DatasetContext, CadConfig.PlanningData, options))
+                : _matcher.MatchDatabaseBlockAttributes(_db, pipeLayers, attrLayers, options);
             LastSummary = summary;
 
             if (summary.TotalPipeCount == 0 && summary.TotalAttachmentCount == 0)
@@ -131,10 +148,11 @@ namespace process_pipeline.Commands
                 if (_ed != null)
                 {
                     CadDialogService.ShowMessage(
-                        "[Title]当前文档未找到可核查的参考管线或属性块数据。\n\n" +
-                        "[Hint]MATCHGROUP 命令针对当前激活文档核查图属与 Group 绑定关系：\n" +
-                        $"1. 上版数据管线图层：{string.Join("、", CadConfig.PreviousData.PipeLayers)}（属性块图层：{string.Join("、", CadConfig.PreviousData.AttributeLayers)}）；\n" +
-                        $"2. 勘测数据图层：{string.Join("、", CadConfig.SurveyData.PipeLayers)}。",
+                        "[Title]当前文档未找到可核查的管线、属性块或文字标注数据。\n\n" +
+                        "[Hint]MATCHGROUP 命令针对当前激活文档核查图属配对与 Group 绑定关系：\n" +
+                        $"1. 规划数据文字配对：{string.Join("、", CadConfig.PlanningData.GetAllPipeLayers())} <-> {string.Join("、", CadConfig.PlanningData.GetAllTextLayers())}；\n" +
+                        $"2. 上版数据块配对：{string.Join("、", CadConfig.PreviousData.PipeLayers)}（属性块：{string.Join("、", CadConfig.PreviousData.AttributeLayers)}）；\n" +
+                        $"3. 勘测数据块配对：{string.Join("、", CadConfig.SurveyData.PipeLayers)}。",
                         type: MessageBoxType.Warning);
                 }
                 return new Dictionary<ObjectId, CheckIssueItem>();
@@ -143,7 +161,6 @@ namespace process_pipeline.Commands
             RebuildTopologyMappings(summary);
 
             // 同步继承当前会话中人工已标记为 Ignored 的历史状态
-            var session = DocumentSessionManager.GetOrCreateSession(_db);
             var existingSameRuleIssues = new Dictionary<ObjectId, CheckIssueItem>();
             if (session?.CurrentIssues != null)
             {
@@ -161,7 +178,7 @@ namespace process_pipeline.Commands
 
         /// <summary>
         /// 执行局部增量核查（ICheckRule.CheckIncremental）：
-        /// 当用户在核查过程中移动属性块、修改块内 LEN/WIDTH 属性、修改管线几何或通过命令绑定/解绑 Group 后，
+        /// 当用户在核查过程中移动属性块/文字标注、修改块内属性或文字内容、修改管线几何或通过命令绑定/解绑 Group 后，
         /// 实时刷新受影响管线与邻近要素的核查状态，并将已完成 1:1 Group 绑定的记录自动归档为 Resolved。
         /// </summary>
         public Dictionary<ObjectId, CheckIssueItem> CheckIncremental(
@@ -176,9 +193,15 @@ namespace process_pipeline.Commands
             var session = DocumentSessionManager.GetOrCreateSession(_db);
             session?.DatasetContext.InvalidatePreviousData();
 
-            ResolveTargetLayers(out HashSet<string> pipeLayers, out HashSet<string> attrLayers);
+            ResolveTargetLayers(out HashSet<string> pipeLayers, out HashSet<string> attrLayers, out bool isPlanTextMode);
+            IsPlanningTextMode = isPlanTextMode;
+
             var options = MatchOptions ?? PipeSpatialMatchOptions.FromConfig();
-            PipeSpatialMatchSummary latestSummary = _matcher.MatchDatabaseBlockAttributes(_db, pipeLayers, attrLayers, options);
+            PipeSpatialMatchSummary latestSummary = isPlanTextMode
+                ? (PipeLayerNames != null && PipeLayerNames.Count > 0 && AttributeLayerNames != null && AttributeLayerNames.Count > 0
+                    ? _matcher.MatchDatabaseTextLabels(_db, pipeLayers, attrLayers, options)
+                    : _matcher.MatchAndEnrichPlanTextLabels(_db, session?.DatasetContext, CadConfig.PlanningData, options))
+                : _matcher.MatchDatabaseBlockAttributes(_db, pipeLayers, attrLayers, options);
             LastSummary = latestSummary;
 
             RebuildTopologyMappings(latestSummary);
@@ -202,7 +225,7 @@ namespace process_pipeline.Commands
 
                 if (!latestIssues.ContainsKey(keyId))
                 {
-                    // 该管线或属性块在最新全图配对中已不再属于异常/未建Group项（即已完成 1:1 CAD Group 绑定）
+                    // 该管线或属性块/文字在最新全图配对中已不再属于异常/未建Group项（即已完成 1:1 CAD Group 绑定）
                     CheckIssueItem resolvedItem = mergedIssues[keyId];
                     resolvedItem.Status = IssueReviewStatus.Resolved;
                     if (latestSummary.MatchByPipeId.TryGetValue(keyId, out PipeAttachmentMatchItem matched) &&
@@ -230,7 +253,7 @@ namespace process_pipeline.Commands
 
         /// <summary>
         /// 变更影响范围追踪（ICheckRule.GetAffectedTargetIds）：
-        /// 监听管线（Polyline/Line）、属性块（BlockReference）、块内属性文字（AttributeReference）及 CAD Group 的增删改。
+        /// 监听管线（Polyline/Line）、属性块（BlockReference）、块内属性文字（AttributeReference）、规划文字标注（DBText/MText）及 CAD Group 的增删改。
         /// </summary>
         public IEnumerable<ObjectId> GetAffectedTargetIds(DBObject changedObj)
         {
@@ -278,7 +301,7 @@ namespace process_pipeline.Commands
                 if (targetEnt == null)
                     return affectedIds;
 
-                ResolveTargetLayers(out HashSet<string> pipeLayers, out HashSet<string> attrLayers);
+                ResolveTargetLayers(out HashSet<string> pipeLayers, out HashSet<string> attrLayers, out bool isPlanTextMode);
 
                 // 情况 3：目标管线图层上的多段线或直线发生几何/图层变更
                 if ((targetEnt is Polyline || targetEnt is Line) &&
@@ -300,19 +323,20 @@ namespace process_pipeline.Commands
                     }
                 }
 
-                // 情况 4：目标属性块图层上的 BlockReference 发生位移、属性编辑或删除
-                if (targetEnt is BlockReference br &&
-                    !string.IsNullOrWhiteSpace(br.Layer) &&
-                    attrLayers.Contains(br.Layer))
+                // 情况 4：目标属性块图层上的 BlockReference 或规划文字标注图层上的 DBText / MText 发生位移、编辑或删除
+                if ((targetEnt is BlockReference || targetEnt is DBText || targetEnt is MText) &&
+                    !string.IsNullOrWhiteSpace(targetEnt.Layer) &&
+                    attrLayers.Contains(targetEnt.Layer))
                 {
-                    affectedIds.Add(br.ObjectId);
-                    if (_attachmentToPipes.TryGetValue(br.ObjectId, out HashSet<ObjectId> boundPipes))
+                    affectedIds.Add(targetEnt.ObjectId);
+                    if (_attachmentToPipes.TryGetValue(targetEnt.ObjectId, out HashSet<ObjectId> boundPipes))
                     {
                         foreach (ObjectId pid in boundPipes)
                             affectedIds.Add(pid);
                     }
 
-                    double searchBuffer = (MatchOptions?.MaxCurveDistance ?? 25.0) * 1.5;
+                    double defaultRadius = isPlanTextMode ? 85.0 : 25.0;
+                    double searchBuffer = (MatchOptions?.MaxCurveDistance ?? defaultRadius) * 1.5;
                     using (OpenCloseTransaction tr = _db.TransactionManager.StartOpenCloseTransaction())
                     {
                         BlockTableRecord btr = (BlockTableRecord)tr.GetObject(_db.CurrentSpaceId, OpenMode.ForRead);
@@ -325,7 +349,7 @@ namespace process_pipeline.Commands
                                 if (pipeCandidate != null &&
                                     !string.IsNullOrWhiteSpace(pipeCandidate.Layer) &&
                                     pipeLayers.Contains(pipeCandidate.Layer) &&
-                                    GeometryHelper.IsIntersection2D(br, pipeCandidate, searchBuffer))
+                                    GeometryHelper.IsIntersection2D(targetEnt, pipeCandidate, searchBuffer))
                                 {
                                     affectedIds.Add(pipeCandidate.ObjectId);
                                 }
@@ -399,7 +423,7 @@ namespace process_pipeline.Commands
 
             if (result == null || result.Count == 0)
             {
-                Ed?.WriteMessage($"\n[{RuleName}] 检查通过：当前文档共 {LastSummary?.ValidGroupPairCount ?? 0} 组管线与属性块均已 1:1 合法绑定 Group，无异常或未绑定项。\n");
+                Ed?.WriteMessage($"\n[{RuleName}] 检查通过：当前文档共 {LastSummary?.ValidGroupPairCount ?? 0} 组管线与属性要素均已 1:1 合法绑定 Group，无异常或未绑定项。\n");
                 if (session != null)
                 {
                     var mergedEmpty = session.MergeRuleIssues(RuleId, new Dictionary<ObjectId, CheckIssueItem>(), isIncremental: false);
@@ -414,7 +438,7 @@ namespace process_pipeline.Commands
             int pendingCount = result.Values.Count(i => i.Status == IssueReviewStatus.Pending);
             int toRecheckCount = result.Values.Count(i => i.Status == IssueReviewStatus.ToRecheck);
             Ed?.WriteMessage(
-                $"\n[{RuleName}] 核查完成：共检出 {result.Count} 项（待核查冲突/缺失/结构异常：{pendingCount} 项，待复核确认绑定 Group：{toRecheckCount} 项）。\n");
+                $"\n[{RuleName}] 核查完成：共检出 {result.Count} 项（待核查冲突/不规范/多段共标/多余标注：{pendingCount} 项，待复核确认连线与绑定 Group：{toRecheckCount} 项）。\n");
 
             var mergedAll = session != null
                 ? session.MergeRuleIssues(RuleId, result, isIncremental: false)
@@ -484,7 +508,7 @@ namespace process_pipeline.Commands
                 issues[targetId] = issue;
             }
 
-            // 2. 一对多空间邻近歧义（存在多个距离相近的候选属性块，附带 PossibleMatches 供绘制瞬态红色辅助连线）
+            // 2. 一对多空间邻近歧义、一管多标或不规范文字标注（列入 Pending 待核查，附带 PossibleMatches 供绘制瞬态红色辅助连线）
             foreach (PipeAttachmentMatchItem conflict in summary.ConflictMatches)
             {
                 context?.Step();
@@ -533,7 +557,7 @@ namespace process_pipeline.Commands
                 issues[pipeId] = issue;
             }
 
-            // 3. 未找到任何可配对属性块的管线
+            // 3. 未找到专属 1:1 配对的管线（含多段共标与缺标管段，多段共标时附带指向相邻共享标注的辅助连线）
             foreach (PipeAttachmentMatchItem unmatched in summary.UnmatchedPipes)
             {
                 context?.Step();
@@ -541,6 +565,14 @@ namespace process_pipeline.Commands
                     continue;
 
                 ObjectId pipeId = unmatched.Pipe.PipeId;
+                ExtractDiameterAndHeight(unmatched.MatchedAttachment?.Attributes, out double uDiam, out double uHeight);
+
+                var relatedIds = new List<ObjectId>();
+                if (unmatched.MatchedAttachment != null && !unmatched.MatchedAttachment.AttachmentId.IsNull)
+                {
+                    relatedIds.Add(unmatched.MatchedAttachment.AttachmentId);
+                }
+
                 var issue = new CheckIssueItem
                 {
                     IssueId = $"{RuleId}:{unmatched.Pipe.Handle}:0",
@@ -552,9 +584,13 @@ namespace process_pipeline.Commands
                     TargetObjectId = pipeId,
                     TargetHandle = unmatched.Pipe.Handle,
                     LayerName = unmatched.Pipe.LayerName,
+                    RelatedObjectIds = relatedIds,
                     Location = unmatched.ClosestPointOnPipe,
+                    Diameter = uDiam,
+                    Height = uHeight,
                     Description = unmatched.Description,
                     Remark = unmatched.Description,
+                    PossibleMatches = unmatched.PossibleMatches ?? new List<MatchItem>(),
                     RulePayload = unmatched
                 };
 
@@ -562,7 +598,7 @@ namespace process_pipeline.Commands
                 issues[pipeId] = issue;
             }
 
-            // 4. 未被任何管线认领的孤立属性块
+            // 4. 未被任何管线 1:1 认领的多余/孤立属性块或文字标注（附带指向最邻近管线的辅助连线）
             foreach (PipeAttachmentMatchItem orphan in summary.OrphanAttachments)
             {
                 context?.Step();
@@ -571,6 +607,12 @@ namespace process_pipeline.Commands
 
                 ObjectId attId = orphan.MatchedAttachment.AttachmentId;
                 ExtractDiameterAndHeight(orphan.MatchedAttachment.Attributes, out double diam, out double height);
+
+                var relatedIds = new List<ObjectId>();
+                if (orphan.Pipe != null && !orphan.Pipe.PipeId.IsNull)
+                {
+                    relatedIds.Add(orphan.Pipe.PipeId);
+                }
 
                 var issue = new CheckIssueItem
                 {
@@ -583,11 +625,13 @@ namespace process_pipeline.Commands
                     TargetObjectId = attId,
                     TargetHandle = orphan.MatchedAttachment.Handle,
                     LayerName = orphan.MatchedAttachment.LayerName,
+                    RelatedObjectIds = relatedIds,
                     Location = orphan.MatchedAttachment.Position,
                     Diameter = diam,
                     Height = height,
                     Description = orphan.Description,
                     Remark = orphan.Description,
+                    PossibleMatches = orphan.PossibleMatches ?? new List<MatchItem>(),
                     RulePayload = orphan
                 };
 
@@ -616,10 +660,28 @@ namespace process_pipeline.Commands
 
                     string channelText = unique.Channel == SpatialMatchChannel.XDataLink
                         ? $"XData({PipeSpatialMatcher.XDataRegAppName})句柄匹配"
-                        : (unique.Channel == SpatialMatchChannel.ExtentsCenterMatch ? "外包框中心+管长匹配" : "曲线邻近匹配");
+                        : (unique.Channel == SpatialMatchChannel.ExtentsCenterMatch ? "外包框中心+管长匹配" : "曲线邻近+平行角匹配");
 
-                    string desc = $"未建 Group：已通过[{channelText}]唯一配对属性块 [{unique.MatchedAttachment.Handle}]" +
-                                  $"（距曲线={unique.DistanceToCurve:F2}m, 距外包框中心={unique.DistanceToExtentsCenter:F2}m），右键可一键绑定 Group 与 XData";
+                    string desc;
+                    if (IsPlanningTextMode)
+                    {
+                        string labelPreview = !string.IsNullOrWhiteSpace(unique.MatchedAttachment.BlockNameOrText)
+                            ? $" '{unique.MatchedAttachment.BlockNameOrText}'"
+                            : string.Empty;
+                        string angText = unique.AngleDifferenceDegrees.HasValue
+                            ? $", 平行角差={unique.AngleDifferenceDegrees.Value:F1}°"
+                            : string.Empty;
+                        desc = $"待人工复核：已通过[{channelText}]配对文字标注 [{unique.MatchedAttachment.Handle}]{labelPreview}" +
+                               $"（距曲线={unique.DistanceToCurve:F2}m{angText}），点击可查看配对连线，右键可一键绑定 Group 与 XData";
+                    }
+                    else
+                    {
+                        string blockChannelText = unique.Channel == SpatialMatchChannel.XDataLink
+                            ? $"XData({PipeSpatialMatcher.XDataRegAppName})句柄匹配"
+                            : (unique.Channel == SpatialMatchChannel.ExtentsCenterMatch ? "外包框中心+管长匹配" : "曲线邻近匹配");
+                        desc = $"未建 Group：已通过[{blockChannelText}]唯一配对属性块 [{unique.MatchedAttachment.Handle}]" +
+                               $"（距曲线={unique.DistanceToCurve:F2}m, 距外包框中心={unique.DistanceToExtentsCenter:F2}m），右键可一键绑定 Group 与 XData";
+                    }
 
                     var possibleMatches = unique.PossibleMatches != null && unique.PossibleMatches.Count > 0
                         ? unique.PossibleMatches
@@ -631,7 +693,7 @@ namespace process_pipeline.Commands
                                 unique.DistanceToCurve,
                                 unique.ClosestPointOnPipe,
                                 unique.MatchedAttachment.RotationDegrees ?? 0.0,
-                                0.0,
+                                unique.AngleDifferenceDegrees ?? 0.0,
                                 true)
                         };
 
@@ -674,24 +736,28 @@ namespace process_pipeline.Commands
 
             var allItems = summary.UniqueMatches
                 .Concat(summary.ConflictMatches)
-                .Concat(summary.InvalidGroups);
+                .Concat(summary.InvalidGroups)
+                .Concat(summary.UnmatchedPipes)
+                .Concat(summary.OrphanAttachments);
 
             foreach (PipeAttachmentMatchItem item in allItems)
             {
-                if (item?.Pipe == null || item.Pipe.PipeId.IsNull)
+                if (item == null)
                     continue;
 
-                ObjectId pipeId = item.Pipe.PipeId;
-                if (item.MatchedAttachment != null && !item.MatchedAttachment.AttachmentId.IsNull)
+                ObjectId pipeId = item.Pipe != null ? item.Pipe.PipeId : ObjectId.Null;
+                ObjectId attId = item.MatchedAttachment != null ? item.MatchedAttachment.AttachmentId : ObjectId.Null;
+
+                if (!pipeId.IsNull && !attId.IsNull)
                 {
-                    LinkPipeAndAttachment(pipeId, item.MatchedAttachment.AttachmentId);
+                    LinkPipeAndAttachment(pipeId, attId);
                 }
 
-                if (item.PossibleMatches != null)
+                if (!pipeId.IsNull && item.PossibleMatches != null)
                 {
                     foreach (MatchItem cand in item.PossibleMatches)
                     {
-                        if (!cand.Id.IsNull)
+                        if (!cand.Id.IsNull && cand.Id != pipeId)
                         {
                             LinkPipeAndAttachment(pipeId, cand.Id);
                         }
@@ -718,61 +784,123 @@ namespace process_pipeline.Commands
         }
 
         /// <summary>
-        /// 自动探测当前文档中的目标管线图层与属性块图层（严格以当前 _db 为唯一数据源）。
+        /// 自动探测当前文档中的目标管线图层与属性块/文字标注图层（严格以当前 _db 为唯一数据源，按实有图元数识别规划文字图纸与上版/勘测属性块图纸）。
         /// </summary>
-        private void ResolveTargetLayers(out HashSet<string> pipeLayers, out HashSet<string> attrLayers)
+        private void ResolveTargetLayers(
+            out HashSet<string> pipeLayers,
+            out HashSet<string> attrLayers,
+            out bool isPlanningTextMode)
         {
             if (PipeLayerNames != null && PipeLayerNames.Count > 0 &&
                 AttributeLayerNames != null && AttributeLayerNames.Count > 0)
             {
                 pipeLayers = new HashSet<string>(PipeLayerNames, StringComparer.OrdinalIgnoreCase);
                 attrLayers = new HashSet<string>(AttributeLayerNames, StringComparer.OrdinalIgnoreCase);
+                if (UsePlanningTextMode.HasValue)
+                {
+                    isPlanningTextMode = UsePlanningTextMode.Value;
+                }
+                else
+                {
+                    var cfgTextSet = CadConfig.PlanningData?.GetAllTextLayers() ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    isPlanningTextMode = attrLayers.Any(l => cfgTextSet.Contains(l));
+                }
                 return;
             }
 
             pipeLayers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             attrLayers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
+            var planPipes = CadConfig.PlanningData?.GetAllPipeLayers() ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var planTexts = CadConfig.PlanningData?.GetAllTextLayers() ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var prevPipes = new HashSet<string>(CadConfig.PreviousData.PipeLayers ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
             var prevAttrs = new HashSet<string>(CadConfig.PreviousData.AttributeLayers ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
             var surveyPipes = new HashSet<string>(CadConfig.SurveyData.PipeLayers ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
             var surveyAttrs = new HashSet<string>(CadConfig.SurveyData.AttributeLayers ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
 
-            bool hasPrevEntities = false;
-            bool hasSurveyEntities = false;
+            if (UsePlanningTextMode == true)
+            {
+                isPlanningTextMode = true;
+                foreach (string l in planPipes) pipeLayers.Add(l);
+                foreach (string l in planTexts) attrLayers.Add(l);
+                return;
+            }
+
+            int planPipeEntityCount = 0;
+            int planTextEntityCount = 0;
+            int prevAttrBlockCount = 0;
+            int surveyAttrBlockCount = 0;
 
             using (OpenCloseTransaction tr = _db.TransactionManager.StartOpenCloseTransaction())
             {
-                LayerTable lt = (LayerTable)tr.GetObject(_db.LayerTableId, OpenMode.ForRead);
-                foreach (string l in prevPipes.Concat(prevAttrs))
-                {
-                    if (!string.IsNullOrWhiteSpace(l) && lt.Has(l))
-                    {
-                        hasPrevEntities = true;
-                        break;
-                    }
-                }
+                BlockTable bt = (BlockTable)tr.GetObject(_db.BlockTableId, OpenMode.ForRead);
+                BlockTableRecord ms = (BlockTableRecord)tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForRead);
 
-                foreach (string l in surveyPipes.Concat(surveyAttrs))
+                foreach (ObjectId objId in ms)
                 {
-                    if (!string.IsNullOrWhiteSpace(l) && lt.Has(l))
+                    if (objId.IsNull || objId.IsErased)
+                        continue;
+
+                    string dxfName = objId.ObjectClass.DxfName;
+                    if (dxfName != "LWPOLYLINE" && dxfName != "POLYLINE" && dxfName != "LINE" &&
+                        dxfName != "INSERT" && dxfName != "TEXT" && dxfName != "MTEXT")
                     {
-                        hasSurveyEntities = true;
-                        break;
+                        continue;
+                    }
+
+                    Entity ent = tr.GetObject(objId, OpenMode.ForRead, false) as Entity;
+                    if (ent == null || string.IsNullOrWhiteSpace(ent.Layer))
+                        continue;
+
+                    string layer = ent.Layer.Trim();
+                    if ((dxfName == "LWPOLYLINE" || dxfName == "POLYLINE" || dxfName == "LINE") && planPipes.Contains(layer))
+                    {
+                        planPipeEntityCount++;
+                    }
+                    else if ((dxfName == "TEXT" || dxfName == "MTEXT") && planTexts.Contains(layer))
+                    {
+                        planTextEntityCount++;
+                    }
+                    else if (dxfName == "INSERT")
+                    {
+                        if (prevAttrs.Contains(layer))
+                            prevAttrBlockCount++;
+                        if (surveyAttrs.Contains(layer))
+                            surveyAttrBlockCount++;
                     }
                 }
             }
 
-            if (hasPrevEntities)
+            if (UsePlanningTextMode != false &&
+                planPipeEntityCount > 0 &&
+                planTextEntityCount > 0 &&
+                (planPipeEntityCount + planTextEntityCount) >= (prevAttrBlockCount + surveyAttrBlockCount))
+            {
+                isPlanningTextMode = true;
+                foreach (string l in planPipes) pipeLayers.Add(l);
+                foreach (string l in planTexts) attrLayers.Add(l);
+                return;
+            }
+
+            isPlanningTextMode = false;
+            if (prevAttrBlockCount > 0)
             {
                 foreach (string l in prevPipes) pipeLayers.Add(l);
                 foreach (string l in prevAttrs) attrLayers.Add(l);
             }
 
-            if (hasSurveyEntities)
+            if (surveyAttrBlockCount > 0)
             {
                 foreach (string l in surveyPipes) pipeLayers.Add(l);
                 foreach (string l in surveyAttrs) attrLayers.Add(l);
+            }
+
+            if (pipeLayers.Count == 0 && planPipeEntityCount > 0 && planTextEntityCount > 0)
+            {
+                isPlanningTextMode = true;
+                foreach (string l in planPipes) pipeLayers.Add(l);
+                foreach (string l in planTexts) attrLayers.Add(l);
+                return;
             }
 
             if (pipeLayers.Count == 0)

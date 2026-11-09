@@ -117,7 +117,6 @@ namespace process_pipeline.Utils
                     foreach (CheckIssueItem issue in issuesForOid)
                     {
                         if (issue != null &&
-                            issue.Type == ProblemType.OneToMany &&
                             issue.Status != IssueReviewStatus.Resolved &&
                             issue.PossibleMatches != null &&
                             issue.PossibleMatches.Count > 0)

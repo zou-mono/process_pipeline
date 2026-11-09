@@ -1474,7 +1474,6 @@ namespace process_pipeline.Forms
                 {
                     var issue = targetRows[0].SourceIssue;
                     if (issue != null &&
-                        issue.Type == ProblemType.OneToMany &&
                         issue.PossibleMatches != null &&
                         issue.PossibleMatches.Count > 0)
                     {

@@ -58,7 +58,27 @@ namespace process_pipeline.Geometry
         public double? Length { get; set; }
 
         /// <summary>
-        /// 将解析出的管径（WIDTH）、高度（HEITH）、坡度（PD）、管长（LEN）转换为标准管线属性字典。
+        /// 并排管线根数（默认 1；如 "2DN1000" 时为 2，属于需人工核查的不规范多管标注）。
+        /// </summary>
+        public int PipeCount { get; set; } = 1;
+
+        /// <summary>
+        /// 变径/范围标注的第二管径（毫米，如 "d600-700" 时为 700；正常单管径标注为 null）。
+        /// </summary>
+        public double? SecondaryDiameter { get; set; }
+
+        /// <summary>
+        /// 是否属于需人工重点核查的不规范文字标注格式（如并排多管 "2DN1000"、变径范围 "d600-700" 等）。
+        /// </summary>
+        public bool HasIrregularFormat { get; set; }
+
+        /// <summary>
+        /// 不规范文字标注的具体原因说明（供待核查列表展示，正常标注为空字符串）。
+        /// </summary>
+        public string IrregularReason { get; set; } = string.Empty;
+
+        /// <summary>
+        /// 将解析出的管径（WIDTH）、高度（HEITH）、坡度（PD）、管长（LEN）及不规范标识转换为标准管线属性字典。
         /// </summary>
         public Dictionary<string, object> ToAttributeDictionary()
         {
@@ -79,6 +99,21 @@ namespace process_pipeline.Geometry
                 dict["LEN"] = Length.Value;
             }
 
+            if (PipeCount > 1)
+            {
+                dict["PIPE_COUNT"] = PipeCount;
+            }
+
+            if (SecondaryDiameter.HasValue)
+            {
+                dict["WIDTH_MAX"] = SecondaryDiameter.Value;
+            }
+
+            if (HasIrregularFormat && !string.IsNullOrWhiteSpace(IrregularReason))
+            {
+                dict["IRREGULAR_LABEL"] = IrregularReason;
+            }
+
             if (!string.IsNullOrWhiteSpace(CleanedText))
             {
                 dict["RAW_LABEL"] = CleanedText;
@@ -89,14 +124,15 @@ namespace process_pipeline.Geometry
     }
 
     /// <summary>
-    /// 规划管线文字标注正则解析器（Stage 5 Commit 5.1）。
+    /// 规划管线文字标注正则解析器（Stage 5 Commit 5.1 &amp; 5.2）。
     /// 
     /// 支持解析：
     /// 1. 圆管标注：d400、D500、DN600、φ800、%%c400 等；
     /// 2. 渠箱标注：1200x1000、2000×1500、B×H=1500×1200 等；
     /// 3. 坡度标注：-i1.0、-i5.6、i=2.0、I1.5 等；
     /// 4. 管长标注：-L1080、-L2216、L=900、-l350 等；
-    /// 5. 自动清理 MText 富文本控制序列（如 \A1;、\P、{\f...;...}）与全角连接符。
+    /// 5. 自动清理 MText 富文本控制序列（如 \A1;、\P、{\f...;...}）与全角连接符；
+    /// 6. 自动识别人工作业不规范标注（如并排多管 "2DN1000"、渐变管径 "d600-700"）并输出 HasIrregularFormat 供待核查列表展示。
     /// </summary>
     public static class PipeLabelParser
     {
@@ -108,6 +144,11 @@ namespace process_pipeline.Geometry
         // 圆管直径正则：匹配 DN600, 2DN1000, d400, D800, Φ500 等（限定合理管径数值范围 50 ~ 10000mm，兼容并排双管前缀如 2DN1000）
         private static readonly Regex CircularDiameterRegex = new Regex(
             @"(?<![A-Za-z0-9])(?:(?<count>\d+)\s*[-xX×\*]?\s*)?(?<prefix>DN|dn|Dn|dN|d|D|Φ|φ)\s*[-=:：]?\s*(?<diam>\d{2,5}(?:\.\d+)?)(?![0-9])",
+            RegexOptions.Compiled);
+
+        // 变径/范围管径正则：匹配 d600-700, d600~d700, DN600/800 等（第二个数值前无 i/L 等坡度或管长前缀）
+        private static readonly Regex VariableDiameterRangeRegex = new Regex(
+            @"(?<![A-Za-z0-9])(?:(?:\d+)\s*[-xX×\*]?\s*)?(?:DN|dn|Dn|dN|d|D|Φ|φ)\s*[-=:：]?\s*(?<diam1>\d{2,5}(?:\.\d+)?)\s*[-~/]\s*(?:DN|dn|Dn|dN|d|D|Φ|φ)?\s*(?<diam2>\d{2,5}(?:\.\d+)?)(?![0-9A-Za-z])",
             RegexOptions.Compiled);
 
         // 矩形渠箱断面正则：匹配 1200x1000, 2000×1500 等
@@ -172,7 +213,7 @@ namespace process_pipeline.Geometry
 
             string text = result.CleanedText;
 
-            // 1. 优先匹配圆管管径（d400 / DN600 等）
+            // 1. 优先匹配圆管管径（d400 / DN600 / 2DN1000 / d600-700 等）
             Match circularMatch = CircularDiameterRegex.Match(text);
             if (circularMatch.Success &&
                 double.TryParse(circularMatch.Groups["diam"].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out double diam) &&
@@ -182,6 +223,35 @@ namespace process_pipeline.Geometry
                 result.Prefix = circularMatch.Groups["prefix"].Value;
                 result.Diameter = diam;
                 result.Height = 0.0;
+
+                var irregularReasons = new List<string>();
+
+                // 检测并排多管前缀（如 "2DN1000"）
+                if (circularMatch.Groups["count"].Success &&
+                    int.TryParse(circularMatch.Groups["count"].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int pipeCount) &&
+                    pipeCount > 1)
+                {
+                    result.PipeCount = pipeCount;
+                    result.HasIrregularFormat = true;
+                    irregularReasons.Add($"并排多管标注({pipeCount}根{result.Prefix}{diam:0})");
+                }
+
+                // 检测变径/范围管径标注（如 "d600-700"）
+                Match rangeMatch = VariableDiameterRangeRegex.Match(text);
+                if (rangeMatch.Success &&
+                    double.TryParse(rangeMatch.Groups["diam2"].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out double diam2) &&
+                    diam2 >= 50.0 && diam2 <= 10000.0 &&
+                    Math.Abs(diam2 - diam) > 1e-6)
+                {
+                    result.SecondaryDiameter = diam2;
+                    result.HasIrregularFormat = true;
+                    irregularReasons.Add($"变径范围标注({result.Prefix}{diam:0}-{diam2:0})");
+                }
+
+                if (irregularReasons.Count > 0)
+                {
+                    result.IrregularReason = string.Join("；", irregularReasons);
+                }
             }
             else
             {

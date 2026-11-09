@@ -593,8 +593,8 @@ namespace process_pipeline.Geometry
         }
 
         /// <summary>
-        /// 对指定 CAD 数据库中的管线图层与文字标注图层（DBText / MText）执行空间邻近 + 走向平行角配对（Stage 5 Commit 5.1）。
-        /// 自动调用 PipeLabelParser 解析管径（WIDTH）、坡度（PD）与标注管长（LEN）。
+        /// 对指定 CAD 数据库中的管线图层与文字标注图层（DBText / MText）执行三级（Group -&gt; XData -&gt; 空间邻近+平行角）配对（Stage 5 Commit 5.1 &amp; 5.2）。
+        /// 自动调用 PipeLabelParser 解析管径（WIDTH）、坡度（PD）、标注管长（LEN）与不规范标注标识（IRREGULAR_LABEL）。
         /// </summary>
         public PipeSpatialMatchSummary MatchDatabaseTextLabels(
             Database db,
@@ -606,9 +606,7 @@ namespace process_pipeline.Geometry
                 throw new ArgumentNullException(nameof(db));
 
             var baseOpts = options ?? PipeSpatialMatchOptions.FromConfig();
-            double textMaxDist = options != null && options.MaxCurveDistance > 0
-                ? options.MaxCurveDistance
-                : Math.Max(baseOpts.MaxCurveDistance, 85.0);
+            double textMaxDist = Math.Max(baseOpts.MaxCurveDistance, 85.0);
             var textMatchOpts = new PipeSpatialMatchOptions
             {
                 MaxCurveDistance = textMaxDist,
@@ -633,14 +631,21 @@ namespace process_pipeline.Geometry
                 (textLayers ?? Enumerable.Empty<string>()).Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()),
                 StringComparer.OrdinalIgnoreCase);
 
-            var pipes = new List<SpatialPipeTarget>();
-            var textAttachments = new List<SpatialAttachmentItem>();
+            var pipesById = new Dictionary<ObjectId, SpatialPipeTarget>();
+            var pipesByHandle = new Dictionary<string, SpatialPipeTarget>(StringComparer.OrdinalIgnoreCase);
+            var attachmentsById = new Dictionary<ObjectId, SpatialAttachmentItem>();
+            var attachmentsByHandle = new Dictionary<string, SpatialAttachmentItem>(StringComparer.OrdinalIgnoreCase);
+
+            var summary = new PipeSpatialMatchSummary();
+            var matchedPipeIds = new HashSet<ObjectId>();
+            var matchedAttachmentIds = new HashSet<ObjectId>();
 
             using (Transaction tr = db.TransactionManager.StartOpenCloseTransaction())
             {
                 BlockTable bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
                 BlockTableRecord ms = (BlockTableRecord)tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForRead);
 
+                // 1. 扫描 ModelSpace 提取目标图层上的全部有效管线与文字标注
                 foreach (ObjectId objId in ms)
                 {
                     if (objId.IsNull || objId.IsErased) continue;
@@ -658,7 +663,8 @@ namespace process_pipeline.Geometry
                             SpatialPipeTarget target = CreatePipeTarget(pl, objId, _geometryFactory);
                             if (target != null && target.Length > 1e-4)
                             {
-                                pipes.Add(target);
+                                pipesById[objId] = target;
+                                pipesByHandle[target.Handle] = target;
                             }
                         }
                         else if (ent is Line line)
@@ -666,7 +672,8 @@ namespace process_pipeline.Geometry
                             SpatialPipeTarget target = CreatePipeTargetFromLine(line, objId, _geometryFactory);
                             if (target != null && target.Length > 1e-4)
                             {
-                                pipes.Add(target);
+                                pipesById[objId] = target;
+                                pipesByHandle[target.Handle] = target;
                             }
                         }
                     }
@@ -676,7 +683,257 @@ namespace process_pipeline.Geometry
                         SpatialAttachmentItem att = PipeLabelParser.CreateAttachmentFromTextEntity(ent, objId, out _);
                         if (att != null)
                         {
-                            textAttachments.Add(att);
+                            attachmentsById[objId] = att;
+                            attachmentsByHandle[att.Handle] = att;
+                        }
+                    }
+                }
+
+                summary.TotalPipeCount = pipesById.Count;
+                summary.TotalAttachmentCount = attachmentsById.Count;
+
+                // 2. 第一级：校验并提取 CAD 原生 GroupDictionary 中的管线-文字标注 1:1 绑定关系
+                if (textMatchOpts.UseExistingCadGroups)
+                {
+                    DBDictionary groupDict = tr.GetObject(db.GroupDictionaryId, OpenMode.ForRead) as DBDictionary;
+                    if (groupDict != null && groupDict.Count > 0)
+                    {
+                        foreach (DBDictionaryEntry entry in groupDict)
+                        {
+                            Group grp = tr.GetObject(entry.Value, OpenMode.ForRead, false) as Group;
+                            if (grp == null || grp.IsErased)
+                                continue;
+
+                            ObjectId[] entIds = grp.GetAllEntityIds();
+                            if (entIds == null || entIds.Length == 0)
+                                continue;
+
+                            var groupPipes = new List<SpatialPipeTarget>();
+                            var groupAttachments = new List<SpatialAttachmentItem>();
+
+                            foreach (ObjectId eid in entIds)
+                            {
+                                if (pipesById.TryGetValue(eid, out SpatialPipeTarget p))
+                                {
+                                    groupPipes.Add(p);
+                                }
+                                else if (attachmentsById.TryGetValue(eid, out SpatialAttachmentItem a))
+                                {
+                                    groupAttachments.Add(a);
+                                }
+                                else if (!eid.IsNull && !eid.IsErased && groupPipes.Count > 0)
+                                {
+                                    Entity fallbackEnt = tr.GetObject(eid, OpenMode.ForRead, false) as Entity;
+                                    if (fallbackEnt is DBText || fallbackEnt is MText)
+                                    {
+                                        SpatialAttachmentItem fallbackAtt = PipeLabelParser.CreateAttachmentFromTextEntity(fallbackEnt, eid, out _);
+                                        if (fallbackAtt != null)
+                                        {
+                                            attachmentsById[eid] = fallbackAtt;
+                                            attachmentsByHandle[fallbackAtt.Handle] = fallbackAtt;
+                                            groupAttachments.Add(fallbackAtt);
+                                        }
+                                    }
+                                }
+                            }
+
+                            if (groupPipes.Count == 0 && groupAttachments.Count == 0)
+                                continue;
+
+                            summary.TotalExistingGroupCount++;
+
+                            if (groupPipes.Count == 1 && groupAttachments.Count == 1)
+                            {
+                                SpatialPipeTarget p = groupPipes[0];
+                                SpatialAttachmentItem a = groupAttachments[0];
+
+                                if (!matchedPipeIds.Contains(p.PipeId) && !matchedAttachmentIds.Contains(a.AttachmentId))
+                                {
+                                    matchedPipeIds.Add(p.PipeId);
+                                    matchedAttachmentIds.Add(a.AttachmentId);
+                                    summary.ValidGroupPairCount++;
+
+                                    double distCurve = ComputePointToLineStringDistance(a.Position, p.Geometry, out Point3d closestPt, out double segAng);
+                                    double distCenter = Distance2D(a.Position, p.ExtentsCenter);
+                                    double? angDiff = a.RotationDegrees.HasValue
+                                        ? (double?)ComputeParallelAngleDifference(a.RotationDegrees.Value, segAng)
+                                        : null;
+
+                                    var matchItem = new PipeAttachmentMatchItem
+                                    {
+                                        Status = SpatialMatchStatus.UniqueMatch,
+                                        Channel = SpatialMatchChannel.CadGroup,
+                                        Pipe = p,
+                                        MatchedAttachment = a,
+                                        GroupId = entry.Value,
+                                        GroupName = entry.Key,
+                                        DistanceToCurve = distCurve,
+                                        DistanceToExtentsCenter = distCenter,
+                                        AngleDifferenceDegrees = angDiff,
+                                        ClosestPointOnPipe = closestPt,
+                                        PossibleMatches = new List<MatchItem>
+                                        {
+                                            new MatchItem(a.AttachmentId, a.Position, distCurve, closestPt, a.RotationDegrees ?? 0.0, angDiff ?? 0.0, true)
+                                        },
+                                        Description = $"已通过 CAD Group [{entry.Key}] 1:1 绑定文字标注 [{a.Handle}] '{a.BlockNameOrText}'"
+                                    };
+
+                                    RegisterUniqueMatch(summary, matchItem);
+                                }
+                                else
+                                {
+                                    summary.InvalidGroupCount++;
+                                    summary.InvalidGroups.Add(new PipeAttachmentMatchItem
+                                    {
+                                        Status = SpatialMatchStatus.InvalidGroupStructure,
+                                        Channel = SpatialMatchChannel.CadGroup,
+                                        Pipe = p,
+                                        MatchedAttachment = a,
+                                        GroupId = entry.Value,
+                                        GroupName = entry.Key,
+                                        ClosestPointOnPipe = p != null ? p.MidPoint : a.Position,
+                                        Description = $"Group [{entry.Key}] 中的管线 [{p.Handle}] 或文字标注 [{a.Handle}] 已被其他 Group 重复引用"
+                                    });
+                                }
+                            }
+                            else
+                            {
+                                SpatialPipeTarget firstPipe = groupPipes.FirstOrDefault();
+                                SpatialAttachmentItem firstAtt = groupAttachments.FirstOrDefault();
+                                summary.InvalidGroupCount++;
+                                summary.InvalidGroups.Add(new PipeAttachmentMatchItem
+                                {
+                                    Status = SpatialMatchStatus.InvalidGroupStructure,
+                                    Channel = SpatialMatchChannel.CadGroup,
+                                    Pipe = firstPipe,
+                                    MatchedAttachment = firstAtt,
+                                    GroupId = entry.Value,
+                                    GroupName = entry.Key,
+                                    ClosestPointOnPipe = firstPipe != null ? firstPipe.MidPoint : (firstAtt != null ? firstAtt.Position : Point3d.Origin),
+                                    PossibleMatches = groupAttachments
+                                        .Select(att => new MatchItem(
+                                            att.AttachmentId,
+                                            att.Position,
+                                            firstPipe != null ? Distance2D(att.Position, firstPipe.MidPoint) : 0.0,
+                                            firstPipe != null ? firstPipe.MidPoint : att.Position,
+                                            att.RotationDegrees ?? 0.0,
+                                            0.0,
+                                            true))
+                                        .ToList(),
+                                    Description = $"Group [{entry.Key}] 成员结构异常：包含 {groupPipes.Count} 条管线、{groupAttachments.Count} 个文字标注（应为 1:1）"
+                                });
+                            }
+                        }
+                    }
+                }
+
+                // 3. 第二级：通过 XData (PIPE_CHECK_LINK) 双向恢复管线与文字标注配对
+                if (textMatchOpts.UseXDataLinks)
+                {
+                    foreach (SpatialPipeTarget pipe in pipesById.Values)
+                    {
+                        if (matchedPipeIds.Contains(pipe.PipeId))
+                            continue;
+
+                        if (string.IsNullOrWhiteSpace(pipe.XDataLinkedAttachmentHandle))
+                            continue;
+
+                        if (!attachmentsByHandle.TryGetValue(pipe.XDataLinkedAttachmentHandle, out SpatialAttachmentItem linkedAtt))
+                        {
+                            try
+                            {
+                                long handleVal = Convert.ToInt64(pipe.XDataLinkedAttachmentHandle.Trim(), 16);
+                                if (db.TryGetObjectId(new Handle(handleVal), out ObjectId linkedObjId) &&
+                                    !linkedObjId.IsNull && !linkedObjId.IsErased)
+                                {
+                                    Entity linkedEnt = tr.GetObject(linkedObjId, OpenMode.ForRead, false) as Entity;
+                                    if (linkedEnt is DBText || linkedEnt is MText)
+                                    {
+                                        linkedAtt = PipeLabelParser.CreateAttachmentFromTextEntity(linkedEnt, linkedObjId, out _);
+                                        if (linkedAtt != null)
+                                        {
+                                            attachmentsById[linkedObjId] = linkedAtt;
+                                            attachmentsByHandle[linkedAtt.Handle] = linkedAtt;
+                                        }
+                                    }
+                                }
+                            }
+                            catch
+                            {
+                                // 忽略无效 Handle 解析异常
+                            }
+                        }
+
+                        if (linkedAtt != null && !matchedAttachmentIds.Contains(linkedAtt.AttachmentId))
+                        {
+                            matchedPipeIds.Add(pipe.PipeId);
+                            matchedAttachmentIds.Add(linkedAtt.AttachmentId);
+                            summary.XDataMatchedCount++;
+
+                            double distCurve = ComputePointToLineStringDistance(linkedAtt.Position, pipe.Geometry, out Point3d closestPt, out double segAng);
+                            double distCenter = Distance2D(linkedAtt.Position, pipe.ExtentsCenter);
+                            double? angDiff = linkedAtt.RotationDegrees.HasValue
+                                ? (double?)ComputeParallelAngleDifference(linkedAtt.RotationDegrees.Value, segAng)
+                                : null;
+
+                            var matchItem = new PipeAttachmentMatchItem
+                            {
+                                Status = SpatialMatchStatus.UniqueMatch,
+                                Channel = SpatialMatchChannel.XDataLink,
+                                Pipe = pipe,
+                                MatchedAttachment = linkedAtt,
+                                DistanceToCurve = distCurve,
+                                DistanceToExtentsCenter = distCenter,
+                                AngleDifferenceDegrees = angDiff,
+                                ClosestPointOnPipe = closestPt,
+                                PossibleMatches = new List<MatchItem>
+                                {
+                                    new MatchItem(linkedAtt.AttachmentId, linkedAtt.Position, distCurve, closestPt, linkedAtt.RotationDegrees ?? 0.0, angDiff ?? 0.0, true)
+                                },
+                                Description = $"通过 XData ({XDataRegAppName}) 恢复文字配对 [{linkedAtt.Handle}] '{linkedAtt.BlockNameOrText}'"
+                            };
+
+                            RegisterUniqueMatch(summary, matchItem);
+                        }
+                    }
+
+                    foreach (SpatialAttachmentItem att in attachmentsById.Values)
+                    {
+                        if (matchedAttachmentIds.Contains(att.AttachmentId))
+                            continue;
+
+                        if (!string.IsNullOrWhiteSpace(att.XDataLinkedPipeHandle) &&
+                            pipesByHandle.TryGetValue(att.XDataLinkedPipeHandle, out SpatialPipeTarget linkedPipe) &&
+                            !matchedPipeIds.Contains(linkedPipe.PipeId))
+                        {
+                            matchedPipeIds.Add(linkedPipe.PipeId);
+                            matchedAttachmentIds.Add(att.AttachmentId);
+                            summary.XDataMatchedCount++;
+
+                            double distCurve = ComputePointToLineStringDistance(att.Position, linkedPipe.Geometry, out Point3d closestPt, out double segAng);
+                            double distCenter = Distance2D(att.Position, linkedPipe.ExtentsCenter);
+                            double? angDiff = att.RotationDegrees.HasValue
+                                ? (double?)ComputeParallelAngleDifference(att.RotationDegrees.Value, segAng)
+                                : null;
+
+                            var matchItem = new PipeAttachmentMatchItem
+                            {
+                                Status = SpatialMatchStatus.UniqueMatch,
+                                Channel = SpatialMatchChannel.XDataLink,
+                                Pipe = linkedPipe,
+                                MatchedAttachment = att,
+                                DistanceToCurve = distCurve,
+                                DistanceToExtentsCenter = distCenter,
+                                AngleDifferenceDegrees = angDiff,
+                                ClosestPointOnPipe = closestPt,
+                                PossibleMatches = new List<MatchItem>
+                                {
+                                    new MatchItem(att.AttachmentId, att.Position, distCurve, closestPt, att.RotationDegrees ?? 0.0, angDiff ?? 0.0, true)
+                                },
+                                Description = $"通过文字 XData ({XDataRegAppName}) 恢复配对 [{att.Handle}] '{att.BlockNameOrText}'"
+                            };
+
+                            RegisterUniqueMatch(summary, matchItem);
                         }
                     }
                 }
@@ -684,7 +941,16 @@ namespace process_pipeline.Geometry
                 tr.Commit();
             }
 
-            return MatchInMemory(pipes, textAttachments, textMatchOpts);
+            // 4. 第三级：对剩余未绑定管线与文字标注执行空间邻近 + 平行角配对
+            var remainingPipes = pipesById.Values.Where(p => !matchedPipeIds.Contains(p.PipeId)).ToList();
+            var remainingAttachments = attachmentsById.Values.Where(a => !matchedAttachmentIds.Contains(a.AttachmentId)).ToList();
+
+            if (remainingPipes.Count > 0 || remainingAttachments.Count > 0)
+            {
+                MatchRemainingBySpatialProximity(remainingPipes, remainingAttachments, textMatchOpts, summary);
+            }
+
+            return summary;
         }
 
         /// <summary>
@@ -983,7 +1249,7 @@ namespace process_pipeline.Geometry
                 assignedAttachments.Add(cand.Attachment.Handle);
             }
 
-            // 生成每条管线的配对结果并检测是否存在空间歧义
+            // 生成每条管线的配对结果并检测是否存在空间歧义、一管多标或不规范文字标注
             foreach (SpatialPipeTarget pipe in pipes)
             {
                 if (assignedPipes.TryGetValue(pipe.Handle, out CandidatePair best))
@@ -992,10 +1258,10 @@ namespace process_pipeline.Geometry
                         ? list.OrderBy(c => c.Score).ToList()
                         : new List<CandidatePair> { best };
 
-                    // 判断是否存在需人工确认的近距离歧义：
+                    // 1. 判断是否存在需人工确认的近距离空间歧义：
                     // 若存在次优候选，且次优候选与最优候选属于同一命中层级、距离差小于 AmbiguityDistanceMargin、
-                    // 且最优候选无法通过精确管长 LEN 唯一锁定时，标记为 OneToManyConflict。
-                    bool hasAmbiguity = false;
+                    // 且最优候选无法通过精确管长 LEN 唯一锁定时，标记为空间歧义。
+                    bool hasSpatialAmbiguity = false;
                     if (pipeCands.Count > 1)
                     {
                         CandidatePair second = pipeCands[1];
@@ -1010,16 +1276,82 @@ namespace process_pipeline.Geometry
                             Math.Abs(secondaryDist - primaryDist) <= options.AmbiguityDistanceMargin &&
                             !(best.IsLengthMatched && !second.IsLengthMatched))
                         {
-                            // 若只有在次优附件也未被更高置信度的另一条管线锁定时，或两条管线几何几乎完全重叠时，视为歧义
                             if (primaryDist > 0.05 || Math.Abs(best.Score - second.Score) <= options.AmbiguityDistanceMargin)
                             {
-                                hasAmbiguity = true;
+                                hasSpatialAmbiguity = true;
                             }
                         }
                     }
 
-                    var possibleMatches = pipeCands
-                        .Take(5)
+                    // 2. 检测“一管多标”（单条长干管旁存在多个未被其他管线认领、且以当前管线为最邻近目标的文字标注）
+                    var extraLabelsOnSamePipe = new List<CandidatePair>();
+                    foreach (CandidatePair cand in pipeCands)
+                    {
+                        if (string.Equals(cand.Attachment.Handle, best.Attachment.Handle, StringComparison.OrdinalIgnoreCase))
+                            continue;
+                        if (assignedAttachments.Contains(cand.Attachment.Handle))
+                            continue;
+
+                        if (candidatesByAtt.TryGetValue(cand.Attachment.Handle, out var attCandList) &&
+                            attCandList.Count > 0)
+                        {
+                            CandidatePair attBestPipe = attCandList.OrderBy(x => x.Score).First();
+                            if (string.Equals(attBestPipe.Pipe.Handle, pipe.Handle, StringComparison.OrdinalIgnoreCase))
+                            {
+                                extraLabelsOnSamePipe.Add(cand);
+                            }
+                        }
+                    }
+
+                    bool hasOnePipeMultiLabel = extraLabelsOnSamePipe.Count > 0;
+
+                    // 3. 检测“不规范文字标注格式”（如并排多管 "2DN1000"、渐变范围管径 "d600-700"）
+                    string irregularReason = null;
+                    if (best.Attachment.Attributes != null &&
+                        best.Attachment.Attributes.TryGetValue("IRREGULAR_LABEL", out object irregObj) &&
+                        irregObj != null &&
+                        !string.IsNullOrWhiteSpace(irregObj.ToString()))
+                    {
+                        irregularReason = irregObj.ToString();
+                    }
+                    else
+                    {
+                        foreach (CandidatePair extra in extraLabelsOnSamePipe)
+                        {
+                            if (extra.Attachment.Attributes != null &&
+                                extra.Attachment.Attributes.TryGetValue("IRREGULAR_LABEL", out object exIrreg) &&
+                                exIrreg != null &&
+                                !string.IsNullOrWhiteSpace(exIrreg.ToString()))
+                            {
+                                irregularReason = exIrreg.ToString();
+                                break;
+                            }
+                        }
+                    }
+
+                    bool hasIrregularLabel = !string.IsNullOrWhiteSpace(irregularReason);
+                    bool needsManualPendingReview = hasSpatialAmbiguity || hasOnePipeMultiLabel || hasIrregularLabel;
+
+                    // 构建瞬态辅助连线集合：
+                    // - 若属于常规 1:1 唯一匹配（ToRecheck 待复核），仅绘制当前管线与唯一配对要素的 1 条连线，避免邻近已配对标注干扰视线；
+                    // - 若属于一管多标或空间歧义（Pending 待核查），绘制当前管线到全部关联/竞争标注的多条连线。
+                    List<CandidatePair> displayCands;
+                    if (hasOnePipeMultiLabel)
+                    {
+                        displayCands = new List<CandidatePair> { best };
+                        displayCands.AddRange(extraLabelsOnSamePipe);
+                    }
+                    else if (hasSpatialAmbiguity)
+                    {
+                        displayCands = pipeCands.Take(5).ToList();
+                    }
+                    else
+                    {
+                        displayCands = new List<CandidatePair> { best };
+                    }
+
+                    var possibleMatches = displayCands
+                        .Take(8)
                         .Select(c => new MatchItem(
                             c.Attachment.AttachmentId,
                             c.Attachment.Position,
@@ -1035,9 +1367,38 @@ namespace process_pipeline.Geometry
                     else
                         summary.CurveProximityMatchedCount++;
 
+                    string description;
+                    if (hasIrregularLabel && hasOnePipeMultiLabel)
+                    {
+                        string allLabels = string.Join("、", displayCands.Select(c => $"[{c.Attachment.Handle}]'{c.Attachment.BlockNameOrText}'"));
+                        description = $"不规范标注且一管多标待核查：管线 [{pipe.Handle}] 沿线存在 {displayCands.Count} 个标注（{allLabels}），且含{irregularReason}，已暂取 [{best.Attachment.Handle}]（距曲线={best.DistanceToCurve:F2}m）";
+                    }
+                    else if (hasIrregularLabel)
+                    {
+                        description = $"不规范文字标注待核查：管线 [{pipe.Handle}] 配对标注 [{best.Attachment.Handle}] '{best.Attachment.BlockNameOrText}' 含{irregularReason}（距曲线={best.DistanceToCurve:F2}m），请人工核实管径与根数";
+                    }
+                    else if (hasOnePipeMultiLabel)
+                    {
+                        var distinctSpecs = displayCands
+                            .Select(c => c.Attachment.BlockNameOrText ?? string.Empty)
+                            .Distinct(StringComparer.OrdinalIgnoreCase)
+                            .ToList();
+                        string specWarn = distinctSpecs.Count > 1 ? "（注意：沿线标注规格不一致！）" : "（沿线重复标注）";
+                        string allLabels = string.Join("、", displayCands.Select(c => $"[{c.Attachment.Handle}]'{c.Attachment.BlockNameOrText}'"));
+                        description = $"一管多标待核查{specWarn}：管线 [{pipe.Handle}] (L={pipe.Length:F1}m) 沿线存在 {displayCands.Count} 个文字标注 {allLabels}，已暂取最近 [{best.Attachment.Handle}]（距曲线={best.DistanceToCurve:F2}m）";
+                    }
+                    else if (hasSpatialAmbiguity)
+                    {
+                        description = $"空间邻近歧义待核查：管线 [{pipe.Handle}] 附近存在 {pipeCands.Count} 个距离相近的候选属性要素，已暂取最优 [{best.Attachment.Handle}]（距曲线={best.DistanceToCurve:F2}m, 距外包框中心={best.DistanceToCenter:F2}m）";
+                    }
+                    else
+                    {
+                        description = $"空间配对成功：管线 [{pipe.Handle}] <-> [{best.Attachment.Handle}]（渠道={best.Channel}, 距曲线={best.DistanceToCurve:F2}m, 距中心={best.DistanceToCenter:F2}m）";
+                    }
+
                     var matchItem = new PipeAttachmentMatchItem
                     {
-                        Status = hasAmbiguity ? SpatialMatchStatus.OneToManyConflict : SpatialMatchStatus.UniqueMatch,
+                        Status = needsManualPendingReview ? SpatialMatchStatus.OneToManyConflict : SpatialMatchStatus.UniqueMatch,
                         Channel = best.Channel,
                         Pipe = pipe,
                         MatchedAttachment = best.Attachment,
@@ -1047,12 +1408,10 @@ namespace process_pipeline.Geometry
                         AngleDifferenceDegrees = best.AngleDiff,
                         ClosestPointOnPipe = best.ClosestPointOnPipe,
                         PossibleMatches = possibleMatches,
-                        Description = hasAmbiguity
-                            ? $"管线 [{pipe.Handle}] 附近存在 {pipeCands.Count} 个距离相近的候选属性要素，已暂取最优 [{best.Attachment.Handle}]（距曲线={best.DistanceToCurve:F2}m, 距外包框中心={best.DistanceToCenter:F2}m）"
-                            : $"空间配对成功：管线 [{pipe.Handle}] <-> [{best.Attachment.Handle}]（渠道={best.Channel}, 距曲线={best.DistanceToCurve:F2}m, 距中心={best.DistanceToCenter:F2}m）"
+                        Description = description
                     };
 
-                    if (hasAmbiguity)
+                    if (needsManualPendingReview)
                     {
                         summary.ConflictMatches.Add(matchItem);
                         if (!pipe.PipeId.IsNull)
@@ -1070,33 +1429,154 @@ namespace process_pipeline.Geometry
                 }
                 else
                 {
-                    var noMatchItem = new PipeAttachmentMatchItem
+                    // 未分配到专属 1:1 标注的管线：区分“多段共标（邻近平行标注已被相邻管段占用）”与“搜索半径内无标注”
+                    if (candidatesByPipe.TryGetValue(pipe.Handle, out var sharedCands) && sharedCands.Count > 0)
                     {
-                        Status = SpatialMatchStatus.NoMatchPipe,
-                        Channel = SpatialMatchChannel.None,
-                        Pipe = pipe,
-                        ClosestPointOnPipe = pipe.MidPoint,
-                        Description = $"管线 [{pipe.Handle}] (图层: {pipe.LayerName}, 长度: {pipe.Length:F2}m) 在搜索半径内未找到匹配的属性块/标注"
-                    };
-                    summary.UnmatchedPipes.Add(noMatchItem);
-                    if (!pipe.PipeId.IsNull)
-                        summary.MatchByPipeId[pipe.PipeId] = noMatchItem;
+                        CandidatePair nearestShared = sharedCands.OrderBy(c => c.Score).First();
+                        string ownerPipeHandle = assignedPipes.Values
+                            .FirstOrDefault(p => string.Equals(p.Attachment.Handle, nearestShared.Attachment.Handle, StringComparison.OrdinalIgnoreCase))
+                            ?.Pipe?.Handle ?? "-";
+
+                        var sharedMatchItem = new PipeAttachmentMatchItem
+                        {
+                            Status = SpatialMatchStatus.NoMatchPipe,
+                            Channel = SpatialMatchChannel.None,
+                            Pipe = pipe,
+                            MatchedAttachment = nearestShared.Attachment,
+                            DistanceToCurve = nearestShared.DistanceToCurve,
+                            DistanceToExtentsCenter = nearestShared.DistanceToCenter,
+                            AngleDifferenceDegrees = nearestShared.AngleDiff,
+                            ClosestPointOnPipe = nearestShared.ClosestPointOnPipe,
+                            PossibleMatches = new List<MatchItem>
+                            {
+                                new MatchItem(
+                                    nearestShared.Attachment.AttachmentId,
+                                    nearestShared.Attachment.Position,
+                                    nearestShared.DistanceToCurve,
+                                    nearestShared.ClosestPointOnPipe,
+                                    nearestShared.Attachment.RotationDegrees ?? 0.0,
+                                    nearestShared.AngleDiff ?? 0.0,
+                                    true)
+                            },
+                            Description = $"多段共标待核查：管线 [{pipe.Handle}] (图层: {pipe.LayerName}, L={pipe.Length:F1}m) 邻近标注 [{nearestShared.Attachment.Handle}] '{nearestShared.Attachment.BlockNameOrText}'（距曲线={nearestShared.DistanceToCurve:F2}m）已被相邻管线 [{ownerPipeHandle}] 占用，请人工确认是否共用该规格"
+                        };
+                        summary.UnmatchedPipes.Add(sharedMatchItem);
+                        if (!pipe.PipeId.IsNull)
+                            summary.MatchByPipeId[pipe.PipeId] = sharedMatchItem;
+                    }
+                    else
+                    {
+                        var noMatchItem = new PipeAttachmentMatchItem
+                        {
+                            Status = SpatialMatchStatus.NoMatchPipe,
+                            Channel = SpatialMatchChannel.None,
+                            Pipe = pipe,
+                            ClosestPointOnPipe = pipe.MidPoint,
+                            Description = $"无配对标注待核查：管线 [{pipe.Handle}] (图层: {pipe.LayerName}, 长度: {pipe.Length:F2}m) 在搜索半径内未找到匹配的属性块/文字标注"
+                        };
+                        summary.UnmatchedPipes.Add(noMatchItem);
+                        if (!pipe.PipeId.IsNull)
+                            summary.MatchByPipeId[pipe.PipeId] = noMatchItem;
+                    }
                 }
             }
 
-            // 收集未被任何管线认领的孤立附属要素
+            // 收集未被任何管线 1:1 认领的多余/孤立附属要素（如长干管沿线的第 2~N 个重复标注或含不规范格式的标注）
             foreach (SpatialAttachmentItem att in attachments)
             {
                 if (!assignedAttachments.Contains(att.Handle))
                 {
-                    summary.OrphanAttachments.Add(new PipeAttachmentMatchItem
+                    string irregTag = string.Empty;
+                    if (att.Attributes != null &&
+                        att.Attributes.TryGetValue("IRREGULAR_LABEL", out object attIrreg) &&
+                        attIrreg != null &&
+                        !string.IsNullOrWhiteSpace(attIrreg.ToString()))
                     {
-                        Status = SpatialMatchStatus.OrphanAttachment,
-                        Channel = SpatialMatchChannel.None,
-                        MatchedAttachment = att,
-                        ClosestPointOnPipe = att.Position,
-                        Description = $"属性要素 [{att.Handle}] (图层: {att.LayerName}) 未能配对到任何管线"
-                    });
+                        irregTag = $"（含{attIrreg}）";
+                    }
+
+                    if (candidatesByAtt.TryGetValue(att.Handle, out var attCands) && attCands.Count > 0)
+                    {
+                        CandidatePair nearestPipeCand = attCands.OrderBy(c => c.Score).First();
+                        assignedPipes.TryGetValue(nearestPipeCand.Pipe.Handle, out CandidatePair pipeOwnerBest);
+                        string ownerLabelInfo = pipeOwnerBest?.Attachment != null
+                            ? $"[{pipeOwnerBest.Attachment.Handle}] '{pipeOwnerBest.Attachment.BlockNameOrText}'"
+                            : "其他标注";
+
+                        summary.OrphanAttachments.Add(new PipeAttachmentMatchItem
+                        {
+                            Status = SpatialMatchStatus.OrphanAttachment,
+                            Channel = SpatialMatchChannel.None,
+                            Pipe = nearestPipeCand.Pipe,
+                            MatchedAttachment = att,
+                            DistanceToCurve = nearestPipeCand.DistanceToCurve,
+                            DistanceToExtentsCenter = nearestPipeCand.DistanceToCenter,
+                            AngleDifferenceDegrees = nearestPipeCand.AngleDiff,
+                            ClosestPointOnPipe = nearestPipeCand.ClosestPointOnPipe,
+                            PossibleMatches = new List<MatchItem>
+                            {
+                                new MatchItem(
+                                    nearestPipeCand.Pipe.PipeId,
+                                    att.Position,
+                                    nearestPipeCand.DistanceToCurve,
+                                    nearestPipeCand.ClosestPointOnPipe,
+                                    att.RotationDegrees ?? 0.0,
+                                    nearestPipeCand.AngleDiff ?? 0.0,
+                                    true)
+                            },
+                            Description = $"一管多标多余标注待核查{irregTag}：标注 [{att.Handle}] '{att.BlockNameOrText}' 紧邻管线 [{nearestPipeCand.Pipe.Handle}]（距曲线={nearestPipeCand.DistanceToCurve:F2}m），该管线已配对 {ownerLabelInfo}，请人工核查是否需打断管线或清理重复标注"
+                        });
+                    }
+                    else
+                    {
+                        SpatialPipeTarget fallbackPipe = null;
+                        double minFallbackDist = double.MaxValue;
+                        Point3d fallbackClosestPt = att.Position;
+                        double fallbackSegAng = 0.0;
+
+                        foreach (SpatialPipeTarget p in pipes)
+                        {
+                            if (p?.Geometry == null) continue;
+                            double d = ComputePointToLineStringDistance(att.Position, p.Geometry, out Point3d cpt, out double sAng);
+                            if (d < minFallbackDist)
+                            {
+                                minFallbackDist = d;
+                                fallbackPipe = p;
+                                fallbackClosestPt = cpt;
+                                fallbackSegAng = sAng;
+                            }
+                        }
+
+                        var fallbackMatches = new List<MatchItem>();
+                        string distHint = string.Empty;
+                        if (fallbackPipe != null && minFallbackDist < double.MaxValue)
+                        {
+                            double angDiff = att.RotationDegrees.HasValue
+                                ? ComputeParallelAngleDifference(att.RotationDegrees.Value, fallbackSegAng)
+                                : 0.0;
+                            fallbackMatches.Add(new MatchItem(
+                                fallbackPipe.PipeId,
+                                att.Position,
+                                minFallbackDist,
+                                fallbackClosestPt,
+                                att.RotationDegrees ?? 0.0,
+                                angDiff,
+                                true));
+                            distHint = $"（最近管线 [{fallbackPipe.Handle}] 距曲线={minFallbackDist:F2}m, 平行角差={angDiff:F1}°）";
+                        }
+
+                        summary.OrphanAttachments.Add(new PipeAttachmentMatchItem
+                        {
+                            Status = SpatialMatchStatus.OrphanAttachment,
+                            Channel = SpatialMatchChannel.None,
+                            Pipe = fallbackPipe,
+                            MatchedAttachment = att,
+                            DistanceToCurve = minFallbackDist,
+                            ClosestPointOnPipe = fallbackClosestPt,
+                            PossibleMatches = fallbackMatches,
+                            Description = $"一管多标多余/超距标注待核查{irregTag}：属性要素 [{att.Handle}] '{att.BlockNameOrText}' (图层: {att.LayerName}) 在常规半径内未配对管线{distHint}"
+                        });
+                    }
                 }
             }
         }
