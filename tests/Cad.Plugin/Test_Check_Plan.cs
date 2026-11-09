@@ -7,6 +7,7 @@ using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Runtime;
 using NetTopologySuite.Geometries;
 using NLog;
+using process_pipeline.Commands;
 using process_pipeline.Core;
 using process_pipeline.Core.DataSource;
 using process_pipeline.Core.PreCheck;
@@ -365,6 +366,64 @@ namespace Cad.Plugin
 
                 AssertTrue(resolvedCount == 13 && remainingPending == 0,
                     $"PlanDataCheckService.CheckIncremental 在颜色修正与残留清理后自动将全部 13 条问题状态更新为 Resolved (实际={resolvedCount}/13)");
+            }
+
+            // =========================================================================
+            // 场景 5：验证 CHECKPLAN 与 FlowArrowService 的多规则共存及流向属性富化同步（Commit 4.2）
+            // =========================================================================
+            Logger.Info("--- 场景 5：验证 CHECKPLAN 与 FlowArrowService 多规则共存及流向属性富化同步 (Commit 4.2) ---");
+            using (Database comboDb = new Database(false, true))
+            {
+                comboDb.ReadDwgFile(planDwgPath, FileOpenMode.OpenForReadAndAllShare, false, null);
+                comboDb.CloseInput(true);
+
+                var comboSession = DocumentSessionManager.GetOrCreateSession(comboDb);
+
+                // 5.1 先执行规划数据自检（CheckPlan）并归并到会话
+                var planSvc = new PlanDataCheckService(comboDb, Ed);
+                comboSession.RegisterActiveRule(planSvc);
+                Dictionary<ObjectId, CheckIssueItem> planIssues = planSvc.CheckAll();
+                comboSession.MergeRuleIssues(planSvc.RuleId, planIssues, isIncremental: false);
+
+                // 5.2 再执行流向箭头核查（FlowArrow）并归并到同一会话
+                var flowSvc = new FlowArrowService(comboDb, Ed, false)
+                {
+                    MaxBufferDistance = CadConfig.MaxBufferDistance,
+                    ArrowLayerName = CadConfig.ArrowLayers,
+                    AngleTolerance = CadConfig.AngleTolerance,
+                    PipeLayerName = CadConfig.PipeLayers
+                };
+                comboSession.RegisterActiveRule(flowSvc);
+                Dictionary<ObjectId, CheckIssueItem> flowIssues = flowSvc.CheckAll();
+                comboSession.MergeRuleIssues(flowSvc.RuleId, flowIssues, isIncremental: false);
+
+                int checkPlanInSession = comboSession.CurrentIssues.Values.Count(i => i.RuleId == PlanDataCheckService.DefaultRuleId);
+                int flowArrowInSession = comboSession.CurrentIssues.Values.Count(i => i.RuleId == "FlowArrow");
+                Logger.Info(
+                    $"  [多规则会话共存] ActiveRules 数={comboSession.ActiveRules.Count}, " +
+                    $"会话总 CurrentIssues={comboSession.CurrentIssues.Count} (CheckPlan={checkPlanInSession}, FlowArrow={flowArrowInSession})");
+
+                AssertTrue(comboSession.ActiveRules.Count == 2 &&
+                           checkPlanInSession > 0 &&
+                           flowArrowInSession == flowIssues.Count,
+                    $"DocumentCheckSession 同时注册 CheckPlan 与 FlowArrow 两条活动规则，并保留 CheckPlan({checkPlanInSession}条) 与 FlowArrow({flowArrowInSession}条) 问题项");
+
+                // 5.3 验证规划管线在 PipeDatasetContext 中同时具备规划分类属性（GHZT）与流向核查属性（LX / LX_VALID）
+                int enrichedWithBoth = comboSession.DatasetContext.PlanPipesById.Values.Count(p =>
+                    p.Polyline != null &&
+                    p.Polyline.Attributes.ContainsKey("GHZT") &&
+                    p.Polyline.Attributes.ContainsKey("LX") &&
+                    p.Polyline.Attributes.ContainsKey("LX_VALID"));
+                int consistentFlowPipes = comboSession.DatasetContext.PlanPipesById.Values.Count(p => p.IsFlowDirectionConsistent == true);
+
+                Logger.Info(
+                    $"  [上下文富化同步] PlanPipesById 总数={comboSession.DatasetContext.PlanPipesById.Count}, " +
+                    $"同时具备规划状态(GHZT)与流向属性(LX)的管线数={enrichedWithBoth}, 流向一致管线数={consistentFlowPipes}");
+
+                AssertTrue(comboSession.DatasetContext.PlanPipesById.Count == 256 &&
+                           enrichedWithBoth == 256 &&
+                           consistentFlowPipes == 129,
+                    $"FlowArrowService 核查完成后将全部 256 条有效规划管线的流向属性(LX/LX_VALID)同步写入 PipeDatasetContext 且过滤退化线 (实际={enrichedWithBoth}/256, 顺向={consistentFlowPipes})");
             }
 
             string finalSummary = $"[test_check_plan] 测试完成：通过 {passedChecks} 项，失败 {failedChecks} 项。";

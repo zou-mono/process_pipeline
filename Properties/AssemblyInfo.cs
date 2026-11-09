@@ -1,4 +1,4 @@
-﻿using Autodesk.AutoCAD.Runtime;
+using Autodesk.AutoCAD.Runtime;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -42,3 +42,7 @@ using System.Runtime.InteropServices;
 [assembly: CommandClass(typeof(process_pipeline.Commands.ReversePolylineCommands))]
 [assembly: CommandClass(typeof(process_pipeline.Commands.ClearLayerCommands))]
 [assembly: CommandClass(typeof(process_pipeline.Commands.CheckPipeCommands))]
+[assembly: CommandClass(typeof(process_pipeline.Commands.MatchGroupCommands))]
+[assembly: CommandClass(typeof(process_pipeline.Commands.CheckPlanDataCommands))]
+[assembly: CommandClass(typeof(process_pipeline.Commands.MatchPipe))]
+[assembly: CommandClass(typeof(process_pipeline.Commands.CompareSegment))]

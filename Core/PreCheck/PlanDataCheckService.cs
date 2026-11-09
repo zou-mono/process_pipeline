@@ -8,6 +8,7 @@ using Autodesk.AutoCAD.Geometry;
 using NetTopologySuite.Geometries;
 using process_pipeline.Core.Config;
 using process_pipeline.Core.DataSource;
+using process_pipeline.Forms;
 using process_pipeline.Geometry;
 using process_pipeline.Models;
 using process_pipeline.Utils;
@@ -121,7 +122,59 @@ namespace process_pipeline.Core.PreCheck
                 context);
 
             LastReport = report;
+
+            if (report.TotalScannedPlanCurves == 0 && report.LegacyResidualItems.Count == 0 && _ed != null)
+            {
+                var planLayers = (Settings ?? CadConfig.PlanningData)?.GetAllPipeLayers() ?? new HashSet<string>();
+                CadDialogService.ShowMessage(
+                    "[Title]当前文档未找到可核查的规划管线数据。\n\n" +
+                    "[Hint]CHECKPLAN 命令针对当前激活文档核查规划管线颜色/图层一致性、退化几何与残留图层：\n" +
+                    $"1.Entity类型必须是Line或者Polyline;\n" +
+                    $"2.规划管线图层名称：{string.Join("、", planLayers)}.",
+                    type: MessageBoxType.Warning);
+                return null;
+            }
+
             return report.IssueMap;
+        }
+
+        protected override void OnSuccess(Dictionary<ObjectId, CheckIssueItem> result, bool bOnlyUpdate = false)
+        {
+            var session = DocumentSessionManager.GetOrCreateSession(_db);
+
+            if (bOnlyUpdate)
+            {
+                var merged = session != null
+                    ? session.MergeRuleIssues(RuleId, result ?? new Dictionary<ObjectId, CheckIssueItem>(), isIncremental: true)
+                    : (result ?? new Dictionary<ObjectId, CheckIssueItem>());
+                palCheckPipe.Instance.UpdateIncrementalData(merged);
+                return;
+            }
+
+            if (result == null || result.Count == 0)
+            {
+                Ed?.WriteMessage($"\n[{RuleName}] 检查通过：当前文档共 {LastReport?.NormalCompliantPipeCount ?? 0} 条规划管线全部符合颜色与图层标准规范，无退化或残留旧图层异常。\n");
+                if (session != null)
+                {
+                    var mergedEmpty = session.MergeRuleIssues(RuleId, new Dictionary<ObjectId, CheckIssueItem>(), isIncremental: false);
+                    if (palCheckPipe.Instance.IsVisible)
+                    {
+                        palCheckPipe.Instance.UpdateData(mergedEmpty);
+                    }
+                }
+                return;
+            }
+
+            int colorMismatchCount = LastReport?.ColorLayerMismatchItems.Count ?? 0;
+            int degenerateCount = LastReport?.DegenerateGeometryItems.Count ?? 0;
+            int legacyCount = LastReport?.LegacyResidualItems.Count ?? 0;
+            Ed?.WriteMessage(
+                $"\n[{RuleName}] 核查完成：共检出 {result.Count} 项待核查问题（颜色与图层冲突：{colorMismatchCount} 项，退化零长度几何：{degenerateCount} 项，残留旧图层图元：{legacyCount} 项）。\n");
+
+            var mergedAll = session != null
+                ? session.MergeRuleIssues(RuleId, result, isIncremental: false)
+                : result;
+            palCheckPipe.Instance.Show(mergedAll);
         }
 
         /// <summary>
@@ -421,10 +474,20 @@ namespace process_pipeline.Core.PreCheck
                     continue;
                 }
 
+                if (oldId.IsNull || !oldId.IsValid || oldId.IsErased)
+                {
+                    oldItem.Status = IssueReviewStatus.Resolved;
+                    oldItem.Description = "已修复：退化或残留图元已删除";
+                    oldItem.Remark = "图元已删除（已归档）";
+                    oldItem.PossibleMatches?.Clear();
+                    continue;
+                }
+
                 if (!currentAbnormalIds.Contains(oldId))
                 {
                     oldItem.Status = IssueReviewStatus.Resolved;
                     oldItem.Description = "已修复：规划管线颜色/图层或残留退化几何已合规";
+                    oldItem.Remark = "颜色与图层已合规（已修复）";
                     oldItem.PossibleMatches?.Clear();
                 }
             }

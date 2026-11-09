@@ -2,6 +2,7 @@ using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using process_pipeline.Commands;
 using process_pipeline.Core;
+using process_pipeline.Core.PreCheck;
 using process_pipeline.Geometry;
 using process_pipeline.Models;
 using process_pipeline.Themes;
@@ -1171,6 +1172,7 @@ namespace process_pipeline.Forms
             return GetActionTargetRows()
                 .Where(r => r?.SourceIssue != null &&
                             !string.Equals(r.SourceIssue.RuleId, MatchGroupService.DefaultRuleId, StringComparison.OrdinalIgnoreCase) &&
+                            !string.Equals(r.SourceIssue.RuleId, PlanDataCheckService.DefaultRuleId, StringComparison.OrdinalIgnoreCase) &&
                             (r.SourceIssue.Type == ProblemType.DirectionConflict ||
                              r.SourceIssue.Type == ProblemType.OneToMany))
                 .ToList();
@@ -2060,6 +2062,26 @@ namespace process_pipeline.Forms
             if (doc == null) return;
 
             var session = DocumentSessionManager.GetOrCreateSession(doc.Database);
+            if (session != null && session.ActiveRules.Count > 1)
+            {
+                Dictionary<ObjectId, CheckIssueItem> lastMerged = null;
+                foreach (ICheckRule activeRule in session.ActiveRules.Values.ToList())
+                {
+                    if (activeRule == null) continue;
+                    var ruleIssues = activeRule.CheckAll();
+                    if (ruleIssues != null)
+                    {
+                        lastMerged = session.MergeRuleIssues(activeRule.RuleId, ruleIssues, isIncremental: false);
+                    }
+                }
+
+                if (lastMerged != null)
+                {
+                    UpdateData(lastMerged);
+                }
+                return;
+            }
+
             ICheckRule rule = session?.ActiveRule ?? new FlowArrowService(doc.Database, doc.Editor);
             var newProblems = rule.CheckAll();
             if (newProblems != null)

@@ -195,6 +195,16 @@ namespace process_pipeline.Core.DataSource
         public bool? IsFlowDirectionConsistent { get; set; }
 
         /// <summary>
+        /// 匹配到的最近流向箭头块句柄（Stage 4 Commit 4.2）。
+        /// </summary>
+        public string MatchedArrowHandle { get; set; } = string.Empty;
+
+        /// <summary>
+        /// 流向核查状态简述（如 "顺向" / "反向" / "多箭头冲突" / "无箭头"，Stage 4 Commit 4.2）。
+        /// </summary>
+        public string FlowDirectionText { get; set; } = string.Empty;
+
+        /// <summary>
         /// 对应的几何与属性包装对象。
         /// </summary>
         public CadPolyline Polyline { get; set; }
@@ -232,7 +242,16 @@ namespace process_pipeline.Core.DataSource
                 Polyline.Attributes["LX_ANGLE"] = FlowDirectionAngle.Value;
 
             if (IsFlowDirectionConsistent.HasValue)
+            {
                 Polyline.Attributes["LX_VALID"] = IsFlowDirectionConsistent.Value;
+                Polyline.Attributes["LX"] = IsFlowDirectionConsistent.Value ? "0" : "1";
+            }
+
+            if (!string.IsNullOrWhiteSpace(MatchedArrowHandle))
+                Polyline.Attributes["ARROW_HANDLE"] = MatchedArrowHandle;
+
+            if (!string.IsNullOrWhiteSpace(FlowDirectionText))
+                Polyline.Attributes["LX_DESC"] = FlowDirectionText;
         }
     }
 

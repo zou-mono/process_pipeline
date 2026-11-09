@@ -13,6 +13,8 @@ using Autodesk.AutoCAD.EditorInput;       // 命令行交互
 using Autodesk.AutoCAD.Geometry;          // 几何对象（点、线）
 using Autodesk.AutoCAD.Runtime;
 using process_pipeline.Core;           // 命令特性（关键）
+using process_pipeline.Core.DataSource;
+using process_pipeline.Core.PreCheck;
 using process_pipeline.Forms;
 using process_pipeline.Models;
 using process_pipeline.Utils;
@@ -116,17 +118,17 @@ namespace process_pipeline.Commands
 
             //DbgLog.Write(_ed, $"\n找到箭头: {arrowData.Count} 个，管线: {pipeIds.Count} 条");
 
-            if (arrowData == null || pipeIds == null || arrowData.Count == 0 || pipeIds.Count == 0) {
-                CadDialogService.ShowMessage(
-                    $"[Title]没有合规的管线数据和箭头数据，无法进行检查.\n\n" +
-                    $"[Hint]管线数据要求：\n" +
-                    $"1.Entity类型必须是Line或者Polyline;\n" +
-                    $"2.Layer名称必须满足：{string.Join("、", CadConfig.PipeLayers)}.\n" +
-                    $"[Hint]箭头数据要求：\n" +
-                    $"1.Entity类型必须是Line或者Polyline;\n" +
-                    $"2.Layer名称必须满足：{string.Join("、", CadConfig.ArrowLayers)}.",
-                    type: MessageBoxType.Error
-                );
+            // Stage 4 Commit 4.2：将流向核查前置条件检查统一迁移至 Core/PreCheck/PreCheckService
+            PreCheckSummary preCheckReport = PreCheckService.ValidateFlowArrowPreConditions(
+                _db,
+                PipeLayerName,
+                ArrowLayerName,
+                preloadedPipeCount: pipeIds?.Count ?? 0,
+                preloadedArrowCount: arrowData?.Count ?? 0,
+                showDialogOnError: true);
+
+            if (preCheckReport == null || preCheckReport.HasBlockingIssues || arrowData == null || pipeIds == null)
+            {
                 return null;
             }
 
@@ -265,11 +267,13 @@ namespace process_pipeline.Commands
         private Dictionary<ObjectId, ProblemItem> _RunChecker(ObjectId[] pipeObjs, 
             Dictionary<ObjectId, ArrowCacheInfo> arrowData, ProgressContext context)
         {
-            // Commit 5.4：统一从主核查面板 palCheckPipe 中继承同规则已有问题的修复状态
+            // Commit 5.4 / Stage 4 Commit 4.2：优先从当前文档会话 DocumentCheckSession 中继承同规则已有问题的修复状态，
+            // 避免在后台核查或无头测试（accoreconsole.exe）中直接实例化 WPF 面板 palCheckPipe.Instance。
             Dictionary<ObjectId, ProblemItem> problems = new Dictionary<ObjectId, ProblemItem>();
-            if (palCheckPipe.Instance.CurrentIssues != null && palCheckPipe.Instance.CurrentIssues.Count > 0)
+            var session = DocumentSessionManager.GetOrCreateSession(_db);
+            if (session?.CurrentIssues != null && session.CurrentIssues.Count > 0)
             {
-                foreach (var kvp in palCheckPipe.Instance.CurrentIssues)
+                foreach (var kvp in session.CurrentIssues)
                 {
                     if (kvp.Value != null && string.Equals(kvp.Value.RuleId, RuleId, StringComparison.OrdinalIgnoreCase))
                     {
@@ -284,7 +288,6 @@ namespace process_pipeline.Commands
                         };
                     }
                 }
-
             }
 
             //Dictionary<ObjectId, ProblemItem> problems = palCheckArrow.Instance.CurrentProblems
@@ -295,7 +298,7 @@ namespace process_pipeline.Commands
             //cl.ClearLayer(auxLayerName);
 
             // 确保图层存在
-            Utils.Database database = new Utils.Database();
+            //Utils.Database database = new Utils.Database();
             //ObjectId auxlayerID = database.EnsureAuxLayer(auxLayerName);  // 辅助线图层ID
 
             // 4. 关联处理（遍历管线，找最近匹配箭头）
@@ -379,12 +382,14 @@ namespace process_pipeline.Commands
                     Location = GeometryHelper.RepresentativePoint(pipe_ent),
                     Description = "无匹配箭头（管线附近无任何箭头）"
                 };
+                SyncFlowDirectionToDatasetContext(pipeId, pipe_ent, null, null, false, "无匹配箭头");
                 return;
             }
 
             double minDist = double.MaxValue;
             //double pipeDir = 0.0;
             double pipeSegAngle = double.MaxValue;
+            double closestSegAngle = double.NaN;
             double dist = double.MaxValue;
             //double arrowRealAngle = double.MaxValue;
             //double angleDiff = double.MaxValue;
@@ -434,12 +439,14 @@ namespace process_pipeline.Commands
                 {
                     minDist = dist;
                     closestArrow = matchItem;
+                    closestSegAngle = pipeSegAngle;
                 }
             }
 
             // 更新箭头和管线匹配关系
             List<ObjectId> matchedArrowIds = possibleMatches.Select(item => item.Id).ToList();
             UpdatePipeRelation(pipeId, matchedArrowIds); 
+            double? flowAngleOpt = !double.IsNaN(closestSegAngle) ? (double?)closestSegAngle : null;
 
             // 如果没有一个可能匹配的箭头
             if (possibleMatches.Count == 0)
@@ -453,6 +460,7 @@ namespace process_pipeline.Commands
                     Location = GeometryHelper.RepresentativePoint(pipe_ent),
                     Description = $"无匹配箭头（在管线{MaxBufferDistance}米范围内没有找到符合方向的箭头）"
                 };
+                SyncFlowDirectionToDatasetContext(pipeId, pipe_ent, null, null, false, "无符合方向箭头");
                 //return problems;
             }
             else
@@ -484,6 +492,7 @@ namespace process_pipeline.Commands
                             PossibleMatches = possibleMatches,
                             Description = "管线和箭头方向不一致"
                         };
+                        SyncFlowDirectionToDatasetContext(pipeId, pipe_ent, closestArrow, flowAngleOpt, false, "流向与箭头反向");
                     }
                     else if (_reverseCount == _forwardCount)
                     {
@@ -497,12 +506,14 @@ namespace process_pipeline.Commands
                             PossibleMatches = possibleMatches,
                             Description = $"与管线关联的多个箭头方向冲突（同向 {sameCount} 个，反向 {reverseCount} 个）"
                         };
+                        SyncFlowDirectionToDatasetContext(pipeId, pipe_ent, closestArrow, flowAngleOpt, false, "多箭头方向冲突");
                     }
                     else { 
                         if (problems.ContainsKey(pipeId)) 
                         { 
                             problems[pipeId].IsFixed = true;
                         }
+                        SyncFlowDirectionToDatasetContext(pipeId, pipe_ent, closestArrow, flowAngleOpt, true, "流向一致");
                     }
                 }
                 else if (reverseCount == possibleMatches.Count && reverseCount > 0)
@@ -523,14 +534,67 @@ namespace process_pipeline.Commands
                             };
                         }
                     }
+                    SyncFlowDirectionToDatasetContext(pipeId, pipe_ent, closestArrow, flowAngleOpt, false, "流向与箭头反向");
                 }
                 else { 
                     if (problems.ContainsKey(pipeId)) 
                     { 
                         problems[pipeId].IsFixed = true;
                     }
+                    SyncFlowDirectionToDatasetContext(pipeId, pipe_ent, closestArrow, flowAngleOpt, true, "流向一致");
                 }
             }
+        }
+
+        /// <summary>
+        /// Stage 4 Commit 4.2：将流向箭头核查确定的管线流向属性同步写入当前文档会话的 PipeDatasetContext，
+        /// 为后续管线文字/材质匹配与多源数据对比提供流向属性基准（LX / LX_ANGLE / LX_VALID）。
+        /// </summary>
+        private void SyncFlowDirectionToDatasetContext(
+            ObjectId pipeId,
+            Entity pipeEnt,
+            MatchItem closestArrow,
+            double? flowAngle,
+            bool isConsistent,
+            string statusText)
+        {
+            if (pipeId.IsNull || !pipeId.IsValid || pipeEnt == null)
+                return;
+
+            // 过滤长度为 0 的退化几何线（如 Handle=184, 188, 1C8），避免将其混入有效规划管线富化上下文
+            if (pipeEnt is Curve curve && (!PreCheckService.TryGetCurveLength(curve, out double curveLen) || curveLen <= 1e-4))
+                return;
+
+            var session = DocumentSessionManager.GetOrCreateSession(_db);
+            PipeDatasetContext context = session?.DatasetContext;
+            if (context == null)
+                return;
+
+            string handle = pipeEnt.Handle.ToString();
+            EnrichedPlanPipeInfo enriched = context.GetOrCreatePlanPipeInfo(pipeId, handle);
+            if (string.IsNullOrWhiteSpace(enriched.LayerName))
+            {
+                enriched.LayerName = pipeEnt.Layer ?? string.Empty;
+            }
+
+            if (enriched.Polyline == null)
+            {
+                enriched.Polyline = new CadPolyline
+                {
+                    SourceHandles = new List<string> { handle },
+                    LayerName = pipeEnt.Layer ?? string.Empty,
+                    DatasetName = "plan",
+                    Attributes = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase)
+                };
+            }
+
+            enriched.FlowDirectionAngle = flowAngle;
+            enriched.IsFlowDirectionConsistent = isConsistent;
+            enriched.MatchedArrowHandle = closestArrow != null && !closestArrow.Id.IsNull
+                ? closestArrow.Id.Handle.ToString()
+                : string.Empty;
+            enriched.FlowDirectionText = statusText ?? string.Empty;
+            enriched.SyncToPolylineAttributes();
         }
 
         public static void UpdatePipeRelation(ObjectId pipeId, IEnumerable<ObjectId> matchedArrowIds)
