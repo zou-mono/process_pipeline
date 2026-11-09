@@ -570,7 +570,14 @@ namespace process_pipeline.Core.PreCheck
 
             if (curve is Polyline pl)
             {
-                return GeometryHelper.ConvertAutoCadPolylineToPolyline(pl, objId, _geometryFactory, "plan", attrs);
+                var cadPoly = GeometryHelper.ConvertAutoCadPolylineToPolyline(pl, objId, _geometryFactory, "plan", attrs);
+                // 规划管线的管径 WIDTH 严格来源于关联文字标注（TextDiameter），移除由 Polyline.ConstantWidth 线宽回退写入的伪管径
+                if (cadPoly?.Attributes != null && cadPoly.Attributes.ContainsKey("WIDTH"))
+                {
+                    cadPoly.Attributes["CONSTANT_LINE_WIDTH"] = cadPoly.Attributes["WIDTH"];
+                    cadPoly.Attributes.Remove("WIDTH");
+                }
+                return cadPoly;
             }
 
             if (curve is Line line)

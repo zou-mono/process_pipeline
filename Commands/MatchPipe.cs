@@ -1,10 +1,15 @@
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
+using Autodesk.AutoCAD.Geometry;
 using Autodesk.AutoCAD.Runtime;
 using NetTopologySuite.Geometries;
 using NtsGeometry = NetTopologySuite.Geometries.Geometry;
 using NetTopologySuite.Index.Strtree;
 using process_pipeline.Core;
+using process_pipeline.Core.Config;
+using process_pipeline.Core.DataSource;
+using process_pipeline.Core.PreCheck;
+using process_pipeline.Forms;
 using process_pipeline.Geometry;
 using process_pipeline.Models;
 using process_pipeline.Utils;
@@ -13,33 +18,842 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using AcadDb = Autodesk.AutoCAD.DatabaseServices;
 
 namespace process_pipeline.Commands
 {
+    /// <summary>
+    /// 跨图规划管线与勘测管线匹配及管径一致性核查命令入口（Stage 6 Commit 6.1）。
+    /// </summary>
     public class MatchPipe : CadCommandBase
     {
-        [CommandMethod("MatchPipe", CommandFlags.Session | CommandFlags.Redraw)]
+        [CommandMethod("MatchPipe", CommandFlags.Modal | CommandFlags.NoUndoMarker)]
         public override void Execute()
         {
+            if (Doc == null) return;
+
             var service = new MatchPipeService(Doc.Database, Doc.Editor);
-            service.Run("匹配管道数据");
+            var session = DocumentSessionManager.GetOrCreateSession(Doc.Database);
+            if (session != null)
+            {
+                session.RegisterActiveRule(service);
+            }
+
+            service.Run("管段匹配核查", bOnlyUpdate: false);
         }
     }
 
-    public class MatchPipeService : CadBase<Dictionary<ObjectId, ProblemItem>>
+    /// <summary>
+    /// 单段规划管线与合并勘测管线的分段匹配及管径比对核查明细（Stage 6 Commit 6.1）。
+    /// </summary>
+    public class MatchPipeSegmentCheckItem
     {
-        public MatchPipeService(Autodesk.AutoCAD.DatabaseServices.Database db, Editor ed) : base(db, ed)
+        public ObjectId PlanPipeId { get; set; } = ObjectId.Null;
+        public string PlanHandle { get; set; } = string.Empty;
+        public string PlanLayerName { get; set; } = string.Empty;
+        public string CategoryId { get; set; } = string.Empty;
+        public string CategoryName { get; set; } = string.Empty;
+        public int SubIndex { get; set; }
+        public double PlanPipeLength { get; set; }
+        public double? PlanDiameter { get; set; }
+        public double? PlanSecondaryDiameter { get; set; }
+        public string PlanRawLabel { get; set; } = string.Empty;
+        public bool IsMatchedToSurvey { get; set; }
+        public List<string> SurveyHandles { get; set; } = new List<string>();
+        public double? SurveyDiameter { get; set; }
+        public double? SurveyHeight { get; set; }
+        public SegmentInterval TargetInterval { get; set; }
+        public SegmentInterval SurveyInterval { get; set; }
+        public double AverageDistance { get; set; }
+        public double MaxDistance { get; set; }
+        public double Score { get; set; }
+        public bool IsDiameterConsistent { get; set; }
+        public bool IsMissingPlanDiameterOnMatched { get; set; }
+        public Point3d RepresentativeLocation { get; set; }
+        public MatchItem HelperLine { get; set; }
+        public CompareResult RawCompareResult { get; set; }
+    }
+
+    /// <summary>
+    /// 规划数据（三类管线）与只读合并勘测数据管径匹配核查完整结构化报告（Stage 6 Commit 6.1）。
+    /// </summary>
+    public class MatchPipeCheckReport
+    {
+        public int TotalPlanPipeCount { get; set; }
+        public int SurveyRawPolylineCount { get; set; }
+        public int SurveyMergedPolylineCount { get; set; }
+        public string SurveyCacheKey { get; set; } = string.Empty;
+
+        public Dictionary<string, int> PlanCountByCategory { get; } =
+            new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        public Dictionary<string, int> MatchedPipeCountByCategory { get; } =
+            new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        public Dictionary<string, int> UnmatchedPipeCountByCategory { get; } =
+            new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        public List<MatchPipeSegmentCheckItem> AllSegmentItems { get; } = new List<MatchPipeSegmentCheckItem>();
+        public List<MatchPipeSegmentCheckItem> DiameterConsistentItems { get; } = new List<MatchPipeSegmentCheckItem>();
+        public List<MatchPipeSegmentCheckItem> DiameterMismatchItems { get; } = new List<MatchPipeSegmentCheckItem>();
+        public List<MatchPipeSegmentCheckItem> MissingPlanLabelOnMatchedItems { get; } = new List<MatchPipeSegmentCheckItem>();
+        public List<MatchPipeSegmentCheckItem> UnmatchedExistingPipeItems { get; } = new List<MatchPipeSegmentCheckItem>();
+        public List<MatchPipeSegmentCheckItem> MultiSegmentPipeItems { get; } = new List<MatchPipeSegmentCheckItem>();
+
+        public List<CheckIssueItem> AllIssueItems { get; } = new List<CheckIssueItem>();
+        public Dictionary<ObjectId, CheckIssueItem> IssueMap { get; } = new Dictionary<ObjectId, CheckIssueItem>();
+    }
+
+    /// <summary>
+    /// 规划数据（新建、现状、改扩建三类管线）与只读合并勘测数据分段匹配及管径一致性核查服务（Stage 6 Commit 6.1）。
+    /// 
+    /// 核心设计：
+    /// 1. 串联 <see cref="PipeDatasetContext"/> 中已组装的规划管分类（颜色优先）与文字标注管径（WIDTH），
+    ///    以及只读勘测管（按 WIDTH 拓扑合并 + 静态 STRtree 缓存）；
+    /// 2. 对全部三类规划管线（规划新建管、现状管、规划改扩建管）执行分段匹配（PipeMatcher），
+    ///    核对规划标注管径与勘测管径一致性；
+    /// 3. 支持单根长规划管线跨越多个不同管径勘测管段时输出多子项（SubIndex = 0, 1, ...）核查问题；
+    /// 4. 支持在核查过程中修改规划管线几何或修改规划管径文字标注（DBText/MText）后，
+    ///    直接查询内存静态勘测 STRtree 实现毫秒级局部增量重算与自动归档。
+    /// </summary>
+    public class MatchPipeService : CadBase<Dictionary<ObjectId, CheckIssueItem>>, ICheckRule
+    {
+        public const string DefaultRuleId = "MatchPipe";
+        public const string DefaultRuleName = "管段匹配核查";
+
+        /// <summary>
+        /// 管径数值一致性比对容差（毫米，默认 1.0mm）。
+        /// </summary>
+        public const double DefaultDiameterToleranceMm = 1.0;
+
+        private readonly AcadDb.Database _db;
+        private readonly Editor _ed;
+        private readonly DataSourceService _dataSourceService = new DataSourceService();
+        private readonly PipeSpatialMatcher _spatialMatcher = new PipeSpatialMatcher();
+        private readonly GeometryFactory _geometryFactory =
+            NetTopologySuite.NtsGeometryServices.Instance.CreateGeometryFactory();
+
+        /// <summary>
+        /// 规划文字标注 ObjectId -> 关联规划管线 ObjectId 映射（供文字标注内容修改后触发对应管线的管径增量复核）。
+        /// </summary>
+        private readonly Dictionary<ObjectId, HashSet<ObjectId>> _textToPlanPipeIds =
+            new Dictionary<ObjectId, HashSet<ObjectId>>();
+
+        public string RuleId => DefaultRuleId;
+        public string RuleName => DefaultRuleName;
+
+        /// <summary>
+        /// 可选的外部指定勘测数据 Database（若未指定则通过 DataSourceService 智能嗅探并缓存）。
+        /// </summary>
+        public AcadDb.Database OverrideSurveyDatabase { get; set; }
+
+        /// <summary>
+        /// 管线分段匹配参数。
+        /// </summary>
+        public PolylineMatchOptions MatchOptions { get; set; } = new PolylineMatchOptions();
+
+        /// <summary>
+        /// 勘测管拓扑合并参数（默认按 WIDTH 分组合并）。
+        /// </summary>
+        public PolylineMergeOptions MergeOptions { get; set; } = new PolylineMergeOptions
         {
+            NodeTolerance = CadConfig.Algorithms.PipeMerge.NodeTolerance,
+            MinPolylineLength = CadConfig.Algorithms.PipeMerge.MinPolylineLength,
+            MergeAttributeNames = new List<string>(CadConfig.Algorithms.PipeMerge.MergeAttributeNames ?? new List<string> { "WIDTH" }),
+            RequireSameLayer = true,
+            MergeClosedLoops = true,
+            RemoveDuplicateConsecutivePoints = true
+        };
+
+        /// <summary>
+        /// 最近一次核查生成的完整结构化报告。
+        /// </summary>
+        public MatchPipeCheckReport LastReport { get; private set; }
+
+        public MatchPipeService(AcadDb.Database db, Editor ed = null) : base(db, ed)
+        {
+            _db = db ?? throw new ArgumentNullException(nameof(db));
+            _ed = ed;
         }
 
-        protected override Dictionary<ObjectId, ProblemItem> Execute(ProgressContext context)
+        protected override Dictionary<ObjectId, CheckIssueItem> Execute(ProgressContext context)
         {
-            throw new NotImplementedException();
+            return CheckAll(context);
         }
 
-        protected override Dictionary<ObjectId, ProblemItem> Execute(ProgressContext context, List<ObjectId> objectIds)
+        protected override Dictionary<ObjectId, CheckIssueItem> Execute(ProgressContext context, List<ObjectId> objectIds)
         {
-            throw new NotImplementedException();
+            var session = DocumentSessionManager.GetOrCreateSession(_db);
+            var existingIssues = session?.CurrentIssues != null && session.CurrentIssues.Count > 0
+                ? new Dictionary<ObjectId, CheckIssueItem>(session.CurrentIssues)
+                : new Dictionary<ObjectId, CheckIssueItem>();
+
+            return CheckIncremental(objectIds, existingIssues, context);
+        }
+
+        /// <summary>
+        /// 执行全量规划管与勘测管分段匹配及管径核查（ICheckRule.CheckAll）。
+        /// </summary>
+        public Dictionary<ObjectId, CheckIssueItem> CheckAll(ProgressContext context = null)
+        {
+            var session = DocumentSessionManager.GetOrCreateSession(_db);
+            var datasetContext = session?.DatasetContext ?? new PipeDatasetContext();
+
+            var existingByIssueId = new Dictionary<string, CheckIssueItem>(StringComparer.OrdinalIgnoreCase);
+            if (session?.IssuesById != null)
+            {
+                foreach (var kvp in session.IssuesById)
+                {
+                    if (kvp.Value != null && string.Equals(kvp.Value.RuleId, RuleId, StringComparison.OrdinalIgnoreCase))
+                    {
+                        existingByIssueId[kvp.Key] = kvp.Value;
+                    }
+                }
+            }
+
+            MatchPipeCheckReport report = InspectPlanVsSurveyPipes(
+                datasetContext,
+                OverrideSurveyDatabase,
+                existingByIssueId,
+                context);
+
+            LastReport = report;
+
+            if (session != null && report != null)
+            {
+                session.MergeRuleIssueItems(RuleId, report.AllIssueItems, isIncremental: false);
+            }
+
+            return report?.IssueMap ?? new Dictionary<ObjectId, CheckIssueItem>();
+        }
+
+        /// <summary>
+        /// 执行局部增量核查（ICheckRule.CheckIncremental）：
+        /// 当用户在 CAD 图面修改了规划管线或修改了规划管径文字标注（如将 'd400' 改为 'd600'）后，
+        /// 直接利用内存静态缓存的勘测管 STRtree 毫秒级重算受影响管线的管径一致性，并将已一致的子问题自动标记为 Resolved。
+        /// </summary>
+        public Dictionary<ObjectId, CheckIssueItem> CheckIncremental(
+            List<ObjectId> targetIds,
+            Dictionary<ObjectId, CheckIssueItem> currentIssues = null,
+            ProgressContext context = null)
+        {
+            var mergedIssues = currentIssues != null
+                ? new Dictionary<ObjectId, CheckIssueItem>(currentIssues)
+                : new Dictionary<ObjectId, CheckIssueItem>();
+
+            var session = DocumentSessionManager.GetOrCreateSession(_db);
+            var datasetContext = session?.DatasetContext ?? new PipeDatasetContext();
+
+            var existingByIssueId = new Dictionary<string, CheckIssueItem>(StringComparer.OrdinalIgnoreCase);
+            if (session?.IssuesById != null)
+            {
+                foreach (var kvp in session.IssuesById)
+                {
+                    if (kvp.Value != null && string.Equals(kvp.Value.RuleId, RuleId, StringComparison.OrdinalIgnoreCase))
+                    {
+                        existingByIssueId[kvp.Key] = kvp.Value;
+                    }
+                }
+            }
+            foreach (var kvp in mergedIssues)
+            {
+                if (kvp.Value != null && string.Equals(kvp.Value.RuleId, RuleId, StringComparison.OrdinalIgnoreCase))
+                {
+                    string issueId = DocumentCheckSession.EnsureIssueId(kvp.Value, RuleId, 0);
+                    if (!existingByIssueId.ContainsKey(issueId))
+                    {
+                        existingByIssueId[issueId] = kvp.Value;
+                    }
+                }
+            }
+
+            MatchPipeCheckReport latestReport = InspectPlanVsSurveyPipes(
+                datasetContext,
+                OverrideSurveyDatabase,
+                existingByIssueId,
+                context);
+            LastReport = latestReport;
+
+            var latestByIssueId = new Dictionary<string, CheckIssueItem>(StringComparer.OrdinalIgnoreCase);
+            foreach (CheckIssueItem item in latestReport.AllIssueItems)
+            {
+                if (item == null) continue;
+                string iid = DocumentCheckSession.EnsureIssueId(item, RuleId, 0);
+                latestByIssueId[iid] = item;
+            }
+
+            var updatedAllItems = new List<CheckIssueItem>();
+
+            // 1. 对旧问题中已在最新比对中消除（管径已一致或图元已删除）的子项，自动归档为 Resolved（已修复）
+            foreach (var kvp in existingByIssueId)
+            {
+                string oldIssueId = kvp.Key;
+                CheckIssueItem oldIssue = kvp.Value;
+                if (oldIssue == null) continue;
+
+                ObjectId oid = oldIssue.TargetObjectId;
+                if (!oid.IsNull && (!oid.IsValid || oid.IsErased))
+                {
+                    oldIssue.Status = IssueReviewStatus.Resolved;
+                    oldIssue.Remark = "规划管线图元已删除（已归档）";
+                    updatedAllItems.Add(oldIssue);
+                    mergedIssues[oid] = oldIssue;
+                    continue;
+                }
+
+                if (!latestByIssueId.ContainsKey(oldIssueId))
+                {
+                    oldIssue.Status = IssueReviewStatus.Resolved;
+                    if (!oid.IsNull && datasetContext.PlanPipesById.TryGetValue(oid, out EnrichedPlanPipeInfo enriched) &&
+                        enriched?.TextDiameter.HasValue == true)
+                    {
+                        oldIssue.Diameter = enriched.TextDiameter.Value;
+                        oldIssue.Description = $"规划管 [{enriched.Handle}] 标注管径已更新为 DN{enriched.TextDiameter.Value:0}，与勘测管管径一致";
+                        oldIssue.Remark = $"{oldIssue.Description}（已修复）";
+                    }
+                    else
+                    {
+                        oldIssue.Remark = "规划管径已与勘测管一致（已修复）";
+                    }
+                    updatedAllItems.Add(oldIssue);
+                    if (!oid.IsNull)
+                    {
+                        mergedIssues[oid] = oldIssue;
+                    }
+                }
+            }
+
+            // 2. 合并最新仍处于待核查的子问题
+            foreach (CheckIssueItem newItem in latestReport.AllIssueItems)
+            {
+                if (newItem == null) continue;
+                updatedAllItems.Add(newItem);
+                if (!newItem.TargetObjectId.IsNull)
+                {
+                    mergedIssues[newItem.TargetObjectId] = newItem;
+                }
+            }
+
+            if (session != null)
+            {
+                session.MergeRuleIssueItems(RuleId, updatedAllItems, isIncremental: true, incrementalTargetIds: targetIds);
+            }
+
+            return mergedIssues;
+        }
+
+        /// <summary>
+        /// 变更影响范围追踪（ICheckRule.GetAffectedTargetIds）：
+        /// 监听规划管线（Polyline/Line）以及规划管径文字标注（DBText/MText）的增删改。
+        /// </summary>
+        public IEnumerable<ObjectId> GetAffectedTargetIds(DBObject changedObj)
+        {
+            var affected = new HashSet<ObjectId>();
+            if (changedObj == null)
+                return affected;
+
+            try
+            {
+                Entity ent = changedObj as Entity;
+                if (ent == null || string.IsNullOrWhiteSpace(ent.Layer))
+                    return affected;
+
+                string layer = ent.Layer.Trim();
+                var planPipeLayers = CadConfig.PlanningData.GetAllPipeLayers();
+                var planTextLayers = CadConfig.PlanningData.GetAllTextLayers();
+
+                if ((ent is Polyline || ent is Autodesk.AutoCAD.DatabaseServices.Line) &&
+                    planPipeLayers.Contains(layer))
+                {
+                    affected.Add(ent.ObjectId);
+                }
+                else if ((ent is DBText || ent is MText) && planTextLayers.Contains(layer))
+                {
+                    if (_textToPlanPipeIds.TryGetValue(ent.ObjectId, out HashSet<ObjectId> linkedPipes) && linkedPipes != null)
+                    {
+                        foreach (ObjectId pid in linkedPipes)
+                        {
+                            if (!pid.IsNull)
+                                affected.Add(pid);
+                        }
+                    }
+
+                    var session = DocumentSessionManager.GetOrCreateSession(_db);
+                    if (session != null)
+                    {
+                        foreach (ObjectId pid in session.DatasetContext.PlanPipesById.Keys)
+                        {
+                            if (!pid.IsNull)
+                                affected.Add(pid);
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                // 忽略瞬态事务读取异常
+            }
+
+            return affected;
+        }
+
+        protected override void OnSuccess(Dictionary<ObjectId, CheckIssueItem> result, bool bOnlyUpdate = false)
+        {
+            var session = DocumentSessionManager.GetOrCreateSession(_db);
+
+            if (bOnlyUpdate)
+            {
+                if (session != null && session.IssuesById.Count > 0)
+                {
+                    palCheckPipe.Instance.UpdateIssueItems(session.GetAllIssueItems(), isIncremental: true);
+                }
+                else
+                {
+                    palCheckPipe.Instance.UpdateIncrementalData(result ?? new Dictionary<ObjectId, CheckIssueItem>());
+                }
+                return;
+            }
+
+            if (LastReport != null)
+            {
+                Ed?.WriteMessage(
+                    $"\n[{RuleName}] 核查完成：共扫描三类规划管线 {LastReport.TotalPlanPipeCount} 条，" +
+                    $"勘测管 {LastReport.SurveyRawPolylineCount} 条（按管径合并后 {LastReport.SurveyMergedPolylineCount} 条）；" +
+                    $"管径一致分段 {LastReport.DiameterConsistentItems.Count} 处，" +
+                    $"检出待核查问题 {LastReport.AllIssueItems.Count} 项（管径不符：{LastReport.DiameterMismatchItems.Count}，匹配段缺标注：{LastReport.MissingPlanLabelOnMatchedItems.Count}，现状管未匹配勘测管：{LastReport.UnmatchedExistingPipeItems.Count}）。\n");
+            }
+
+            if (session != null && session.IssuesById.Count > 0)
+            {
+                palCheckPipe.Instance.ShowIssueItems(session.GetAllIssueItems());
+            }
+            else if (result != null)
+            {
+                palCheckPipe.Instance.Show(result);
+            }
+        }
+
+        /// <summary>
+        /// 核心编排方法：串联 <see cref="PipeDatasetContext"/> 中的三类规划管（含文字管径）与只读合并勘测管（含静态 STRtree），
+        /// 执行分段匹配与管径一致性校验，并产出完整报表与多子项（SubIndex）核查问题。
+        /// </summary>
+        public MatchPipeCheckReport InspectPlanVsSurveyPipes(
+            PipeDatasetContext datasetContext = null,
+            AcadDb.Database explicitSurveyDb = null,
+            Dictionary<string, CheckIssueItem> existingIssuesById = null,
+            ProgressContext progress = null)
+        {
+            var ctx = datasetContext ?? DocumentSessionManager.GetOrCreateSession(_db)?.DatasetContext ?? new PipeDatasetContext();
+            var report = new MatchPipeCheckReport();
+
+            // 1. 组装规划管线（颜色优先分类 + 文字标注管径提取）
+            var planCheckSvc = new PlanDataCheckService(_db, _ed);
+            planCheckSvc.InspectPlanningData(CadConfig.PlanningData, ctx, null, progress);
+
+            PipeSpatialMatchSummary textMatchSummary = _spatialMatcher.MatchAndEnrichPlanTextLabels(
+                _db,
+                ctx,
+                CadConfig.PlanningData);
+
+            RebuildTextToPlanPipeMap(textMatchSummary);
+
+            // 2. 获取或构建只读勘测数据静态缓存（RawPolylines + 按 WIDTH 合并后的 MergedPolylines + MergedPolylineIndex）
+            SurveyDatasetCacheEntry surveyCache = ResolveAndGetSurveyCache(ctx, explicitSurveyDb);
+            if (surveyCache == null)
+            {
+                return report;
+            }
+
+            report.SurveyRawPolylineCount = surveyCache.RawPolylines?.Count ?? 0;
+            report.SurveyMergedPolylineCount = surveyCache.MergedPolylines?.Count ?? 0;
+            report.SurveyCacheKey = surveyCache.CacheKey ?? string.Empty;
+
+            var matchOpts = MatchOptions ?? new PolylineMatchOptions();
+
+            // 3. 遍历全部三类规划管线（新建 PlanNew、现状 Existing、改扩建 PlanExpand）
+            var orderedPlanPipes = ctx.PlanPipesById.Values
+                .Where(p => p != null && p.Polyline != null && GeometryHelper.IsValidPolylineGeometry(p.Polyline))
+                .OrderBy(p => p.Handle, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            report.TotalPlanPipeCount = orderedPlanPipes.Count;
+
+            foreach (EnrichedPlanPipeInfo planInfo in orderedPlanPipes)
+            {
+                if (progress != null && progress.Token.IsCancellationRequested)
+                    break;
+
+                string catId = !string.IsNullOrWhiteSpace(planInfo.ResolvedCategoryId)
+                    ? planInfo.ResolvedCategoryId
+                    : "Existing";
+                string catName = !string.IsNullOrWhiteSpace(planInfo.ResolvedCategoryName)
+                    ? planInfo.ResolvedCategoryName
+                    : "现状管";
+
+                if (!report.PlanCountByCategory.ContainsKey(catId))
+                {
+                    report.PlanCountByCategory[catId] = 0;
+                    report.MatchedPipeCountByCategory[catId] = 0;
+                    report.UnmatchedPipeCountByCategory[catId] = 0;
+                }
+                report.PlanCountByCategory[catId]++;
+
+                CadPolyline targetPoly = planInfo.Polyline;
+                double? planWidth = planInfo.TextDiameter ?? targetPoly.GetAttributeDouble("WIDTH");
+                double? planWidthMax = targetPoly.GetAttributeDouble("WIDTH_MAX");
+                string rawLabel = planInfo.RawLabelText ?? targetPoly.GetAttributeString("RAW_LABEL") ?? string.Empty;
+
+                // 利用已构建好的勘测管静态 STRtree 索引直接查询分段匹配
+                List<CompareResult> segMatches = FindSegmentMatchesForTarget(
+                    targetPoly,
+                    surveyCache.MergedPolylineIndex,
+                    _geometryFactory,
+                    matchOpts);
+
+                var validMatches = (segMatches ?? new List<CompareResult>())
+                    .Where(m => m != null && m.IsMatched && m.BestBasePolyline != null)
+                    .ToList();
+
+                if (validMatches.Count == 0)
+                {
+                    report.UnmatchedPipeCountByCategory[catId]++;
+
+                    Point3d repPt = GetMidPointOnLineString(targetPoly.Geometry, null);
+                    var unmatchedItem = new MatchPipeSegmentCheckItem
+                    {
+                        PlanPipeId = planInfo.PipeId,
+                        PlanHandle = planInfo.Handle,
+                        PlanLayerName = planInfo.LayerName,
+                        CategoryId = catId,
+                        CategoryName = catName,
+                        SubIndex = 0,
+                        PlanPipeLength = targetPoly.Length,
+                        PlanDiameter = planWidth,
+                        PlanSecondaryDiameter = planWidthMax,
+                        PlanRawLabel = rawLabel,
+                        IsMatchedToSurvey = false,
+                        RepresentativeLocation = repPt
+                    };
+
+                    report.AllSegmentItems.Add(unmatchedItem);
+
+                    // 若为【现状管】且在勘测管中完全未找到对应管段，则生成“现状管未匹配勘测管”待核查问题
+                    if (string.Equals(catId, "Existing", StringComparison.OrdinalIgnoreCase))
+                    {
+                        report.UnmatchedExistingPipeItems.Add(unmatchedItem);
+
+                        string planWidthDesc = planWidth.HasValue ? $"DN{planWidth.Value:0}" : "无文字标注";
+                        string desc =
+                            $"现状管未匹配到勘测管：[{planInfo.LayerName}] 规划现状管 [{planInfo.Handle}] (标注={planWidthDesc}, L={targetPoly.Length:F1}m) 在容差 {matchOpts.Tolerance:F1}m 内无同源勘测管";
+
+                        CheckIssueItem issue = CreateMatchPipeIssue(
+                            unmatchedItem,
+                            ProblemType.NoAdjacentItems,
+                            ProblemLevel.Warning,
+                            desc,
+                            existingIssuesById);
+
+                        report.AllIssueItems.Add(issue);
+                        if (!planInfo.PipeId.IsNull)
+                        {
+                            report.IssueMap[planInfo.PipeId] = issue;
+                        }
+                    }
+
+                    continue;
+                }
+
+                report.MatchedPipeCountByCategory[catId]++;
+
+                for (int subIdx = 0; subIdx < validMatches.Count; subIdx++)
+                {
+                    CompareResult segMatch = validMatches[subIdx];
+                    CadPolyline surveyPoly = segMatch.BestBasePolyline;
+                    double? surveyWidth = surveyPoly.GetAttributeDouble("WIDTH");
+                    double? surveyHeight = surveyPoly.GetAttributeDouble("HEITH");
+                    var surveyHandles = surveyPoly.SourceHandles != null
+                        ? new List<string>(surveyPoly.SourceHandles)
+                        : new List<string>();
+
+                    Point3d segMidPt = GetMidPointOnLineString(targetPoly.Geometry, segMatch.CoveredIntervalOnTarget);
+                    MatchItem helperLine = BuildSegmentHelperLine(segMidPt, surveyPoly.Geometry);
+
+                    bool isMissingPlanLabel = !planWidth.HasValue && surveyWidth.HasValue;
+                    bool isDiameterMatch = false;
+
+                    if (planWidth.HasValue && surveyWidth.HasValue)
+                    {
+                        if (Math.Abs(planWidth.Value - surveyWidth.Value) <= DefaultDiameterToleranceMm)
+                        {
+                            isDiameterMatch = true;
+                        }
+                        else if (planWidthMax.HasValue &&
+                                 surveyWidth.Value >= Math.Min(planWidth.Value, planWidthMax.Value) - DefaultDiameterToleranceMm &&
+                                 surveyWidth.Value <= Math.Max(planWidth.Value, planWidthMax.Value) + DefaultDiameterToleranceMm)
+                        {
+                            isDiameterMatch = true;
+                        }
+                    }
+
+                    var segItem = new MatchPipeSegmentCheckItem
+                    {
+                        PlanPipeId = planInfo.PipeId,
+                        PlanHandle = planInfo.Handle,
+                        PlanLayerName = planInfo.LayerName,
+                        CategoryId = catId,
+                        CategoryName = catName,
+                        SubIndex = subIdx,
+                        PlanPipeLength = targetPoly.Length,
+                        PlanDiameter = planWidth,
+                        PlanSecondaryDiameter = planWidthMax,
+                        PlanRawLabel = rawLabel,
+                        IsMatchedToSurvey = true,
+                        SurveyHandles = surveyHandles,
+                        SurveyDiameter = surveyWidth,
+                        SurveyHeight = surveyHeight,
+                        TargetInterval = segMatch.CoveredIntervalOnTarget,
+                        SurveyInterval = segMatch.CoveredIntervalOnBase,
+                        AverageDistance = segMatch.AverageDistance,
+                        MaxDistance = segMatch.MaxDistance,
+                        Score = segMatch.Score,
+                        IsDiameterConsistent = isDiameterMatch,
+                        IsMissingPlanDiameterOnMatched = isMissingPlanLabel,
+                        RepresentativeLocation = segMidPt,
+                        HelperLine = helperLine,
+                        RawCompareResult = segMatch
+                    };
+
+                    report.AllSegmentItems.Add(segItem);
+                    if (validMatches.Count > 1)
+                    {
+                        report.MultiSegmentPipeItems.Add(segItem);
+                    }
+
+                    string surveyHandlesSummary = FormatHandlesSummary(surveyHandles);
+                    string intervalDesc = segMatch.CoveredIntervalOnTarget != null
+                        ? $"[{segMatch.CoveredIntervalOnTarget.Start:F1}m~{segMatch.CoveredIntervalOnTarget.End:F1}m]"
+                        : $"[0~{targetPoly.Length:F1}m]";
+
+                    if (isDiameterMatch)
+                    {
+                        report.DiameterConsistentItems.Add(segItem);
+                    }
+                    else if (planWidth.HasValue && surveyWidth.HasValue)
+                    {
+                        // 管径不一致：生成带 SubIndex 的核查问题
+                        report.DiameterMismatchItems.Add(segItem);
+
+                        string segPrefix = validMatches.Count > 1 ? $"分段#{subIdx + 1} " : string.Empty;
+                        string desc =
+                            $"{segPrefix}管径与勘测管不符：[{catName}] 规划管 [{planInfo.Handle}] 标注 DN{planWidth.Value:0}('{rawLabel}') vs 勘测管 [{surveyHandlesSummary}] DN{surveyWidth.Value:0}，区间 {intervalDesc} (均距={segMatch.AverageDistance:F2}m)";
+
+                        CheckIssueItem issue = CreateMatchPipeIssue(
+                            segItem,
+                            ProblemType.DirectionConflict,
+                            ProblemLevel.Error,
+                            desc,
+                            existingIssuesById);
+
+                        report.AllIssueItems.Add(issue);
+                        if (!planInfo.PipeId.IsNull && !report.IssueMap.ContainsKey(planInfo.PipeId))
+                        {
+                            report.IssueMap[planInfo.PipeId] = issue;
+                        }
+                    }
+                    else if (isMissingPlanLabel)
+                    {
+                        // 规划管缺少文字管径标注，但匹配上了有管径的勘测管
+                        report.MissingPlanLabelOnMatchedItems.Add(segItem);
+
+                        string segPrefix = validMatches.Count > 1 ? $"分段#{subIdx + 1} " : string.Empty;
+                        string desc =
+                            $"{segPrefix}规划管缺管径标注（已匹配勘测管）：[{catName}] 规划管 [{planInfo.Handle}] 未提取到文字管径，对应勘测管 [{surveyHandlesSummary}] 管径为 DN{surveyWidth.Value:0}，区间 {intervalDesc}";
+
+                        CheckIssueItem issue = CreateMatchPipeIssue(
+                            segItem,
+                            ProblemType.NoAdjacentItems,
+                            ProblemLevel.Warning,
+                            desc,
+                            existingIssuesById);
+
+                        report.AllIssueItems.Add(issue);
+                        if (!planInfo.PipeId.IsNull && !report.IssueMap.ContainsKey(planInfo.PipeId))
+                        {
+                            report.IssueMap[planInfo.PipeId] = issue;
+                        }
+                    }
+                }
+            }
+
+            return report;
+        }
+
+        private SurveyDatasetCacheEntry ResolveAndGetSurveyCache(
+            PipeDatasetContext ctx,
+            AcadDb.Database explicitSurveyDb)
+        {
+            var surveyLayers = CadConfig.SurveyData.PipeLayers ?? new List<string> { "勘测管" };
+
+            if (explicitSurveyDb != null)
+            {
+                return ctx.GetOrBuildSurveyCache(explicitSurveyDb, surveyLayers, _geometryFactory, MergeOptions);
+            }
+
+            if (ctx.SurveyDataSource == null || !ctx.SurveyDataSource.IsValid)
+            {
+                _dataSourceService.TryAutoResolveDataSources(_db, ctx, needPreviousData: false, needSurveyData: true);
+            }
+
+            if (ctx.SurveyDataSource == null || !ctx.SurveyDataSource.IsValid)
+            {
+                return null;
+            }
+
+            AcadDb.Database surveyDb = null;
+            bool shouldDispose = false;
+            try
+            {
+                surveyDb = _dataSourceService.OpenOrReadDatabase(ctx.SurveyDataSource, out shouldDispose);
+                if (surveyDb == null)
+                    return null;
+
+                return ctx.GetOrBuildSurveyCache(surveyDb, ctx.SurveyDataSource.PipeLayers ?? surveyLayers, _geometryFactory, MergeOptions);
+            }
+            finally
+            {
+                if (shouldDispose && surveyDb != null)
+                {
+                    surveyDb.Dispose();
+                }
+            }
+        }
+
+        private void RebuildTextToPlanPipeMap(PipeSpatialMatchSummary textSummary)
+        {
+            _textToPlanPipeIds.Clear();
+            if (textSummary == null || textSummary.MatchByPipeId == null)
+                return;
+
+            foreach (var match in textSummary.MatchByPipeId.Values)
+            {
+                if (match?.Pipe == null || match.Pipe.PipeId.IsNull)
+                    continue;
+
+                ObjectId pipeId = match.Pipe.PipeId;
+                if (match.MatchedAttachment != null && !match.MatchedAttachment.AttachmentId.IsNull)
+                {
+                    ObjectId attId = match.MatchedAttachment.AttachmentId;
+                    if (!_textToPlanPipeIds.TryGetValue(attId, out HashSet<ObjectId> set))
+                    {
+                        set = new HashSet<ObjectId>();
+                        _textToPlanPipeIds[attId] = set;
+                    }
+                    set.Add(pipeId);
+                }
+
+                if (match.PossibleMatches != null)
+                {
+                    foreach (MatchItem pm in match.PossibleMatches)
+                    {
+                        if (pm.Id.IsNull) continue;
+                        if (!_textToPlanPipeIds.TryGetValue(pm.Id, out HashSet<ObjectId> set))
+                        {
+                            set = new HashSet<ObjectId>();
+                            _textToPlanPipeIds[pm.Id] = set;
+                        }
+                        set.Add(pipeId);
+                    }
+                }
+            }
+        }
+
+        private CheckIssueItem CreateMatchPipeIssue(
+            MatchPipeSegmentCheckItem segItem,
+            ProblemType problemType,
+            ProblemLevel level,
+            string description,
+            Dictionary<string, CheckIssueItem> existingIssuesById)
+        {
+            string issueId = $"{RuleId}:{segItem.PlanHandle}:{segItem.SubIndex}";
+            IssueReviewStatus status = IssueReviewStatus.Pending;
+            string remark = description;
+
+            if (existingIssuesById != null && existingIssuesById.TryGetValue(issueId, out CheckIssueItem oldIssue) && oldIssue != null)
+            {
+                if (oldIssue.Status == IssueReviewStatus.Ignored || oldIssue.Status == IssueReviewStatus.ToRecheck)
+                {
+                    status = oldIssue.Status;
+                    if (!string.IsNullOrWhiteSpace(oldIssue.Remark))
+                        remark = oldIssue.Remark;
+                }
+            }
+
+            var helperLines = new List<MatchItem>();
+            if (segItem.HelperLine != null)
+            {
+                helperLines.Add(segItem.HelperLine);
+            }
+
+            return new CheckIssueItem
+            {
+                IssueId = issueId,
+                RuleId = RuleId,
+                RuleName = RuleName,
+                Type = problemType,
+                Level = level,
+                TargetObjectId = segItem.PlanPipeId,
+                TargetHandle = segItem.PlanHandle,
+                LayerName = segItem.PlanLayerName,
+                Location = segItem.RepresentativeLocation,
+                Diameter = segItem.PlanDiameter ?? segItem.SurveyDiameter ?? 0.0,
+                Height = segItem.SurveyHeight ?? 0.0,
+                Description = description,
+                Remark = remark,
+                Status = status,
+                PossibleMatches = helperLines,
+                RulePayload = segItem
+            };
+        }
+
+        private static Point3d GetMidPointOnLineString(LineString line, SegmentInterval interval)
+        {
+            if (line == null || line.IsEmpty)
+                return Point3d.Origin;
+
+            double midMeasure = interval != null
+                ? (interval.Start + interval.End) * 0.5
+                : line.Length * 0.5;
+
+            Coordinate c = GetPointAtMeasure(line, midMeasure);
+            return c != null ? new Point3d(c.X, c.Y, 0.0) : Point3d.Origin;
+        }
+
+        private static MatchItem BuildSegmentHelperLine(Point3d planMidPt, LineString surveyLine)
+        {
+            if (surveyLine == null || surveyLine.IsEmpty)
+                return null;
+
+            ProjectionResult proj = ProjectPointToLineStringMeasure(new Coordinate(planMidPt.X, planMidPt.Y), surveyLine);
+            if (proj == null || proj.Coordinate == null)
+                return null;
+
+            return new MatchItem(
+                ObjectId.Null,
+                new Point3d(proj.Coordinate.X, proj.Coordinate.Y, 0.0),
+                proj.Distance,
+                planMidPt,
+                0.0,
+                0.0,
+                true);
+        }
+
+        private static string FormatHandlesSummary(List<string> handles)
+        {
+            if (handles == null || handles.Count == 0)
+                return "-";
+            if (handles.Count <= 3)
+                return string.Join(",", handles);
+            return $"{string.Join(",", handles.Take(3))}等{handles.Count}段";
         }
 
         public static List<CompareResult> PipeMatcher(
@@ -73,24 +887,36 @@ namespace process_pipeline.Commands
             STRtree<CadPolyline> mergedBaseIndex =
                 BuildPolylineIndex(mergedBasePolylines);
 
+            return PipeMatcherWithPremergedIndex(
+                mergedBaseIndex,
+                targetLayerPolylines,
+                geometryFactory,
+                match_options);
+        }
+
+        /// <summary>
+        /// 使用已在 <see cref="PipeDatasetContext"/> 中预合并并构建好的静态勘测管 <see cref="STRtree{CadPolyline}"/> 直接执行分段匹配，
+        /// 避免重复执行耗时的拓扑合并与空间索引构建。
+        /// </summary>
+        public static List<CompareResult> PipeMatcherWithPremergedIndex(
+            STRtree<CadPolyline> mergedBaseIndex,
+            List<CadPolyline> targetLayerPolylines,
+            GeometryFactory geometryFactory,
+            PolylineMatchOptions match_options)
+        {
+            if (targetLayerPolylines == null)
+                targetLayerPolylines = new List<CadPolyline>();
+
+            if (match_options == null)
+                match_options = new PolylineMatchOptions();
+
             var results = new List<CompareResult>();
 
-            // ============================================================
-            // 3. 主循环遍历 B。
-            // ============================================================
             foreach (CadPolyline targetPolyline in targetLayerPolylines)
             {
                 if (!GeometryHelper.IsValidPolylineGeometry(targetPolyline))
                     continue;
 
-                //CompareResult matchResult =
-                //    FindBestMergedBase(
-                //        targetPolyline,
-                //        mergedBaseIndex,
-                //        geometryFactory,
-                //        match_options);
-
-                //results.Add(matchResult);
                 List<CompareResult> targetResults =
                     FindSegmentMatchesForTarget(
                         targetPolyline,
@@ -100,9 +926,6 @@ namespace process_pipeline.Commands
 
                 if (targetResults == null || targetResults.Count == 0)
                 {
-                    // 保留原来的行为：
-                    // 如果 target 完全没有匹配，仍然返回一条未匹配结果，
-                    // 这样调用方可以知道这条 target 没匹配上。
                     results.Add(new CompareResult
                     {
                         TargetPolyline = targetPolyline
@@ -119,17 +942,6 @@ namespace process_pipeline.Commands
 
         /// <summary>
         /// 为当前 target 寻找一组分段匹配结果。
-        /// 
-        /// 重要修改：
-        /// 原来的 FindBestMergedBase 是：
-        ///     一条 target -> 一个 best base。
-        /// 
-        /// 现在改成：
-        ///     一条 target -> 多个 base 分段匹配。
-        /// 
-        /// 这样可以处理：
-        /// target 比某条 base 长，target 的一部分匹配 base，
-        /// 剩余部分继续匹配其他 base。
         /// </summary>
         private static List<CompareResult> FindSegmentMatchesForTarget(
             CadPolyline targetPolyline,
@@ -138,10 +950,6 @@ namespace process_pipeline.Commands
             PolylineMatchOptions options)
         {
             var empty = new List<CompareResult>();
-
-            if (targetPolyline.SourceHandles[0] == "5114") {
-                Console.WriteLine("debug");
-            }
 
             if (!GeometryHelper.IsValidPolylineGeometry(targetPolyline))
                 return empty;
@@ -177,7 +985,6 @@ namespace process_pipeline.Commands
                     ScoreMatch(
                         targetPolyline,
                         candidateBase,
-                        //geometryFactory,
                         options);
 
                 if (current == null)
@@ -426,7 +1233,6 @@ namespace process_pipeline.Commands
         private static CompareResult ScoreMatch(
             CadPolyline targetPolyline,
             CadPolyline candidateBasePolyline,
-            //GeometryFactory geometryFactory,
             PolylineMatchOptions options)
         {
             if (!GeometryHelper.IsValidPolylineGeometry(targetPolyline))
@@ -434,10 +1240,6 @@ namespace process_pipeline.Commands
 
             if (!GeometryHelper.IsValidPolylineGeometry(candidateBasePolyline))
                 return null;
-
-            if (targetPolyline.SourceHandles[0] == "5114") {
-                Console.WriteLine("debug");
-            }
 
             LineString targetLine = targetPolyline.Geometry as LineString;
             LineString baseLine = candidateBasePolyline.Geometry as LineString;
@@ -554,16 +1356,11 @@ namespace process_pipeline.Commands
 
                 double targetCoveredLength = Math.Max(0.0, targetEnd - targetStart);
 
-                /*
-                 * 复用你已有的 options.MinProjectedLength。
-                 * 
-                 * 原来它表示投影到 base 上的最小长度。
-                 * 现在这里也用它过滤 target 上过短的覆盖段。
-                 * 
-                 * 如果你后面想更清晰，可以再单独加 MinMatchedTargetLength。
-                 * 但为了少改类，这里先复用原参数。
-                 */
-                if (targetCoveredLength < options.MinProjectedLength)
+                double minRequiredTargetLen = Math.Max(
+                    options.MinCoveredLength,
+                    Math.Min(options.MinProjectedLength, Math.Min(targetLine.Length, baseLine.Length) * 0.6));
+
+                if (targetCoveredLength < minRequiredTargetLen)
                     continue;
 
                 double baseStart = run.Min(x => x.BaseMeasure);
@@ -571,7 +1368,7 @@ namespace process_pipeline.Commands
 
                 double baseCoveredLength = Math.Max(0.0, baseEnd - baseStart);
 
-                if (baseCoveredLength < options.MinProjectedLength)
+                if (baseCoveredLength < minRequiredTargetLen)
                     continue;
 
                 double averageDistance = run.Average(x => x.Distance);
@@ -890,40 +1687,27 @@ namespace process_pipeline.Commands
             if (candidates == null || candidates.Count == 0)
                 return selected;
 
-            // 当前阶段不做严格的“非重叠剔除”。
-            // 原因：
-            // 1. 区间来自采样 + 投影估算，不是严格切割；
-            // 2. 边界会有天然误差；
-            // 3. 硬性重叠判断容易误删本该保留的正确匹配段。
-            //
-            // 因此这里只做排序保留，让后续更高层逻辑决定如何处理分段关系。
-            selected = candidates
+            double overlapRatioThreshold =
+                (options != null && options.overlapRatio > 0)
+                    ? options.overlapRatio
+                    : 0.5;
+
+            foreach (CompareResult candidate in candidates
                 .Where(x => x != null && x.CoveredIntervalOnTarget != null)
                 .OrderBy(x => x.Score)
-                .ThenByDescending(x => x.CoveredIntervalOnTarget.Length)
-                .ToList();
+                .ThenByDescending(x => x.CoveredIntervalOnTarget.Length))
+            {
+                bool conflict = selected.Any(existing =>
+                    IsTargetIntervalConflict(
+                        existing.CoveredIntervalOnTarget,
+                        candidate.CoveredIntervalOnTarget,
+                        overlapRatioThreshold));
 
-            //double overlapRatioThreshold =
-            //    options.Tolerance > 0
-            //        ? options.overlapRatio
-            //        : 0.0;
+                if (conflict)
+                    continue;
 
-            //foreach (CompareResult candidate in candidates
-            //    .Where(x => x != null && x.CoveredIntervalOnTarget != null)
-            //    .OrderBy(x => x.Score)
-            //    .ThenByDescending(x => x.CoveredIntervalOnTarget.Length))
-            //{
-            //    bool conflict = selected.Any(existing =>
-            //        IsTargetIntervalConflict(
-            //            existing.CoveredIntervalOnTarget,
-            //            candidate.CoveredIntervalOnTarget,
-            //            overlapRatioThreshold));
-
-            //    if (conflict)
-            //        continue;
-
-            //    selected.Add(candidate);
-            //}
+                selected.Add(candidate);
+            }
 
             return selected
                 .OrderBy(x => x.CoveredIntervalOnTarget.Start)
