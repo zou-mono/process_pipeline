@@ -31,13 +31,22 @@ namespace process_pipeline.Commands
         {
             if (Doc == null) return;
 
+            var session = DocumentSessionManager.GetOrCreateSession(Doc.Database);
+            if (!CheckPipelineCoordinator.EnsureDataSourcesReady(
+                    Doc.Database,
+                    session?.DatasetContext,
+                    needPreviousData: true,
+                    needSurveyData: false,
+                    out _,
+                    allowInteractiveDialog: true))
+            {
+                Doc.Editor?.WriteMessage("\n[线段覆盖核查] 未指定有效的上版数据 DWG，操作已取消。\n");
+                return;
+            }
+
             var geometryFactory = NetTopologySuite.NtsGeometryServices.Instance.CreateGeometryFactory();
             var service = new CompareSegmentService(Doc.Database, Doc.Editor, geometryFactory);
-            var session = DocumentSessionManager.GetOrCreateSession(Doc.Database);
-            if (session != null)
-            {
-                session.RegisterActiveRule(service);
-            }
+            session?.RegisterActiveRule(service);
 
             service.Run("线段覆盖核查", bOnlyUpdate: false);
         }

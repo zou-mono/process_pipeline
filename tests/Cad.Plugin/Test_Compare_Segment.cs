@@ -7,6 +7,7 @@ using NLog;
 using process_pipeline.Commands;
 using process_pipeline.Core;
 using process_pipeline.Core.DataSource;
+using process_pipeline.Core.PreCheck;
 using process_pipeline.Geometry;
 using process_pipeline.Models;
 using System;
@@ -349,6 +350,83 @@ namespace Cad.Plugin
                                 restoredAfterPrev?.Status == IssueReviewStatus.Pending,
                                 $"[方向 B - 还原验证] 还原上版 ws 属性块字段为 '{origPrevWidthStr}' 后，问题 [{targetIssueId}] 准确恢复为 Pending");
                         }
+
+                        // ============================================================
+                        // 场景 4：测试 DataSourceSettingsViewModel 多数据源配置与 ucMainCheckWindow 工具栏核查调度（Commit 6.3）
+                        // ============================================================
+                        Logger.Info("--- 场景 4：测试 DataSourceSettingsViewModel 与 ucMainCheckWindow 工具栏 [数据源]/[单项核查]/[一键全量核查] (Commit 6.3) ---");
+
+                        string surveyDwgPath = Path.Combine(projectRoot, "Data", "勘测管.dwg");
+                        var mockMdiList = new List<process_pipeline.Forms.MdiDocumentOptionItem>
+                        {
+                            new process_pipeline.Forms.MdiDocumentOptionItem
+                            {
+                                DisplayName = "上版数据.dwg (内存标签页)",
+                                FilePath = prevDwgPath,
+                                Database = prevDb,
+                                PreviousLayerCurveCount = 317,
+                                SurveyLayerCurveCount = 0
+                            }
+                        };
+
+                        var dsVm = new process_pipeline.Forms.DataSourceSettingsViewModel(
+                            planDb,
+                            datasetContext,
+                            new DataSourceService(),
+                            mockMdiList);
+
+                        AssertTrue(dsVm.PlanningCurveCount >= 256,
+                            $"[DataSourceSettingsViewModel] 自动识别当前激活主图规划管线曲线数量 >= 256 (实际={dsVm.PlanningCurveCount})");
+
+                        // 切换上版数据为 MDI 已打开文档模式，勘测数据为外部 DWG 文件模式并执行 ConfirmCommand
+                        dsVm.SelectedPreviousMdiDoc = mockMdiList[0];
+                        dsVm.IsPreviousOpenMdi = true;
+                        dsVm.SurveyExternalFilePath = surveyDwgPath;
+                        dsVm.IsSurveyExternalFile = true;
+                        dsVm.ConfirmCommand.Execute(null);
+
+                        AssertTrue(
+                            dsVm.DialogConfirmed &&
+                            datasetContext.PreviousDataSource.Kind == DataSourceKind.OpenMdiDocument &&
+                            datasetContext.SurveyDataSource.Kind == DataSourceKind.ExternalDwgFile &&
+                            string.Equals(CadConfig.DataSources.LastSurveyDataDwgPath, Path.GetFullPath(surveyDwgPath), StringComparison.OrdinalIgnoreCase),
+                            "[DataSourceSettingsViewModel] 支持 MDI 文档与外部 DWG 模式切换，ConfirmCommand 同步更新会话上下文与 Config.json 记忆路径");
+
+                        // 验证 MainCheckWindowViewModel 顶部工具栏命令绑定：[数据源]、[单项核查]、[一键全量核查]
+                        var mainVm = new process_pipeline.Forms.MainCheckWindowViewModel();
+                        int dialogLaunchCount = 0;
+                        mainVm.CustomDataSourceDialogLauncher = vm =>
+                        {
+                            dialogLaunchCount++;
+                            vm.PreviousExternalFilePath = prevDwgPath;
+                            vm.SurveyExternalFilePath = surveyDwgPath;
+                            return vm.ConfirmAndSave();
+                        };
+
+                        mainVm.ExecuteOpenDataSourceSettings(planDb);
+                        AssertTrue(dialogLaunchCount == 1,
+                            "[ucMainCheckWindow 工具栏] 点击 [数据源] 按钮正常触发 DataSourceSettingsViewModel 配置流程");
+
+                        // 测试 [单项核查]：选择 PlanDataCheck 单项执行
+                        mainVm.SelectedSingleRule = mainVm.AvailableSingleRules.FirstOrDefault(r =>
+                            string.Equals(r.RuleId, PlanDataCheckService.DefaultRuleId, StringComparison.OrdinalIgnoreCase));
+                        var singleRuleIssues = mainVm.ExecuteRunSingleCheck(planDb, null, showPalette: false);
+                        AssertTrue(
+                            singleRuleIssues != null && singleRuleIssues.Count >= 11,
+                            $"[ucMainCheckWindow 工具栏] 执行 [单项核查 - 规划数据自检] 成功返回 {singleRuleIssues?.Count ?? 0} 条记录");
+
+                        // 测试 [一键全量核查]：顺序执行全部 5 项规则并汇总展示
+                        var fullSummary = mainVm.ExecuteRunFullCheck(planDb, null, showPalette: false);
+                        Logger.Info(
+                            $"  [一键全量核查汇总] 执行规则数={fullSummary.ExecutedRuleIds.Count} ({string.Join(", ", fullSummary.ExecutedRuleIds)}), " +
+                            $"总问题条目数={fullSummary.AllMergedIssues.Count}, 面板表格行数={mainVm.Rows.Count}, 耗时={fullSummary.ElapsedMilliseconds}ms");
+
+                        AssertTrue(
+                            fullSummary.ExecutedRuleIds.Count == 5 &&
+                            session.ActiveRules.Count == 5 &&
+                            mainVm.Rows.Count == fullSummary.AllMergedIssues.Count &&
+                            mainVm.Rows.Count > 1000,
+                            $"[ucMainCheckWindow 工具栏] 执行 [一键全量核查] 成功串联全部 5 项核查规则并汇聚 {mainVm.Rows.Count} 条记录至主核查面板");
                     }
                 }
             }

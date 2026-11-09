@@ -25,6 +25,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
 using AcadApp = Autodesk.AutoCAD.ApplicationServices.Application;
+using AcadDb = Autodesk.AutoCAD.DatabaseServices;
 
 namespace process_pipeline.Forms
 {
@@ -304,6 +305,34 @@ namespace process_pipeline.Forms
         public ObservableCollection<TreeNodeVm> TreeNodes { get; } = new ObservableCollection<TreeNodeVm>();
         public ObservableCollection<PipeRowVm> Rows { get; } = new ObservableCollection<PipeRowVm>();
 
+        /// <summary>
+        /// 顶部工具栏 `[单项核查]` 可选的五项标准核查规则（Stage 6 Commit 6.3）。
+        /// </summary>
+        public ObservableCollection<CheckRuleOptionItem> AvailableSingleRules { get; } =
+            new ObservableCollection<CheckRuleOptionItem>(CheckPipelineCoordinator.GetAvailableRuleOptions());
+
+        private CheckRuleOptionItem _selectedSingleRule;
+        public CheckRuleOptionItem SelectedSingleRule
+        {
+            get => _selectedSingleRule;
+            set => Set(ref _selectedSingleRule, value);
+        }
+
+        private string _dataSourceSummaryText = "数据源: 自动嗅探就绪";
+        public string DataSourceSummaryText
+        {
+            get => _dataSourceSummaryText;
+            set => Set(ref _dataSourceSummaryText, value);
+        }
+
+        /// <summary>
+        /// 可选的测试环境自定义数据源弹窗委托（为空时走标准 WPF DataSourceSettingsWindow）。
+        /// </summary>
+        public Func<DataSourceSettingsViewModel, bool> CustomDataSourceDialogLauncher { get; set; }
+
+        public ICommand OpenDataSourceSettingsCommand { get; }
+        public ICommand RunFullCheckCommand { get; }
+        public ICommand RunSingleCheckCommand { get; }
         public ICommand ToggleTreeCommand { get; }
         public ICommand RefreshCommand { get; }
         public ICommand ZoomToCommand { get; }
@@ -319,6 +348,11 @@ namespace process_pipeline.Forms
 
         public MainCheckWindowViewModel()
         {
+            _selectedSingleRule = AvailableSingleRules.FirstOrDefault();
+
+            OpenDataSourceSettingsCommand = new RelayCommand(_ => ExecuteOpenDataSourceSettings());
+            RunFullCheckCommand = new RelayCommand(_ => ExecuteRunFullCheck());
+            RunSingleCheckCommand = new RelayCommand(_ => ExecuteRunSingleCheck(), _ => SelectedSingleRule != null);
             ToggleTreeCommand = new RelayCommand(_ => ToggleTree());
             RefreshCommand = new RelayCommand(_ => RefreshByRule());
             ZoomToCommand = new RelayCommand(_ => ZoomToSelectedRow(isZoomTo: true));
@@ -341,6 +375,7 @@ namespace process_pipeline.Forms
 
             // 初始化 mock 数据（在实际应用中，可以从服务加载）
             InitializeMockData();
+            RefreshDataSourceSummaryText();
         }
 
         private void InitializeMockData()
@@ -915,6 +950,7 @@ namespace process_pipeline.Forms
             }
 
             RefreshFilter();
+            RefreshDataSourceSummaryText();
             StatusText = $"已更新 {Rows.Count} 条核查记录";
         }
 
@@ -1521,6 +1557,109 @@ namespace process_pipeline.Forms
         }
 
         /// <summary>
+        /// 刷新底部状态栏与工具栏按钮提示中的数据源摘要文本（Stage 6 Commit 6.3）。
+        /// </summary>
+        public void RefreshDataSourceSummaryText(AcadDb.Database targetDb = null)
+        {
+            var db = targetDb ?? AcadApp.DocumentManager?.MdiActiveDocument?.Database;
+            if (db == null)
+            {
+                DataSourceSummaryText = "数据源: 未关联活动文档";
+                return;
+            }
+
+            var session = DocumentSessionManager.GetOrCreateSession(db);
+            DataSourceSummaryText = CheckPipelineCoordinator.FormatDataSourceSummary(session?.DatasetContext);
+        }
+
+        /// <summary>
+        /// 响应工具栏 `[数据源]` 按钮：打开多数据源核查配置窗口并持久化保存至 Config.json（Stage 6 Commit 6.3）。
+        /// </summary>
+        public void ExecuteOpenDataSourceSettings(AcadDb.Database targetDb = null)
+        {
+            var db = targetDb ?? AcadApp.DocumentManager?.MdiActiveDocument?.Database;
+            if (db == null)
+            {
+                StatusText = "当前无活动 CAD 文档，无法配置数据源";
+                return;
+            }
+
+            var session = DocumentSessionManager.GetOrCreateSession(db);
+            bool confirmed = CheckPipelineCoordinator.OpenDataSourceSettings(
+                db,
+                session?.DatasetContext,
+                CustomDataSourceDialogLauncher);
+
+            RefreshDataSourceSummaryText(db);
+            StatusText = confirmed
+                ? $"已保存数据源配置（{DataSourceSummaryText}）"
+                : "已取消数据源配置更改";
+        }
+
+        /// <summary>
+        /// 响应工具栏 `[一键全量核查]` 按钮：先智能嗅探数据源（无法确定时弹窗），再顺序执行全部五项规则并汇聚展示（Stage 6 Commit 6.3）。
+        /// </summary>
+        public FullPipelineCheckSummary ExecuteRunFullCheck(AcadDb.Database targetDb = null, Editor targetEd = null, bool showPalette = false)
+        {
+            var doc = AcadApp.DocumentManager?.MdiActiveDocument;
+            var db = targetDb ?? doc?.Database;
+            var ed = targetEd ?? doc?.Editor;
+            if (db == null)
+            {
+                StatusText = "当前无活动 CAD 文档，无法执行全量核查";
+                return new FullPipelineCheckSummary();
+            }
+
+            FullPipelineCheckSummary summary = CheckPipelineCoordinator.ExecuteFullPipelineCheck(
+                db,
+                ed,
+                allowInteractiveDialog: true,
+                showPalette: showPalette,
+                customDialogLauncher: CustomDataSourceDialogLauncher);
+
+            UpdateFromIssueItems(summary.AllMergedIssues, isIncremental: false);
+            RefreshDataSourceSummaryText(db);
+            StatusText = $"一键全量核查完成：共执行 {summary.ExecutedRuleIds.Count} 项规则，检出 {Rows.Count} 条记录（{summary.ElapsedMilliseconds}ms）";
+            return summary;
+        }
+
+        /// <summary>
+        /// 响应工具栏 `[单项核查]` 按钮：执行当前选中的单项规则（跨图规则先智能嗅探数据源，无法确定时弹窗，Stage 6 Commit 6.3）。
+        /// </summary>
+        public IReadOnlyList<CheckIssueItem> ExecuteRunSingleCheck(AcadDb.Database targetDb = null, Editor targetEd = null, bool showPalette = false)
+        {
+            var ruleOption = SelectedSingleRule ?? AvailableSingleRules.FirstOrDefault();
+            if (ruleOption == null)
+            {
+                StatusText = "请先选择要执行的单项核查规则";
+                return Array.Empty<CheckIssueItem>();
+            }
+
+            var doc = AcadApp.DocumentManager?.MdiActiveDocument;
+            var db = targetDb ?? doc?.Database;
+            var ed = targetEd ?? doc?.Editor;
+            if (db == null)
+            {
+                StatusText = "当前无活动 CAD 文档，无法执行单项核查";
+                return Array.Empty<CheckIssueItem>();
+            }
+
+            IReadOnlyList<CheckIssueItem> mergedIssues = CheckPipelineCoordinator.ExecuteSingleRule(
+                db,
+                ed,
+                ruleOption.RuleId,
+                out _,
+                allowInteractiveDialog: true,
+                showPalette: showPalette,
+                customDialogLauncher: CustomDataSourceDialogLauncher);
+
+            UpdateFromIssueItems(mergedIssues, isIncremental: false);
+            RefreshDataSourceSummaryText(db);
+            StatusText = $"单项核查 [{ruleOption.DisplayName}] 完成：当前共 {Rows.Count} 条记录";
+            return mergedIssues;
+        }
+
+        /// <summary>
         /// 重新调用核查规则刷新数据。
         /// </summary>
         public void RefreshByRule()
@@ -2063,21 +2202,18 @@ namespace process_pipeline.Forms
             var session = DocumentSessionManager.GetOrCreateSession(doc.Database);
             if (session != null && session.ActiveRules.Count > 1)
             {
-                Dictionary<ObjectId, CheckIssueItem> lastMerged = null;
                 foreach (ICheckRule activeRule in session.ActiveRules.Values.ToList())
                 {
                     if (activeRule == null) continue;
                     var ruleIssues = activeRule.CheckAll();
-                    if (ruleIssues != null)
+                    if (ruleIssues != null &&
+                        string.Equals(activeRule.RuleId, CheckPipelineCoordinator.FlowArrowRuleId, StringComparison.OrdinalIgnoreCase))
                     {
-                        lastMerged = session.MergeRuleIssues(activeRule.RuleId, ruleIssues, isIncremental: false);
+                        session.MergeRuleIssues(activeRule.RuleId, ruleIssues, isIncremental: false);
                     }
                 }
 
-                if (lastMerged != null)
-                {
-                    UpdateData(lastMerged);
-                }
+                UpdateIssueItems(session.GetAllIssueItems(), isIncremental: false);
                 return;
             }
 
@@ -2085,10 +2221,20 @@ namespace process_pipeline.Forms
             var newProblems = rule.CheckAll();
             if (newProblems != null)
             {
-                var merged = session != null
-                    ? session.MergeRuleIssues(rule.RuleId, newProblems, isIncremental: false)
-                    : newProblems;
-                UpdateData(merged);
+                if (session != null &&
+                    string.Equals(rule.RuleId, CheckPipelineCoordinator.FlowArrowRuleId, StringComparison.OrdinalIgnoreCase))
+                {
+                    session.MergeRuleIssues(rule.RuleId, newProblems, isIncremental: false);
+                }
+
+                if (session != null && session.IssuesById.Count > 0)
+                {
+                    UpdateIssueItems(session.GetAllIssueItems(), isIncremental: false);
+                }
+                else
+                {
+                    UpdateData(newProblems);
+                }
             }
         }
     }

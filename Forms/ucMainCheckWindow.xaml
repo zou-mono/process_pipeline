@@ -385,12 +385,31 @@
 
     <!-- Toolbar -->
     <ToolBar Grid.Row="0" Style="{StaticResource ToolBarStyle}">
-      <Button Content="刷新" Command="{Binding RefreshCommand}" Margin="0,0,8,0"/>
-      <Button Content="定位" Command="{Binding ZoomToCommand}" Margin="0,0,8,0"/>
-      <Button Content="导出" Command="{Binding ExportCommand}" Margin="0,0,8,0"/>
-      <Separator/>
-      <TextBlock VerticalAlignment="Center" Text="关键字：" Margin="8,0,4,0"/>
-      <TextBox Width="220" Text="{Binding Keyword, UpdateSourceTrigger=PropertyChanged}"/>
+      <Button Content="数据源"
+              Command="{Binding OpenDataSourceSettingsCommand}"
+              ToolTip="{Binding DataSourceSummaryText}"
+              Margin="0,0,6,0"/>
+      <Button Content="一键全量核查"
+              Command="{Binding RunFullCheckCommand}"
+              FontWeight="Bold"
+              Margin="0,0,6,0"/>
+      <Separator Margin="2,0,6,0"/>
+      <ComboBox Width="165"
+                ItemsSource="{Binding AvailableSingleRules}"
+                SelectedItem="{Binding SelectedSingleRule, Mode=TwoWay}"
+                DisplayMemberPath="DisplayName"
+                VerticalContentAlignment="Center"
+                Margin="0,0,4,0"/>
+      <Button Content="单项核查"
+              Command="{Binding RunSingleCheckCommand}"
+              Margin="0,0,6,0"/>
+      <Separator Margin="2,0,6,0"/>
+      <Button Content="刷新" Command="{Binding RefreshCommand}" Margin="0,0,6,0"/>
+      <Button Content="定位" Command="{Binding ZoomToCommand}" Margin="0,0,6,0"/>
+      <Button Content="导出" Command="{Binding ExportCommand}" Margin="0,0,6,0"/>
+      <Separator Margin="2,0,6,0"/>
+      <TextBlock VerticalAlignment="Center" Text="关键字：" Margin="4,0,4,0"/>
+      <TextBox Width="170" Text="{Binding Keyword, UpdateSourceTrigger=PropertyChanged}"/>
     </ToolBar>
 
     <!-- 中部 -->
@@ -560,6 +579,8 @@
       <StatusBarItem Content="{Binding StatusText}"/>
       <Separator/>
       <StatusBarItem Content="{Binding RowCountText}"/>
+      <Separator/>
+      <StatusBarItem Content="{Binding DataSourceSummaryText}" Opacity="0.85"/>
     </StatusBar>
   </Grid>
 </UserControl>

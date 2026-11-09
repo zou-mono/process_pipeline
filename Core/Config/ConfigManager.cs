@@ -30,6 +30,11 @@ namespace process_pipeline.Core.Config
         public static bool SuppressUiAlerts { get; set; } = false;
 
         /// <summary>
+        /// 当前进程是否处于无头测试模式（accoreconsole.exe）或已显式静默 UI 弹窗。
+        /// </summary>
+        public static bool IsHeadlessOrSuppressedUi => ShouldSuppressUiAlerts(null);
+
+        /// <summary>
         /// 最近一次加载配置时是否触发了错误自愈。
         /// </summary>
         public static bool LastLoadHadError { get; private set; }

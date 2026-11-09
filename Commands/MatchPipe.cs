@@ -32,12 +32,21 @@ namespace process_pipeline.Commands
         {
             if (Doc == null) return;
 
-            var service = new MatchPipeService(Doc.Database, Doc.Editor);
             var session = DocumentSessionManager.GetOrCreateSession(Doc.Database);
-            if (session != null)
+            if (!CheckPipelineCoordinator.EnsureDataSourcesReady(
+                    Doc.Database,
+                    session?.DatasetContext,
+                    needPreviousData: false,
+                    needSurveyData: true,
+                    out _,
+                    allowInteractiveDialog: true))
             {
-                session.RegisterActiveRule(service);
+                Doc.Editor?.WriteMessage("\n[管段匹配核查] 未指定有效的勘测数据 DWG，操作已取消。\n");
+                return;
             }
+
+            var service = new MatchPipeService(Doc.Database, Doc.Editor);
+            session?.RegisterActiveRule(service);
 
             service.Run("管段匹配核查", bOnlyUpdate: false);
         }

@@ -21,24 +21,23 @@ namespace process_pipeline.Commands
         {
             if (Doc == null) return;
 
-            // 1. 直接 new 服务，填参数
-            var service = new CheckPipeService(Doc.Database, Doc.Editor)
-            {
-
-            };
-
-            // 2. 启动引擎！
-            service.Run(CadConfig.TaskNames.CheckPipe, false);
+            // Stage 6 Commit 6.3：通过 CheckPipelineCoordinator 统一执行三级数据源智能嗅探、
+            // 按需弹出数据源设置窗口，并一键调度全量五项核查规则汇聚展示至 ucMainCheckWindow。
+            CheckPipelineCoordinator.ExecuteFullPipelineCheck(
+                Doc.Database,
+                Doc.Editor,
+                allowInteractiveDialog: true,
+                showPalette: true);
         }
     }
 
     /// <summary>
-    /// 管线综合核查服务（Commit 2.3）。
+    /// 管线综合核查服务（Commit 2.3 & Stage 6 Commit 6.3）。
     /// 
     /// 架构设计说明：
     /// 1. 升级泛型返回值为 Dictionary<ObjectId, CheckIssueItem>，直接对接统一领域模型。
-    /// 2. 内部通过统一的 ICheckRule 接口调度核查规则（默认挂载 FlowArrowService，后续可扩展多规则聚合），
-    ///    实现命令执行引擎与具体算法实现的解耦。
+    /// 2. 内部通过统一的 ICheckRule 接口调度核查规则，并完美保留 DocumentCheckSession.IssuesById
+    ///    中的多折线段子问题（SubIndex）与 ObjectId.Null 跨图缺失管段问题。
     /// </summary>
     public class CheckPipeService : CadBase<Dictionary<ObjectId, CheckIssueItem>>
     {
@@ -55,7 +54,7 @@ namespace process_pipeline.Commands
             var session = DocumentSessionManager.GetOrCreateSession(db);
             if (session != null)
             {
-                session.ActiveRule = _rule;
+                session.RegisterActiveRule(_rule);
             }
         }
 
@@ -65,7 +64,12 @@ namespace process_pipeline.Commands
             var session = DocumentSessionManager.GetOrCreateSession(_db);
             if (session != null && result != null)
             {
-                return session.MergeRuleIssues(_rule.RuleId, result, isIncremental: false);
+                // FlowArrowService 仅返回按 ObjectId 组织的字典，需同步合并至 session.IssuesById；
+                // 其他规则（PlanDataCheck / MatchGroup / MatchPipe / CompareSegment）已在 CheckAll 内部直接调用 MergeRuleIssueItems。
+                if (string.Equals(_rule.RuleId, CheckPipelineCoordinator.FlowArrowRuleId, StringComparison.OrdinalIgnoreCase))
+                {
+                    return session.MergeRuleIssues(_rule.RuleId, result, isIncremental: false);
+                }
             }
             return result;
         }
@@ -82,21 +86,39 @@ namespace process_pipeline.Commands
             var result = _rule.CheckIncremental(pipeIds, currentIssues, context);
             if (session != null && result != null)
             {
-                return session.MergeRuleIssues(_rule.RuleId, result, isIncremental: true);
+                if (string.Equals(_rule.RuleId, CheckPipelineCoordinator.FlowArrowRuleId, StringComparison.OrdinalIgnoreCase))
+                {
+                    return session.MergeRuleIssues(_rule.RuleId, result, isIncremental: true);
+                }
             }
             return result;
         }
 
         protected override void OnSuccess(Dictionary<ObjectId, CheckIssueItem> result, bool bOnlyUpdate = false)
         {
+            var session = DocumentSessionManager.GetOrCreateSession(_db);
+
             if (bOnlyUpdate)
             {
-                palCheckPipe.Instance.UpdateIncrementalData(result);
+                if (session != null && session.IssuesById.Count > 0)
+                {
+                    palCheckPipe.Instance.UpdateIssueItems(session.GetAllIssueItems(), isIncremental: true);
+                }
+                else
+                {
+                    palCheckPipe.Instance.UpdateIncrementalData(result);
+                }
             }
             else
             {
-                // 弹窗展示全量核查结果
-                palCheckPipe.Instance.Show(result);
+                if (session != null && session.IssuesById.Count > 0)
+                {
+                    palCheckPipe.Instance.ShowIssueItems(session.GetAllIssueItems());
+                }
+                else
+                {
+                    palCheckPipe.Instance.Show(result);
+                }
             }
         }
     }
