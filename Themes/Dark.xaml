@@ -1,4 +1,4 @@
-﻿<ResourceDictionary x:Class="process_pipeline.Forms.Themes.Dark"
+<ResourceDictionary x:Class="process_pipeline.Forms.Themes.Dark"
                     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
@@ -26,5 +26,41 @@
   <SolidColorBrush x:Key="Brush.Splitter.Background" Color="{StaticResource Color.Splitter.Background}"/>
   <SolidColorBrush x:Key="Brush.Border" Color="{StaticResource Color.Border}"/>
   <SolidColorBrush x:Key="Brush.DataGrid.Header.Foreground" Color="{StaticResource Color.DataGrid.Header.Foreground}"/>
-  
+
+  <!-- 通用窗口/面板类 (CAD 2019 Dark, COLORTHEME = 0) -->
+  <SolidColorBrush x:Key="Cad_WindowBackground" Color="#2D2D30"/>
+  <SolidColorBrush x:Key="Cad_PanelBackground" Color="#383838"/>
+  <SolidColorBrush x:Key="Cad_HeaderBackground" Color="#45464A"/>
+  <SolidColorBrush x:Key="Cad_TextForeground" Color="#DFDFDF"/>
+  <SolidColorBrush x:Key="Cad_TextDisabled" Color="#808080"/>
+  <SolidColorBrush x:Key="Cad_GridLine" Color="#555555"/>
+  <SolidColorBrush x:Key="Cad_SelectedRow" Color="#1E5E96"/>
+
+  <!-- 对话框状态强调色 (CAD 2019 Dark) -->
+  <SolidColorBrush x:Key="Brush.DialogError" Color="#F14C4C"/>
+  <SolidColorBrush x:Key="Brush.DialogWarning" Color="#E5A000"/>
+  <SolidColorBrush x:Key="Brush.DialogInfo" Color="#3794FF"/>
+  <SolidColorBrush x:Key="Brush.DialogHint" Color="#4FC1FF"/>
+
+  <!-- CAD 2019 对话框专用画刷 (Dark 主题) -->
+  <SolidColorBrush x:Key="Brush.Dialog.WindowBackground" Color="#2D2D30"/>
+  <SolidColorBrush x:Key="Brush.Dialog.WindowBorder" Color="#58585C"/>
+  <SolidColorBrush x:Key="Brush.Dialog.HeaderBackground" Color="#252526"/>
+  <SolidColorBrush x:Key="Brush.Dialog.HeaderBorder" Color="#3E3E42"/>
+  <SolidColorBrush x:Key="Brush.Dialog.HeaderForeground" Color="#E6E6E6"/>
+  <SolidColorBrush x:Key="Brush.Dialog.TextPrimary" Color="#DFDFDF"/>
+  <SolidColorBrush x:Key="Brush.Dialog.TextSecondary" Color="#B0B0B5"/>
+  <SolidColorBrush x:Key="Brush.Dialog.HintCardBackground" Color="#252526"/>
+  <SolidColorBrush x:Key="Brush.Dialog.HintCardBorder" Color="#3F3F46"/>
+  <SolidColorBrush x:Key="Brush.Dialog.FooterBackground" Color="#252526"/>
+  <SolidColorBrush x:Key="Brush.Dialog.FooterBorder" Color="#3E3E42"/>
+  <SolidColorBrush x:Key="Brush.Dialog.Button.Background" Color="#3E3E42"/>
+  <SolidColorBrush x:Key="Brush.Dialog.Button.Border" Color="#5A5A5E"/>
+  <SolidColorBrush x:Key="Brush.Dialog.Button.DefaultBorder" Color="#007ACC"/>
+  <SolidColorBrush x:Key="Brush.Dialog.Button.Foreground" Color="#F0F0F0"/>
+  <SolidColorBrush x:Key="Brush.Dialog.Button.HoverBackground" Color="#4E4E52"/>
+  <SolidColorBrush x:Key="Brush.Dialog.Button.HoverBorder" Color="#1C97EA"/>
+  <SolidColorBrush x:Key="Brush.Dialog.Button.PressedBackground" Color="#005A9E"/>
+  <SolidColorBrush x:Key="Brush.Dialog.Button.PressedForeground" Color="#FFFFFF"/>
+
 </ResourceDictionary>

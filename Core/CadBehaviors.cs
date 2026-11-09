@@ -1,4 +1,4 @@
-﻿using Microsoft.Xaml.Behaviors;
+using Microsoft.Xaml.Behaviors;
 using process_pipeline.Themes;
 using System;
 using System.Collections.Generic;
@@ -12,12 +12,16 @@ using AcadApp = Autodesk.AutoCAD.ApplicationServices.Application;
 
 namespace process_pipeline.Core
 {
-    // Behavior: 处理 CAD 主题同步
-    public class CadThemeBehavior : Behavior<UserControl>
+    // Behavior: 处理 CAD 主题同步（支持 UserControl 与 Window 等任意 FrameworkElement）
+    public class CadThemeBehavior : Behavior<FrameworkElement>
     {
         protected override void OnAttached()
         {
             base.OnAttached();
+            if (AssociatedObject != null)
+            {
+                CadThemes.ApplyCadTheme(AssociatedObject);
+            }
             AcadApp.SystemVariableChanged += AcadApp_SystemVariableChanged;
         }
 
@@ -31,7 +35,7 @@ namespace process_pipeline.Core
         {
             if (e.Name.Equals("COLORTHEME", StringComparison.OrdinalIgnoreCase))
             {
-                AssociatedObject.Dispatcher.Invoke(() => CadThemes.ApplyCadTheme(AssociatedObject));
+                AssociatedObject?.Dispatcher.Invoke(() => CadThemes.ApplyCadTheme(AssociatedObject));
             }
         }
     }

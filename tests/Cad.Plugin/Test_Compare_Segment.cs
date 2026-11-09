@@ -454,6 +454,36 @@ namespace Cad.Plugin
                                 emptyFullSummary.ExecutedRuleIds.Count == 0 &&
                                 emptyFullSummary.AllMergedIssues.Count == 0,
                                 "[顶层统一预核查] 空图纸执行 ExecuteFullPipelineCheck 立即触发 Fail-Fast 阻断，后续子规则执行数=0");
+
+                            // ──────────────────────────────────────────────────
+                            // 11. Commit 6.5：CadMessageDialog 的 AutoCAD 2019 Dark / Light 双主题适配验证
+                            // ──────────────────────────────────────────────────
+                            Logger.Info("[测试阶段 11] 验证 CadMessageDialog 在 AutoCAD 2019 Dark / Light 两种主题下的样式与资源切换...");
+                            string mergedMsg = emptyPreCheck.FormatBlockingDialogMessage();
+                            var msgDialog = new process_pipeline.Forms.CadMessageDialog(
+                                "管线综合核查 - 数据预检提示",
+                                mergedMsg,
+                                process_pipeline.Forms.DialogConfig.Get(process_pipeline.Utils.MessageBoxType.Warning));
+
+                            msgDialog.ApplyTheme("Dark");
+                            var darkWinBg = msgDialog.TryFindResource("Brush.Dialog.WindowBackground") as System.Windows.Media.SolidColorBrush;
+                            var darkCardBg = msgDialog.TryFindResource("Brush.Dialog.HintCardBackground") as System.Windows.Media.SolidColorBrush;
+                            AssertTrue(
+                                msgDialog.ActiveThemeName == "Dark" &&
+                                darkWinBg != null && darkWinBg.Color.ToString().Equals("#FF2D2D30", StringComparison.OrdinalIgnoreCase) &&
+                                darkCardBg != null && darkCardBg.Color.ToString().Equals("#FF252526", StringComparison.OrdinalIgnoreCase),
+                                $"[CadMessageDialog 深色主题] COLORTHEME=0(Dark) 下窗口背景={darkWinBg?.Color} (#FF2D2D30)，内嵌卡片背景={darkCardBg?.Color} (#FF252526)");
+
+                            msgDialog.ApplyTheme("Light");
+                            var lightWinBg = msgDialog.TryFindResource("Brush.Dialog.WindowBackground") as System.Windows.Media.SolidColorBrush;
+                            var lightCardBg = msgDialog.TryFindResource("Brush.Dialog.HintCardBackground") as System.Windows.Media.SolidColorBrush;
+                            AssertTrue(
+                                msgDialog.ActiveThemeName == "Light" &&
+                                lightWinBg != null && lightWinBg.Color.ToString().Equals("#FFF0F0F0", StringComparison.OrdinalIgnoreCase) &&
+                                lightCardBg != null && lightCardBg.Color.ToString().Equals("#FFFFFFFF", StringComparison.OrdinalIgnoreCase),
+                                $"[CadMessageDialog 浅色主题] COLORTHEME=1(Light) 下窗口背景={lightWinBg?.Color} (#FFF0F0F0)，内嵌卡片背景={lightCardBg?.Color} (#FFFFFFFF)");
+
+                            msgDialog.Close();
                         }
                     }
                 }
