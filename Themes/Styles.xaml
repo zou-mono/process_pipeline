@@ -18,49 +18,65 @@
     <Setter Property="FontSize" Value="9" />
   </Style>
 
-  <!-- ==================== 仿 ArcGIS 10.5 / AutoCAD 2019 固定宽度双行灰色 ToolTip 样式 ==================== -->
+  <!-- ==================== AutoCAD 2019 原生 RibbonToolTip 双层卡片样式 (反编译自 AdWindows.dll themes/tooltip.xaml) ==================== -->
   <Style x:Key="CadToolTipStyle" TargetType="ToolTip">
-    <Setter Property="FontFamily" Value="Segoe UI, Microsoft YaHei"/>
+    <Setter Property="FontFamily" Value="Microsoft YaHei UI, Microsoft YaHei, Segoe UI"/>
     <Setter Property="FontSize" Value="12"/>
-    <Setter Property="Width" Value="220"/>
+    <Setter Property="Width" Value="240"/>
     <Setter Property="Background" Value="{DynamicResource Brush.ToolTip.Background}"/>
     <Setter Property="Foreground" Value="{DynamicResource Brush.ToolTip.Foreground}"/>
     <Setter Property="BorderBrush" Value="{DynamicResource Brush.ToolTip.Border}"/>
     <Setter Property="BorderThickness" Value="1"/>
-    <Setter Property="Padding" Value="10,7"/>
+    <Setter Property="Padding" Value="1"/>
     <Setter Property="HasDropShadow" Value="True"/>
     <Setter Property="SnapsToDevicePixels" Value="True"/>
+    <Setter Property="UseLayoutRounding" Value="True"/>
+    <Setter Property="TextOptions.TextFormattingMode" Value="Display"/>
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="ToolTip">
+          <!-- 外层容器 mBackgroundRectangle: #FFEFEFEF->#FFECECEC 垂直渐变 + #FF818181 1px 边框 + R=2 圆角 -->
           <Border Background="{TemplateBinding Background}"
                   BorderBrush="{TemplateBinding BorderBrush}"
                   BorderThickness="{TemplateBinding BorderThickness}"
                   Padding="{TemplateBinding Padding}"
                   Width="{TemplateBinding Width}"
-                  CornerRadius="0"
-                  SnapsToDevicePixels="True">
+                  CornerRadius="2"
+                  SnapsToDevicePixels="True"
+                  UseLayoutRounding="True">
             <StackPanel>
-              <!-- 第一行：简短易懂的功能名称（粗体深色） -->
+              <!-- 第一行 mTitle: ToolTipTitleTextBlockStyle (12px Bold, #FF4C4C4C 中深炭灰, Margin=9,9,9,6) -->
               <TextBlock x:Name="PartHeader"
                          Text="{Binding Content, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource ArcGisToolTipHeaderConverter}}"
                          FontWeight="Bold"
                          FontSize="12"
+                         Margin="9,9,9,6"
                          Foreground="{DynamicResource Brush.ToolTip.Foreground}"
                          TextWrapping="Wrap"/>
-              <!-- 第二行起：功能详细描述（固定宽度内自动折行） -->
-              <TextBlock x:Name="PartBody"
-                         Text="{Binding Content, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource ArcGisToolTipBodyConverter}}"
-                         FontSize="11.5"
-                         LineHeight="17"
-                         Margin="0,4,0,0"
-                         Foreground="{DynamicResource Brush.ToolTip.BodyForeground}"
-                         TextWrapping="Wrap"/>
+              <!-- 第二行内嵌白底卡片 mContentBorder: Background=#FFFBFBFB, BorderBrush=#FFDFDFDF, CornerRadius=3, Padding=8, Margin=4,2,4,4 -->
+              <Border x:Name="PartContentBorder"
+                      Background="{DynamicResource Brush.ToolTip.ContentBackground}"
+                      BorderBrush="{DynamicResource Brush.ToolTip.ContentBorder}"
+                      BorderThickness="1"
+                      CornerRadius="3"
+                      Padding="8,8,8,8"
+                      Margin="4,2,4,4"
+                      SnapsToDevicePixels="True">
+                <!-- 功能详细描述 mContent: ToolTipTextBlockStyle (12px Normal, #FF4C4C4C, 自动折行) -->
+                <TextBlock x:Name="PartBody"
+                           Text="{Binding Content, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource ArcGisToolTipBodyConverter}}"
+                           FontSize="12"
+                           FontWeight="Normal"
+                           LineHeight="18"
+                           Foreground="{DynamicResource Brush.ToolTip.BodyForeground}"
+                           TextWrapping="Wrap"/>
+              </Border>
             </StackPanel>
           </Border>
           <ControlTemplate.Triggers>
             <DataTrigger Binding="{Binding Content, RelativeSource={RelativeSource Self}, Converter={StaticResource ArcGisToolTipBodyConverter}}" Value="">
-              <Setter TargetName="PartBody" Property="Visibility" Value="Collapsed"/>
+              <Setter TargetName="PartContentBorder" Property="Visibility" Value="Collapsed"/>
+              <Setter TargetName="PartHeader" Property="Margin" Value="8,6,8,6"/>
             </DataTrigger>
           </ControlTemplate.Triggers>
         </ControlTemplate>
@@ -68,10 +84,10 @@
     </Setter>
   </Style>
 
-  <!-- 全局默认应用 ArcGIS 双行固定宽度灰色 ToolTip 样式 -->
+  <!-- 全局默认应用 AutoCAD 2019 原生 RibbonToolTip 样式 -->
   <Style TargetType="ToolTip" BasedOn="{StaticResource CadToolTipStyle}"/>
 
-  <!-- ==================== AutoCAD 2019 原生工具栏图标按钮样式 (22x22 紧凑按钮, 20x20 图标, 透蓝色半透明膜 + 蓝色系外框) ==================== -->
+  <!-- ==================== AutoCAD 2019 原生工具栏图标按钮样式 (22x22 紧凑按钮, 20x20 图标, UxTheme Toolbar TP_BUTTON 10.2%/20% #008CFF 透蓝膜与外框) ==================== -->
   <Style x:Key="CadToolbarIconButtonStyle" TargetType="Button">
     <Setter Property="Width" Value="22"/>
     <Setter Property="Height" Value="22"/>
@@ -92,25 +108,37 @@
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="Button">
-          <Border x:Name="BtnBorder"
-                  Background="{TemplateBinding Background}"
-                  BorderBrush="{TemplateBinding BorderBrush}"
-                  BorderThickness="{TemplateBinding BorderThickness}"
-                  CornerRadius="0"
-                  Padding="{TemplateBinding Padding}"
-                  SnapsToDevicePixels="True">
-            <ContentPresenter x:Name="BtnContent"
-                              HorizontalAlignment="Center"
-                              VerticalAlignment="Center"
-                              RecognizesAccessKey="True"/>
-          </Border>
+          <Grid Width="{TemplateBinding Width}"
+                Height="{TemplateBinding Height}"
+                SnapsToDevicePixels="True"
+                UseLayoutRounding="True">
+            <!-- 内部透明膜填充层 (Margin="1" 与外层 1px 边框严格分离，避免 Alpha 二次叠加失真) -->
+            <Border x:Name="BtnFill"
+                    Margin="1"
+                    Background="{TemplateBinding Background}"
+                    CornerRadius="0"
+                    SnapsToDevicePixels="True"/>
+            <!-- 外层 1px 边框与图标承载层 -->
+            <Border x:Name="BtnBorder"
+                    Background="Transparent"
+                    BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}"
+                    CornerRadius="0"
+                    Padding="{TemplateBinding Padding}"
+                    SnapsToDevicePixels="True">
+              <ContentPresenter x:Name="BtnContent"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                RecognizesAccessKey="True"/>
+            </Border>
+          </Grid>
           <ControlTemplate.Triggers>
             <Trigger Property="IsMouseOver" Value="True">
-              <Setter TargetName="BtnBorder" Property="Background" Value="{DynamicResource Brush.ToolBar.Button.HoverBackground}"/>
+              <Setter TargetName="BtnFill" Property="Background" Value="{DynamicResource Brush.ToolBar.Button.HoverBackground}"/>
               <Setter TargetName="BtnBorder" Property="BorderBrush" Value="{DynamicResource Brush.ToolBar.Button.HoverBorder}"/>
             </Trigger>
             <Trigger Property="IsPressed" Value="True">
-              <Setter TargetName="BtnBorder" Property="Background" Value="{DynamicResource Brush.ToolBar.Button.PressedBackground}"/>
+              <Setter TargetName="BtnFill" Property="Background" Value="{DynamicResource Brush.ToolBar.Button.PressedBackground}"/>
               <Setter TargetName="BtnBorder" Property="BorderBrush" Value="{DynamicResource Brush.ToolBar.Button.PressedBorder}"/>
             </Trigger>
             <Trigger Property="IsEnabled" Value="False">

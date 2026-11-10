@@ -66,32 +66,37 @@
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
                   </Grid.ColumnDefinitions>
-                  <!-- AutoCAD 2019 adui23.dll CAdUiThemedGripDraw::DrawDoubleGrip 双列紧凑 3D 蚀刻点阵把手 (上黑 #000000 + 下亮灰 #949494) -->
+                  <!-- AutoCAD 2019 acad.exe (0x1402b5c1d..0x1402b5da4) 原生 7行x2列 蚀刻点阵把手：
+                       底色条 0xA8 (#FF525252 Dark / #FFA1A3AB Light)，
+                       每行 Y ∈ {3,5,7,9,11,13,15} 依次绘制 X=1 暗点(0xA6)、X=2 亮점(0xA7)、X=3 暗点(0xA6)、X=4 亮点(0xA7) -->
                   <Canvas Grid.Column="0"
-                          Width="5"
-                          Height="18"
-                          Margin="2,0,4,0"
+                          Width="7"
+                          Height="19"
+                          Margin="1,0,4,0"
                           VerticalAlignment="Center"
+                          Background="{DynamicResource Brush.ToolBar.GripBackground}"
                           SnapsToDevicePixels="True"
                           UseLayoutRounding="True">
-                    <!-- 上层暗点 (#000000)：2列(X=1, X=3) x 6行(Y=1,4,7,10,13,16) -->
+                    <!-- 0xA6 暗点 (#FF000000 Dark / #FF1A1B1D Light)：2列(X=1, X=3) x 7行(Y=3,5,7,9,11,13,15) -->
                     <Path Fill="{DynamicResource Brush.ToolBar.GripDarkDot}"
                           SnapsToDevicePixels="True"
-                          Data="M1,1 h1 v1 h-1 Z M3,1 h1 v1 h-1 Z
-                                M1,4 h1 v1 h-1 Z M3,4 h1 v1 h-1 Z
+                          Data="M1,3 h1 v1 h-1 Z M3,3 h1 v1 h-1 Z
+                                M1,5 h1 v1 h-1 Z M3,5 h1 v1 h-1 Z
                                 M1,7 h1 v1 h-1 Z M3,7 h1 v1 h-1 Z
-                                M1,10 h1 v1 h-1 Z M3,10 h1 v1 h-1 Z
+                                M1,9 h1 v1 h-1 Z M3,9 h1 v1 h-1 Z
+                                M1,11 h1 v1 h-1 Z M3,11 h1 v1 h-1 Z
                                 M1,13 h1 v1 h-1 Z M3,13 h1 v1 h-1 Z
-                                M1,16 h1 v1 h-1 Z M3,16 h1 v1 h-1 Z"/>
-                    <!-- 下层高光亮色点 (#949494)：紧贴每个暗点正下方 (Y=2,5,8,11,14,17)，形成内凹蚀刻竖线点阵 -->
+                                M1,15 h1 v1 h-1 Z M3,15 h1 v1 h-1 Z"/>
+                    <!-- 0xA7 亮点 (#FF909090 Dark / #FFEEEEF2 Light)：紧贴每个暗点右侧 (X=2, X=4) x 7行(Y=3,5,7,9,11,13,15) -->
                     <Path Fill="{DynamicResource Brush.ToolBar.GripLightDot}"
                           SnapsToDevicePixels="True"
-                          Data="M1,2 h1 v1 h-1 Z M3,2 h1 v1 h-1 Z
-                                M1,5 h1 v1 h-1 Z M3,5 h1 v1 h-1 Z
-                                M1,8 h1 v1 h-1 Z M3,8 h1 v1 h-1 Z
-                                M1,11 h1 v1 h-1 Z M3,11 h1 v1 h-1 Z
-                                M1,14 h1 v1 h-1 Z M3,14 h1 v1 h-1 Z
-                                M1,17 h1 v1 h-1 Z M3,17 h1 v1 h-1 Z"/>
+                          Data="M2,3 h1 v1 h-1 Z M4,3 h1 v1 h-1 Z
+                                M2,5 h1 v1 h-1 Z M4,5 h1 v1 h-1 Z
+                                M2,7 h1 v1 h-1 Z M4,7 h1 v1 h-1 Z
+                                M2,9 h1 v1 h-1 Z M4,9 h1 v1 h-1 Z
+                                M2,11 h1 v1 h-1 Z M4,11 h1 v1 h-1 Z
+                                M2,13 h1 v1 h-1 Z M4,13 h1 v1 h-1 Z
+                                M2,15 h1 v1 h-1 Z M4,15 h1 v1 h-1 Z"/>
                   </Canvas>
                   <ToolBarPanel x:Name="PART_ToolBarPanel"
                                 Grid.Column="1"
