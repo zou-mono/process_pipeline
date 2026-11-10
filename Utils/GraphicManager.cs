@@ -147,7 +147,7 @@ namespace process_pipeline.Utils
             ClearAuxiliaryGraphics();
             if (db == null || issues == null) return;
 
-            var targetIssues = issues.Where(i => i != null).Take(20).ToList();
+            var targetIssues = issues.Where(i => i != null).ToList();
             if (targetIssues.Count == 0) return;
 
             const short HighlightMagentaColor = 6; // 6 = 洋红色 (Magenta)，使目标管线与配对属性块外框保持同色高亮

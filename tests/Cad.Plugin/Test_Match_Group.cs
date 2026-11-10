@@ -405,8 +405,10 @@ namespace Cad.Plugin
                         int transientsFor71 = process_pipeline.Utils.GraphicManager.ActiveTransientCount;
                         vm.SetSelectedRows(new[] { rowB8 }, syncCadSelection: true);
                         int transientsForB8 = process_pipeline.Utils.GraphicManager.ActiveTransientCount;
-                        AssertTrue(row71 != null && rowB8 != null && transientsFor71 >= 6 && transientsForB8 >= 6,
-                            $"点击常规图层管线行（如 Handle=71 与零距离直管 Handle=B8）均成功按方案B生成管线(洋红)+属性块矩形外框(洋红)+辅助连线/锚圈(红)瞬态高亮 (71={transientsFor71}, B8={transientsForB8})");
+                        vm.SetSelectedRows(vm.Rows, syncCadSelection: true);
+                        int transientsForAll317 = process_pipeline.Utils.GraphicManager.ActiveTransientCount;
+                        AssertTrue(row71 != null && rowB8 != null && transientsFor71 >= 6 && transientsForB8 >= 6 && transientsForAll317 >= 317 * 6,
+                            $"点击单行及大批量框选全部 317 行均完整生成管线(洋红)+属性块矩形外框(洋红)+辅助连线/锚圈(红)瞬态高亮 (71={transientsFor71}, B8={transientsForB8}, 全选317行={transientsForAll317})");
 
                         // 5.1 先模拟用户在表格中多选前 25 行，执行右键“一键修复：批量绑定图属 Group 与 XData”
                         var firstBatchRows = vm.Rows.Take(25).ToList();
@@ -640,6 +642,35 @@ namespace Cad.Plugin
                         vm.ShowAllRowsCommand.Execute(null);
                         AssertTrue(vm.IsShowAllRows && !vm.IsShowSelectedOnly && vm.GetVisibleRows().Count == 317 && testGrid.SelectedItems.Count == 5,
                             $"Commit 7.6 手动点击【显示所有行】后恢复显示 317 行且 5 行保持选中状态 (可见={vm.GetVisibleRows().Count}, DataGrid选中={testGrid.SelectedItems.Count})");
+
+                        // 5.7 验证 Commit 7.7：全窗体 SVG 矢量图标体系、双色调主题自适应画刷及悬停 ToolTip 校验
+                        string svgDir = @"D:\Codes\Tools\process_pipeline\Themes\Svg";
+                        var svgFiles = Directory.Exists(svgDir) ? Directory.GetFiles(svgDir, "*.svg") : Array.Empty<string>();
+                        AssertTrue(svgFiles.Length >= 16 && svgFiles.All(f => File.ReadAllText(f).Contains("<svg")),
+                            $"Commit 7.7 Themes/Svg 目录下已生成 {svgFiles.Length} 个标准 AutoCAD 2019 风格 .svg 矢量图标资源");
+
+                        var dsWin = new DataSourceSettingsWindow(new DataSourceSettingsViewModel(Doc.Database));
+                        var msgWin = new CadMessageDialog("测试图标与主题", "测试消息内容", DialogConfig.Get(process_pipeline.Utils.MessageBoxType.Info));
+                        var arrowCtrl = new ucMatchArrowResult();
+                        process_pipeline.Themes.CadThemes.ApplyCadTheme(realWin, "Dark");
+                        var darkPrimary = realWin.TryFindResource("Brush.Icon.Primary") as System.Windows.Media.SolidColorBrush;
+                        var darkAccent = realWin.TryFindResource("Brush.Icon.Accent") as System.Windows.Media.SolidColorBrush;
+                        var iconTplFullCheck = realWin.TryFindResource("IconTemplate.FullCheck") as System.Windows.Controls.ControlTemplate;
+                        var iconTplShowSelected = realWin.TryFindResource("IconTemplate.TableShowSelected") as System.Windows.Controls.ControlTemplate;
+
+                        process_pipeline.Themes.CadThemes.ApplyCadTheme(realWin, "Light");
+                        var lightPrimary = realWin.TryFindResource("Brush.Icon.Primary") as System.Windows.Media.SolidColorBrush;
+                        var lightAccent = realWin.TryFindResource("Brush.Icon.Accent") as System.Windows.Media.SolidColorBrush;
+
+                        AssertTrue(
+                            dsWin != null && msgWin != null && arrowCtrl != null &&
+                            iconTplFullCheck != null && iconTplShowSelected != null &&
+                            darkPrimary != null && lightPrimary != null &&
+                            darkPrimary.Color != lightPrimary.Color &&
+                            darkAccent != null && lightAccent != null &&
+                            !string.IsNullOrWhiteSpace(vm.DataSourceToolTipText) &&
+                            !string.IsNullOrWhiteSpace(vm.SingleRuleToolTipText),
+                            $"Commit 7.7 全窗体矢量图标模板与 Dark/Light 双主题动态配色验证通过 (DarkPrimary={darkPrimary?.Color}, LightPrimary={lightPrimary?.Color})");
                     }
                 }
                 finally
