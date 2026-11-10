@@ -533,6 +533,113 @@ namespace Cad.Plugin
                         string summaryAllMode = vm.SelectionRecordSummaryText;
                         AssertTrue(vm.IsShowAllRows && !vm.IsShowSelectedOnly && visibleInAllMode == 317 && summaryAllMode.Contains("已选中 5"),
                             $"Commit 7.5 点击【显示所有行】后恢复全部 317 行展示且保留选中状态 (实际={visibleInAllMode}, 摘要='{summaryAllMode}')");
+
+                        // 5.6 验证 Commit 7.6：实例化真实 ucMainCheckWindow (验证 XAML InitializeComponent 解析无异常) 及左侧 TreeView 与右侧 DataGrid 跨节点联动
+                        var realWin = new ucMainCheckWindow();
+                        AssertTrue(realWin != null && realWin.DataContext is MainCheckWindowViewModel,
+                            "ucMainCheckWindow XAML InitializeComponent() 实例化成功，0 XamlParseException 异常");
+
+                        var testGrid = new System.Windows.Controls.DataGrid
+                        {
+                            SelectionMode = System.Windows.Controls.DataGridSelectionMode.Extended,
+                            SelectionUnit = System.Windows.Controls.DataGridSelectionUnit.FullRow,
+                            ItemsSource = vm.Rows
+                        };
+                        testGrid.SelectionChanged += (s, ev) => vm.SyncSelectedRowsFromGrid(syncCadSelection: false);
+                        vm.AttachGrid(testGrid);
+
+                        var ruleRootNode = vm.TreeNodes.FirstOrDefault(n => n.FilterKind == TreeFilterKind.RuleCategory);
+                        var pendingChildNode = ruleRootNode?.Children.FirstOrDefault(c => c.StatusFilter == IssueReviewStatus.Pending);
+                        var toRecheckChildNode = ruleRootNode?.Children.FirstOrDefault(c => c.StatusFilter == IssueReviewStatus.ToRecheck);
+                        var ignoredChildNode = ruleRootNode?.Children.FirstOrDefault(c => c.StatusFilter == IssueReviewStatus.Ignored);
+
+                        // 场景 A1：图面同时选中“一对匹配的管线和属性块”（Rows[0] 的管线 + Rows[0] 的配对属性块）-> 归并为 1 组（列表中仅 1 行被选中）
+                        var singlePairSelected = vm.ApplyCadObjectIdSelection(new[]
+                        {
+                            vm.Rows[0].TargetObjectId,
+                            vm.Rows[0].SourceIssue.RelatedObjectIds[0]
+                        });
+                        AssertTrue(singlePairSelected.Count == 1 && testGrid.SelectedItems.Count == 1 && vm.StatusText.Contains("1 组配对图属"),
+                            $"Commit 7.6 图面同时选中一对匹配的管线与属性块时归并为 1 组，DataGrid 选中行数={testGrid.SelectedItems.Count} (状态栏='{vm.StatusText}')");
+
+                        // 场景 A2：图面框选一堆图形与属性块（包含 2 组配对成功的 [管线+属性块]、1 根独立管线、1 个独立属性块，共 6 个 CAD 图元）-> 准确识别出 4 行并在 DataGrid 中全部保持选中
+                        var mixedMultiSelected = vm.ApplyCadObjectIdSelection(new[]
+                        {
+                            vm.Rows[0].TargetObjectId,
+                            vm.Rows[0].SourceIssue.RelatedObjectIds[0], // 配对组 #1 -> Rows[0]
+                            vm.Rows[1].TargetObjectId,
+                            vm.Rows[1].SourceIssue.RelatedObjectIds[0], // 配对组 #2 -> Rows[1]
+                            vm.Rows[2].TargetObjectId,                  // 独立管线 -> Rows[2]
+                            vm.Rows[3].SourceIssue.RelatedObjectIds[0]  // 独立属性块 -> Rows[3]
+                        });
+                        AssertTrue(mixedMultiSelected.Count == 4 && testGrid.SelectedItems.Count == 4 && vm.StatusText.Contains("2 组配对图属"),
+                            $"Commit 7.6 图面混合多选（2组配对图属 + 1根独立管线 + 1个独立属性块 = 6图元）时，DataGrid 完整多选 4 行 (实际={testGrid.SelectedItems.Count}, 状态栏='{vm.StatusText}')");
+
+                        // 场景 A3：左侧树停留在“待核查 (0)”节点时，在 CAD 图面点选属于“待复核”的管线与另一组的 ws 属性块 -> 自动切换树节点至“待复核”且 DataGrid 选中 2 行
+                        vm.SelectedTreeNode = pendingChildNode;
+                        AssertTrue(vm.GetVisibleRows().Count == 0,
+                            $"Commit 7.6 切换至【待核查(0)】子节点时初始可见行数为 0 (实际={vm.GetVisibleRows().Count})");
+
+                        var crossNodeSelected = vm.ApplyCadObjectIdSelection(new[]
+                        {
+                            vm.Rows[0].TargetObjectId,
+                            vm.Rows[1].SourceIssue.RelatedObjectIds[0]
+                        });
+                        AssertTrue(ReferenceEquals(vm.SelectedTreeNode, toRecheckChildNode) && crossNodeSelected.Count == 2 && testGrid.SelectedItems.Count == 2 && vm.GetVisibleRows().Count == 317,
+                            $"Commit 7.6 跨节点点选管线与非同组属性块时，左侧树自动从【待核查】切换至【待复核】且 DataGrid 完整选中 2 行 (当前节点={vm.SelectedTreeNode?.Name}, DataGrid选中={testGrid.SelectedItems.Count})");
+
+                        // 场景 B：图面多选跨越同一规则下不同状态（如“已忽略”+“待复核”）时，左侧树自动上卷至一级父节点【图属关系与Group核查】且 DataGrid 选中 2 行
+                        vm.SetSelectedRows(new[] { vm.Rows[0] }, syncCadSelection: false);
+                        vm.ChangeSelectedRowStatus(IssueReviewStatus.Ignored);
+                        vm.SelectedTreeNode = toRecheckChildNode;
+
+                        var multiStatusSelected = vm.ApplyCadObjectIdSelection(new[]
+                        {
+                            vm.Rows[0].TargetObjectId,
+                            vm.Rows[1].TargetObjectId
+                        });
+                        AssertTrue(ReferenceEquals(vm.SelectedTreeNode, ruleRootNode) && multiStatusSelected.Count == 2 && testGrid.SelectedItems.Count == 2,
+                            $"Commit 7.6 图面多选跨【已忽略+待复核】子状态时，左侧树自动上卷至一级规则父节点 [{vm.SelectedTreeNode?.Name}] 且 DataGrid 完整选中 2 行 (DataGrid选中={testGrid.SelectedItems.Count})");
+
+                        vm.ExecuteUndo(); // 还原 Rows[0] 为 ToRecheck
+
+                        // 场景 C：在【仅显示选中行】模式下跨左侧不同根节点/子节点切换时，选中状态始终 100% 保持（仿 ArcGIS 属性表）
+                        var layerRootNode = vm.TreeNodes.FirstOrDefault(n => n.FilterKind == TreeFilterKind.LayerRoot);
+                        testGrid.SelectionChanged += (s, ev) => vm.OnGridSelectionChanged(ev);
+
+                        vm.SelectedTreeNode = ruleRootNode;
+                        vm.SetSelectedRows(vm.Rows.Take(5), syncCadSelection: false);
+                        vm.ShowSelectedRowsCommand.Execute(null);
+                        AssertTrue(vm.IsShowSelectedOnly && vm.GetVisibleRows().Count == 5 && testGrid.SelectedItems.Count == 5 && vm.SelectedRows.Count == 5,
+                            $"Commit 7.6 进入【仅显示选中行】模式，当前显示 5 行且 DataGrid 保持 5 行全选中 (DataGrid选中={testGrid.SelectedItems.Count})");
+
+                        // 从【图属关系与Group核查】根节点切换至【图层】根节点 -> 5 行应依然保持选中状态
+                        vm.SelectedTreeNode = layerRootNode;
+                        AssertTrue(vm.IsShowSelectedOnly && vm.GetVisibleRows().Count == 5 && testGrid.SelectedItems.Count == 5 && vm.SelectedRows.Count == 5,
+                            $"Commit 7.6 在【仅显示选中行】模式下切换至【图层】根节点后，5 行依然保持全选中状态 (DataGrid选中={testGrid.SelectedItems.Count}, VM选中={vm.SelectedRows.Count})");
+
+                        // 从【图层】根节点切换至【待复核】子节点 -> 5 行应依然保持选中状态
+                        vm.SelectedTreeNode = toRecheckChildNode;
+                        AssertTrue(vm.IsShowSelectedOnly && vm.GetVisibleRows().Count == 5 && testGrid.SelectedItems.Count == 5 && vm.SelectedRows.Count == 5,
+                            $"Commit 7.6 在【仅显示选中行】模式下切换至【待复核】子节点后，5 行依然保持全选中状态 (DataGrid选中={testGrid.SelectedItems.Count}, VM选中={vm.SelectedRows.Count})");
+
+                        // 再次切换回【图属关系与Group核查】根节点 -> 5 行依然保持选中状态
+                        vm.SelectedTreeNode = ruleRootNode;
+                        AssertTrue(vm.IsShowSelectedOnly && vm.GetVisibleRows().Count == 5 && testGrid.SelectedItems.Count == 5 && vm.SelectedRows.Count == 5,
+                            $"Commit 7.6 在【仅显示选中行】模式下切回【图属关系与Group核查】根节点后，5 行依然保持全选中状态 (DataGrid选中={testGrid.SelectedItems.Count}, VM选中={vm.SelectedRows.Count})");
+
+                        // 场景 D：在【仅显示选中行】模式下主动点击无交集的树节点（如“待核查 (0)”），保持【仅显示选中行】模式不变且右侧直接显示空行（0 行）；再切回有交集节点时，原 5 行恢复显示且保持选中状态
+                        vm.SelectedTreeNode = pendingChildNode;
+                        AssertTrue(vm.IsShowSelectedOnly && !vm.IsShowAllRows && vm.GetVisibleRows().Count == 0 && testGrid.SelectedItems.Count == 0,
+                            $"Commit 7.6 在【仅显示选中行】模式下点击无交集的【待核查】树节点时，保持【仅显示选中行】模式不变且右侧显示 0 行 (可见={vm.GetVisibleRows().Count})");
+
+                        vm.SelectedTreeNode = toRecheckChildNode;
+                        AssertTrue(vm.IsShowSelectedOnly && vm.GetVisibleRows().Count == 5 && testGrid.SelectedItems.Count == 5 && vm.SelectedRows.Count == 5,
+                            $"Commit 7.6 从空节点再切回【待复核】节点时，仍处于【仅显示选中行】模式，恢复显示 5 行且原 5 行选中状态完整保留 (可见={vm.GetVisibleRows().Count}, DataGrid选中={testGrid.SelectedItems.Count})");
+
+                        vm.ShowAllRowsCommand.Execute(null);
+                        AssertTrue(vm.IsShowAllRows && !vm.IsShowSelectedOnly && vm.GetVisibleRows().Count == 317 && testGrid.SelectedItems.Count == 5,
+                            $"Commit 7.6 手动点击【显示所有行】后恢复显示 317 行且 5 行保持选中状态 (可见={vm.GetVisibleRows().Count}, DataGrid选中={testGrid.SelectedItems.Count})");
                     }
                 }
                 finally

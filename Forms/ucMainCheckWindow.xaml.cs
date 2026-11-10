@@ -104,14 +104,20 @@ namespace process_pipeline.Forms
             }
         }
 
+        private void DataGrid_PreviewUserInput(object sender, RoutedEventArgs e)
+        {
+            _vm?.NotifyUserGridInteraction();
+        }
+
         private void DataGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            _vm.SyncSelectedRowsFromGrid();
+            _vm?.OnGridSelectionChanged(e);
         }
 
         private void DataGrid_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
         {
             if (dgIssues == null) return;
+            _vm?.NotifyUserGridInteraction();
 
             dgIssues.Tag = null;
             _vm.ContextTargetRow = null;
@@ -179,6 +185,14 @@ namespace process_pipeline.Forms
         private void DataGrid_LoadingRow(object sender, DataGridRowEventArgs e)
         {
             e.Row.Header = (e.Row.GetIndex() + 1).ToString();
+            if (e.Row.Item is PipeRowVm rowVm && _vm != null)
+            {
+                bool shouldBeSelected = _vm.IsRowInSelectionSnapshot(rowVm);
+                if (e.Row.IsSelected != shouldBeSelected)
+                {
+                    e.Row.IsSelected = shouldBeSelected;
+                }
+            }
         }
 
         private void DataGrid_ExecuteCopy(object sender, ExecutedRoutedEventArgs e)
@@ -195,6 +209,7 @@ namespace process_pipeline.Forms
         {
             if (dgIssues?.Tag is DataGridRow row)
             {
+                _vm?.NotifyUserGridInteraction();
                 row.IsSelected = !row.IsSelected;
                 dgIssues.Tag = null;
                 _vm.SyncSelectedRowsFromGrid();
@@ -205,6 +220,7 @@ namespace process_pipeline.Forms
         private void CtxClearSelected_Click(object sender, RoutedEventArgs e)
         {
             if (dgIssues == null) return;
+            _vm?.NotifyUserGridInteraction();
             if (dgIssues.SelectionUnit != DataGridSelectionUnit.FullRow)
             {
                 dgIssues.SelectedCells.Clear();
@@ -272,6 +288,7 @@ namespace process_pipeline.Forms
         // ============================================================
         private string _selectedLayerFilter = "全部图层";
         private TreeNodeVm _selectedTreeNode;
+        private bool _isInternalTreeNodeSync;
         private readonly ICollectionView _rowsView;
         private readonly Dictionary<ObjectId, PipeRowVm> _objectIdToRowMap = new Dictionary<ObjectId, PipeRowVm>();
         private readonly Dictionary<string, PipeRowVm> _issueIdToRowMap = new Dictionary<string, PipeRowVm>(StringComparer.OrdinalIgnoreCase);
@@ -283,7 +300,71 @@ namespace process_pipeline.Forms
         private bool _isShowSelectedOnly;
         private readonly HashSet<PipeRowVm> _selectedFilterSnapshot = new HashSet<PipeRowVm>();
         private bool _isSyncingSelection;
+        private bool _pendingFilterSelectionGuard;
         private readonly HybridUndoRedoManager _fallbackUndoRedoManager = new HybridUndoRedoManager();
+
+        /// <summary>
+        /// 标记用户正在主动通过鼠标点击或键盘导航操作 DataGrid（解除过滤刷新后的异步选择丢失保护）。
+        /// </summary>
+        public void NotifyUserGridInteraction()
+        {
+            _pendingFilterSelectionGuard = false;
+        }
+
+        /// <summary>
+        /// 判断指定行是否处于当前 ArcGIS 跨节点持久选择集快照中（供 DataGrid_LoadingRow 容器复用时同步选中状态）。
+        /// </summary>
+        public bool IsRowInSelectionSnapshot(PipeRowVm row)
+        {
+            return row != null && _selectedFilterSnapshot.Contains(row);
+        }
+
+        /// <summary>
+        /// 将种子行及其同一 CAD 管线要素（相同 TargetObjectId）在其他核查规则/树节点下的活动行一并纳入持久选择集快照，
+        /// 实现仿 ArcGIS 跨左侧树根节点切换时同一选中要素行始终保持选中状态（Stage 7 Commit 7.6）。
+        /// </summary>
+        private void UpdateSelectionSnapshotWithSameFeatureRows(IEnumerable<PipeRowVm> seedRows, bool clearExisting)
+        {
+            if (clearExisting)
+            {
+                _selectedFilterSnapshot.Clear();
+            }
+
+            if (seedRows == null)
+                return;
+
+            var seedList = seedRows.Where(r => r != null).Distinct().ToList();
+            if (seedList.Count == 0)
+                return;
+
+            var primaryPipeIds = new HashSet<ObjectId>();
+            foreach (PipeRowVm row in seedList)
+            {
+                _selectedFilterSnapshot.Add(row);
+                if (!row.TargetObjectId.IsNull && !IsOrphanAttachmentRow(row))
+                {
+                    primaryPipeIds.Add(row.TargetObjectId);
+                }
+            }
+
+            if (primaryPipeIds.Count > 0)
+            {
+                foreach (PipeRowVm candidate in Rows)
+                {
+                    if (candidate == null || IsOrphanAttachmentRow(candidate))
+                        continue;
+
+                    IssueReviewStatus status = candidate.SourceIssue?.Status ?? IssueReviewStatus.Pending;
+                    if (status == IssueReviewStatus.Resolved)
+                        continue;
+
+                    if (!candidate.TargetObjectId.IsNull && primaryPipeIds.Contains(candidate.TargetObjectId))
+                    {
+                        _selectedFilterSnapshot.Add(candidate);
+                    }
+                }
+            }
+        }
 
         /// <summary>
         /// 右键点击时鼠标落点所在的行（用于未多选时定位右键目标行）。
@@ -468,18 +549,165 @@ namespace process_pipeline.Forms
         }
 
         /// <summary>
-        /// 当前左侧导航树选中的节点（Commit 5.2：支持按“核查类型”、“核查状态”或“管线图层”过滤）。
+        /// 当前左侧导航树选中的节点（Commit 5.2 & Stage 7 Commit 7.6：支持按“核查类型”、“核查状态”或“管线图层”过滤，并与“仅显示选中行”模式智能联动）。
         /// </summary>
         public TreeNodeVm SelectedTreeNode
         {
             get => _selectedTreeNode;
-            set
+            set => SetSelectedTreeNodeInternal(value, isUserInitiated: !_isInternalTreeNodeSync);
+        }
+
+        /// <summary>
+        /// 内部/用户切换左侧导航树选中节点（Stage 7 Commit 7.6）：
+        /// - 严格遵循 ArcGIS 属性表习惯：“显示所有行 / 仅显示选中行”模式仅在用户主动点击底部切换按钮时改变，
+        ///   切换左侧树节点时绝不自动改变底部筛选模式；若在“仅显示选中行”模式下当前树节点无匹配选中行，右侧列表直接显示为空（0 行），
+        ///   同时持久保留选中集快照，切回有交集节点时自动恢复显示并保持选中状态；
+        /// - 同步维护 TreeNodes 树中各节点的 IsSelected 与父节点 IsExpanded 状态。
+        /// </summary>
+        public void SetSelectedTreeNodeInternal(TreeNodeVm node, bool isUserInitiated)
+        {
+            bool nodeChanged = !ReferenceEquals(_selectedTreeNode, node);
+            _selectedTreeNode = node;
+            SyncTreeNodeVisualSelection(node);
+
+            if (nodeChanged)
             {
-                if (Set(ref _selectedTreeNode, value))
+                OnPropertyChanged(nameof(SelectedTreeNode));
+                RefreshFilter();
+            }
+        }
+
+        private void SyncTreeNodeVisualSelection(TreeNodeVm targetNode)
+        {
+            bool prevInternal = _isInternalTreeNodeSync;
+            _isInternalTreeNodeSync = true;
+            try
+            {
+                foreach (TreeNodeVm topNode in TreeNodes)
                 {
-                    RefreshFilter();
+                    bool isTopMatch = ReferenceEquals(topNode, targetNode);
+                    if (topNode.IsSelected != isTopMatch)
+                    {
+                        topNode.IsSelected = isTopMatch;
+                    }
+
+                    foreach (TreeNodeVm childNode in topNode.Children)
+                    {
+                        bool isChildMatch = ReferenceEquals(childNode, targetNode);
+                        if (childNode.IsSelected != isChildMatch)
+                        {
+                            childNode.IsSelected = isChildMatch;
+                        }
+                        if (isChildMatch && !topNode.IsExpanded)
+                        {
+                            topNode.IsExpanded = true;
+                        }
+                    }
                 }
             }
+            finally
+            {
+                _isInternalTreeNodeSync = prevInternal;
+            }
+        }
+
+        /// <summary>
+        /// 计算能够完整包容给定目标行集合的最小公共左侧导航树节点（Stage 7 Commit 7.6）：
+        /// 1. 若当前选中树节点已能包容全部目标行，则保持原节点不变；
+        /// 2. 若全部目标行属于同一【核查类型】且同一【核查状态】，当状态为“已修复”或原节点为二级状态节点时，切至该二级状态子节点；否则切至该【核查类型】一级节点；
+        /// 3. 若全部目标行属于同一【核查类型】但跨多个未归档状态（如“待核查”+“待复核”），自动上卷至该【核查类型】一级父节点；
+        /// 4. 若跨多个核查类型但同属一个图层，则切至对应图层子节点；否则上卷至“图层”根节点或清除树节点过滤。
+        /// </summary>
+        public TreeNodeVm FindBestEnclosingTreeNode(IReadOnlyCollection<PipeRowVm> targetRows)
+        {
+            if (targetRows == null || targetRows.Count == 0)
+                return _selectedTreeNode;
+
+            if (targetRows.All(r => FilterRowByTreeNode(r, _selectedTreeNode, _selectedLayerFilter)))
+                return _selectedTreeNode;
+
+            var distinctRules = targetRows
+                .Select(r => r?.RuleName)
+                .Where(n => !string.IsNullOrWhiteSpace(n))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            var distinctStatuses = targetRows
+                .Select(r => r?.SourceIssue?.Status ?? IssueReviewStatus.Pending)
+                .Distinct()
+                .ToList();
+
+            var distinctLayers = targetRows
+                .Select(r => r?.Type)
+                .Where(t => !string.IsNullOrWhiteSpace(t))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (distinctRules.Count == 1)
+            {
+                string ruleName = distinctRules[0];
+                TreeNodeVm ruleNode = TreeNodes.FirstOrDefault(n =>
+                    n.FilterKind == TreeFilterKind.RuleCategory &&
+                    string.Equals(n.RuleNameFilter, ruleName, StringComparison.OrdinalIgnoreCase));
+
+                if (ruleNode != null)
+                {
+                    if (distinctStatuses.Count == 1)
+                    {
+                        IssueReviewStatus singleStatus = distinctStatuses[0];
+                        TreeNodeVm statusChild = ruleNode.Children.FirstOrDefault(c =>
+                            c.FilterKind == TreeFilterKind.RuleStatus &&
+                            c.StatusFilter == singleStatus);
+
+                        if (statusChild != null &&
+                            (singleStatus == IssueReviewStatus.Resolved ||
+                             _selectedTreeNode?.FilterKind == TreeFilterKind.RuleStatus))
+                        {
+                            return statusChild;
+                        }
+                    }
+
+                    if (!distinctStatuses.Contains(IssueReviewStatus.Resolved))
+                    {
+                        return ruleNode;
+                    }
+                }
+            }
+
+            TreeNodeVm layerRoot = TreeNodes.FirstOrDefault(n => n.FilterKind == TreeFilterKind.LayerRoot);
+            if (distinctLayers.Count == 1 && layerRoot != null)
+            {
+                TreeNodeVm layerChild = layerRoot.Children.FirstOrDefault(c =>
+                    c.FilterKind == TreeFilterKind.LayerItem &&
+                    string.Equals(c.LayerFilter, distinctLayers[0], StringComparison.OrdinalIgnoreCase));
+                if (layerChild != null)
+                {
+                    return layerChild;
+                }
+            }
+
+            if (!distinctStatuses.Contains(IssueReviewStatus.Resolved) && layerRoot != null)
+            {
+                return layerRoot;
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// 确保当前左侧导航树节点能够包容目标行集合；若存在被当前树节点隐藏的行，则自动上卷/切换至最小包容树节点（Stage 7 Commit 7.6）。
+        /// </summary>
+        public bool EnsureTreeNodeEnclosesRows(IReadOnlyCollection<PipeRowVm> targetRows)
+        {
+            if (targetRows == null || targetRows.Count == 0)
+                return false;
+
+            if (targetRows.All(r => FilterRowByTreeNode(r, _selectedTreeNode, _selectedLayerFilter)))
+                return false;
+
+            TreeNodeVm bestNode = FindBestEnclosingTreeNode(targetRows);
+            SetSelectedTreeNodeInternal(bestNode, isUserInitiated: false);
+            return true;
         }
 
         /// <summary>
@@ -521,7 +749,19 @@ namespace process_pipeline.Forms
         public bool IsShowSelectedOnly
         {
             get => _isShowSelectedOnly;
-            set => SetShowSelectedOnlyMode(value);
+            set
+            {
+                if (value)
+                {
+                    SetShowSelectedOnlyMode(true);
+                }
+                else if (_isShowSelectedOnly)
+                {
+                    // 仿 ArcGIS 10.5 单选页签行为：重复点击已激活的“仅显示选中行”按钮时保持激活，切换至“显示所有行”由点击“显示所有行”按钮或 ShowAllRowsCommand 触发
+                    OnPropertyChanged(nameof(IsShowSelectedOnly));
+                    OnPropertyChanged(nameof(IsShowAllRows));
+                }
+            }
         }
 
         /// <summary>
@@ -530,30 +770,42 @@ namespace process_pipeline.Forms
         public bool IsShowAllRows
         {
             get => !_isShowSelectedOnly;
-            set => SetShowSelectedOnlyMode(!value);
+            set
+            {
+                if (value)
+                {
+                    SetShowSelectedOnlyMode(false);
+                }
+                else if (!_isShowSelectedOnly)
+                {
+                    // 仿 ArcGIS 10.5 单选页签行为：重复点击已激活的“显示所有行”按钮时保持激活
+                    OnPropertyChanged(nameof(IsShowAllRows));
+                    OnPropertyChanged(nameof(IsShowSelectedOnly));
+                }
+            }
         }
 
         /// <summary>
-        /// 切换底部“显示所有行 / 仅显示选中行”筛选模式（Stage 7 Commit 7.5）。
+        /// 当前表格选中的全部行集合（只读视图，Stage 7 Commit 7.6）。
+        /// </summary>
+        public IReadOnlyList<PipeRowVm> SelectedRows => _selectedRows;
+
+        /// <summary>
+        /// 切换底部“显示所有行 / 仅显示选中行”筛选模式（Stage 7 Commit 7.5 & Commit 7.6）。
         /// </summary>
         public void SetShowSelectedOnlyMode(bool showSelectedOnly)
         {
+            _pendingFilterSelectionGuard = true;
             if (showSelectedOnly)
             {
                 var currentSelected = _selectedRows.Count > 0
                     ? _selectedRows.ToList()
                     : GetActionTargetRows().ToList();
 
-                if (currentSelected.Count > 0 || !_isShowSelectedOnly)
+                if (currentSelected.Count > 0)
                 {
-                    _selectedFilterSnapshot.Clear();
-                    foreach (PipeRowVm row in currentSelected)
-                    {
-                        if (row != null)
-                        {
-                            _selectedFilterSnapshot.Add(row);
-                        }
-                    }
+                    // 合并当前选中行及其同要素跨规则行到持久选择集快照，保留跨树节点曾选中的记录不丢失
+                    UpdateSelectionSnapshotWithSameFeatureRows(currentSelected, clearExisting: false);
                 }
 
                 _isShowSelectedOnly = true;
@@ -561,68 +813,37 @@ namespace process_pipeline.Forms
                 OnPropertyChanged(nameof(IsShowAllRows));
                 RefreshFilter();
 
-                if (_grid != null && _selectedFilterSnapshot.Count > 0)
-                {
-                    bool prevSync = _isSyncingSelection;
-                    _isSyncingSelection = true;
-                    try
-                    {
-                        _grid.SelectedItems.Clear();
-                        foreach (PipeRowVm row in _selectedFilterSnapshot)
-                        {
-                            if (FilterRow(row))
-                            {
-                                _grid.SelectedItems.Add(row);
-                            }
-                        }
-                        SelectedRow = _selectedFilterSnapshot.FirstOrDefault(r => FilterRow(r));
-                    }
-                    finally
-                    {
-                        _isSyncingSelection = prevSync;
-                    }
-                }
+                var snapshotRows = Rows
+                    .Where(r => r != null && _selectedFilterSnapshot.Contains(r) && FilterRow(r))
+                    .Distinct()
+                    .ToList();
+                ApplyRowsToGridSelection(snapshotRows, scrollIntoView: true);
 
                 int visibleSelectedCount = GetVisibleRows().Count;
                 StatusText = $"已切换至【仅显示选中行】模式（当前显示 {visibleSelectedCount} 行）";
             }
             else
             {
-                var rowsToKeepSelected = _selectedRows.Count > 0
-                    ? _selectedRows.ToList()
-                    : _selectedFilterSnapshot.ToList();
+                var rowsToKeepSelected = Rows
+                    .Where(r => r != null && (_selectedFilterSnapshot.Contains(r) || _selectedRows.Contains(r)))
+                    .Distinct()
+                    .ToList();
+
+                if (rowsToKeepSelected.Count > 0)
+                {
+                    UpdateSelectionSnapshotWithSameFeatureRows(rowsToKeepSelected, clearExisting: false);
+                }
 
                 _isShowSelectedOnly = false;
                 OnPropertyChanged(nameof(IsShowSelectedOnly));
                 OnPropertyChanged(nameof(IsShowAllRows));
                 RefreshFilter();
 
-                if (_grid != null && rowsToKeepSelected.Count > 0)
-                {
-                    bool prevSync = _isSyncingSelection;
-                    _isSyncingSelection = true;
-                    try
-                    {
-                        _grid.SelectedItems.Clear();
-                        foreach (PipeRowVm row in rowsToKeepSelected)
-                        {
-                            if (FilterRow(row))
-                            {
-                                _grid.SelectedItems.Add(row);
-                            }
-                        }
-                        SelectedRow = rowsToKeepSelected.FirstOrDefault(r => FilterRow(r));
-                        if (SelectedRow != null)
-                        {
-                            _grid.UpdateLayout();
-                            _grid.ScrollIntoView(SelectedRow);
-                        }
-                    }
-                    finally
-                    {
-                        _isSyncingSelection = prevSync;
-                    }
-                }
+                var visibleToSelect = Rows
+                    .Where(r => r != null && _selectedFilterSnapshot.Contains(r) && FilterRow(r))
+                    .Distinct()
+                    .ToList();
+                ApplyRowsToGridSelection(visibleToSelect, scrollIntoView: true);
 
                 int allVisibleCount = GetVisibleRows().Count;
                 StatusText = $"已切换至【显示所有行】模式（当前共显示 {allVisibleCount} 行）";
@@ -630,7 +851,80 @@ namespace process_pipeline.Forms
 
             OnPropertyChanged(nameof(SelectionRecordSummaryText));
             OnPropertyChanged(nameof(RowCountText));
+        }
+
+        /// <summary>
+        /// 将目标行列表原子化应用到 _selectedRows 与 DataGrid.SelectedItems（开启 _isSyncingSelection 保护，杜绝重入冲掉多选，Stage 7 Commit 7.6）。
+        /// </summary>
+        private void ApplyRowsToGridSelection(IReadOnlyList<PipeRowVm> rowsToSelect, bool scrollIntoView = false)
+        {
+            var targetList = (rowsToSelect ?? Array.Empty<PipeRowVm>())
+                .Where(r => r != null && FilterRow(r))
+                .Distinct()
+                .ToList();
+
+            bool prevSync = _isSyncingSelection;
+            _isSyncingSelection = true;
+            try
+            {
+                _selectedRows.Clear();
+                _selectedRows.AddRange(targetList);
+
+                if (_grid != null)
+                {
+                    if (_grid.SelectionUnit != DataGridSelectionUnit.FullRow && _grid.SelectedCells != null)
+                    {
+                        _grid.SelectedCells.Clear();
+                    }
+                    _grid.SelectedItems.Clear();
+                    foreach (PipeRowVm row in targetList)
+                    {
+                        _grid.SelectedItems.Add(row);
+                    }
+
+                    _grid.UpdateLayout();
+
+                    if (scrollIntoView && targetList.Count > 0)
+                    {
+                        _grid.ScrollIntoView(targetList[0]);
+                        _grid.UpdateLayout();
+                    }
+
+                    if (_grid.SelectedItems.Count != targetList.Count)
+                    {
+                        _grid.SelectedItems.Clear();
+                        foreach (PipeRowVm row in targetList)
+                        {
+                            _grid.SelectedItems.Add(row);
+                        }
+                        _grid.UpdateLayout();
+                    }
+
+                    // 显式加固已生成 DataGridRow 容器的 IsSelected 状态，确保跨左侧树根节点切换后选中高亮不丢失
+                    foreach (PipeRowVm row in targetList)
+                    {
+                        if (_grid.ItemContainerGenerator.ContainerFromItem(row) is DataGridRow rowContainer &&
+                            !rowContainer.IsSelected)
+                        {
+                            rowContainer.IsSelected = true;
+                        }
+                    }
+                }
+
+                SelectedRow = _selectedRows.FirstOrDefault();
+            }
+            finally
+            {
+                _isSyncingSelection = prevSync;
+            }
+
+            OnPropertyChanged(nameof(ReversePipeMenuVisibility));
+            OnPropertyChanged(nameof(ReversePipeMenuHeader));
+            OnPropertyChanged(nameof(BindGroupMenuVisibility));
+            OnPropertyChanged(nameof(BindGroupMenuHeader));
             OnPropertyChanged(nameof(SelectionRecordSummaryText));
+            OnPropertyChanged(nameof(RowCountText));
+            NotifyUndoRedoStateChanged();
         }
 
         /// <summary>
@@ -638,6 +932,7 @@ namespace process_pipeline.Forms
         /// </summary>
         public void ClearSelectedFilterSnapshot()
         {
+            _pendingFilterSelectionGuard = false;
             _selectedFilterSnapshot.Clear();
             if (_isShowSelectedOnly)
             {
@@ -659,10 +954,39 @@ namespace process_pipeline.Forms
         }
 
         /// <summary>
-        /// 从 DataGrid.SelectedItems 同步多选行集合，并按需触发 CAD 预选集批量高亮（Commit 5.5）。
+        /// 处理来自 DataGrid.SelectionChanged 事件的回调：
+        /// 当切换左侧树节点或底部筛选模式引发 WPF 布局异步重算导致无用户交互下的意外取消选中时，自动拦截并恢复持久选择集快照。
+        /// </summary>
+        public void OnGridSelectionChanged(SelectionChangedEventArgs e)
+        {
+            if (_isSyncingSelection)
+                return;
+
+            if (_pendingFilterSelectionGuard && _grid != null)
+            {
+                var expectedRows = Rows
+                    .Where(r => r != null && _selectedFilterSnapshot.Contains(r) && FilterRow(r))
+                    .Distinct()
+                    .ToList();
+
+                if (expectedRows.Count > 0 && _grid.SelectedItems.Count < expectedRows.Count)
+                {
+                    ApplyRowsToGridSelection(expectedRows, scrollIntoView: false);
+                    return;
+                }
+            }
+
+            SyncSelectedRowsFromGrid(syncCadSelection: true);
+        }
+
+        /// <summary>
+        /// 从 DataGrid.SelectedItems 同步多选行集合，并按需触发 CAD 预选集批量高亮（Commit 5.5 & Stage 7 Commit 7.6）。
         /// </summary>
         public void SyncSelectedRowsFromGrid(bool syncCadSelection = true)
         {
+            if (_isSyncingSelection)
+                return;
+
             _selectedRows.Clear();
             if (_grid?.SelectedItems != null && _grid.SelectedItems.Count > 0)
             {
@@ -690,17 +1014,17 @@ namespace process_pipeline.Forms
                 }
             }
 
+            SelectedRow = _selectedRows.FirstOrDefault();
+
             if (!_isShowSelectedOnly)
             {
-                _selectedFilterSnapshot.Clear();
-                foreach (PipeRowVm row in _selectedRows)
-                {
-                    _selectedFilterSnapshot.Add(row);
-                }
+                UpdateSelectionSnapshotWithSameFeatureRows(_selectedRows, clearExisting: true);
             }
 
             OnPropertyChanged(nameof(ReversePipeMenuVisibility));
             OnPropertyChanged(nameof(ReversePipeMenuHeader));
+            OnPropertyChanged(nameof(BindGroupMenuVisibility));
+            OnPropertyChanged(nameof(BindGroupMenuHeader));
             OnPropertyChanged(nameof(SelectionRecordSummaryText));
             NotifyUndoRedoStateChanged();
 
@@ -715,26 +1039,38 @@ namespace process_pipeline.Forms
         /// </summary>
         public void SetSelectedRows(IEnumerable<PipeRowVm> rows, bool syncCadSelection = false)
         {
-            _selectedRows.Clear();
-            _selectedFilterSnapshot.Clear();
-            if (rows != null)
-            {
-                foreach (var r in rows)
-                {
-                    if (r != null && !_selectedRows.Contains(r))
-                    {
-                        _selectedRows.Add(r);
-                        _selectedFilterSnapshot.Add(r);
-                    }
-                }
-            }
-            SelectedRow = _selectedRows.FirstOrDefault();
+            _pendingFilterSelectionGuard = true;
+            var distinctRows = (rows ?? Array.Empty<PipeRowVm>())
+                .Where(r => r != null)
+                .Distinct()
+                .ToList();
+
+            UpdateSelectionSnapshotWithSameFeatureRows(distinctRows, clearExisting: true);
+
             if (_isShowSelectedOnly)
             {
-                RefreshFilter();
+                bool prevSync = _isSyncingSelection;
+                _isSyncingSelection = true;
+                try
+                {
+                    if (_grid != null)
+                    {
+                        _grid.SelectedItems.Clear();
+                    }
+                    _rowsView?.Refresh();
+                }
+                finally
+                {
+                    _isSyncingSelection = prevSync;
+                }
             }
-            OnPropertyChanged(nameof(SelectionRecordSummaryText));
-            NotifyUndoRedoStateChanged();
+
+            var visibleToSelect = Rows
+                .Where(r => r != null && _selectedFilterSnapshot.Contains(r) && FilterRow(r))
+                .Distinct()
+                .ToList();
+
+            ApplyRowsToGridSelection(visibleToSelect, scrollIntoView: false);
 
             if (syncCadSelection && !_isSyncingSelection && _selectedRows.Count > 0)
             {
@@ -880,17 +1216,22 @@ namespace process_pipeline.Forms
         private bool FilterRowByTreeAndKeyword(PipeRowVm row)
         {
             if (row == null) return false;
+            return FilterRowByTreeNode(row, _selectedTreeNode, _selectedLayerFilter) && FilterRowByKeyword(row);
+        }
+
+        private static bool FilterRowByTreeNode(PipeRowVm row, TreeNodeVm selectedNode, string fallbackLayerFilter = "全部图层")
+        {
+            if (row == null) return false;
 
             IssueReviewStatus rowStatus = row.SourceIssue?.Status ?? IssueReviewStatus.Pending;
 
-            // 1. 左侧树节点过滤
-            if (_selectedTreeNode != null)
+            if (selectedNode != null)
             {
-                switch (_selectedTreeNode.FilterKind)
+                switch (selectedNode.FilterKind)
                 {
                     case TreeFilterKind.RuleCategory:
                         // 点击一级【核查类型】节点时：展示该核查类型下所有未归档的活动记录（Status != Resolved）
-                        if (!string.Equals(row.RuleName, _selectedTreeNode.RuleNameFilter, StringComparison.OrdinalIgnoreCase))
+                        if (!string.Equals(row.RuleName, selectedNode.RuleNameFilter, StringComparison.OrdinalIgnoreCase))
                             return false;
                         if (rowStatus == IssueReviewStatus.Resolved)
                             return false;
@@ -898,9 +1239,9 @@ namespace process_pipeline.Forms
 
                     case TreeFilterKind.RuleStatus:
                         // 点击二级【核查状态】节点（如“待核查”或“已修复”）时：按核查类型 + 具体状态精准匹配
-                        if (!string.Equals(row.RuleName, _selectedTreeNode.RuleNameFilter, StringComparison.OrdinalIgnoreCase))
+                        if (!string.Equals(row.RuleName, selectedNode.RuleNameFilter, StringComparison.OrdinalIgnoreCase))
                             return false;
-                        if (_selectedTreeNode.StatusFilter.HasValue && rowStatus != _selectedTreeNode.StatusFilter.Value)
+                        if (selectedNode.StatusFilter.HasValue && rowStatus != selectedNode.StatusFilter.Value)
                             return false;
                         break;
 
@@ -912,7 +1253,7 @@ namespace process_pipeline.Forms
 
                     case TreeFilterKind.LayerItem:
                         // 点击具体图层子节点时：匹配所属图层
-                        if (!string.Equals(row.Type, _selectedTreeNode.LayerFilter, StringComparison.OrdinalIgnoreCase))
+                        if (!string.Equals(row.Type, selectedNode.LayerFilter, StringComparison.OrdinalIgnoreCase))
                             return false;
                         break;
 
@@ -927,15 +1268,22 @@ namespace process_pipeline.Forms
                 if (rowStatus == IssueReviewStatus.Resolved)
                     return false;
 
-                if (!string.IsNullOrWhiteSpace(_selectedLayerFilter) &&
-                    !string.Equals(_selectedLayerFilter, "全部图层", StringComparison.OrdinalIgnoreCase))
+                if (!string.IsNullOrWhiteSpace(fallbackLayerFilter) &&
+                    !string.Equals(fallbackLayerFilter, "全部图层", StringComparison.OrdinalIgnoreCase))
                 {
-                    if (!string.Equals(row.Type, _selectedLayerFilter, StringComparison.OrdinalIgnoreCase))
+                    if (!string.Equals(row.Type, fallbackLayerFilter, StringComparison.OrdinalIgnoreCase))
                         return false;
                 }
             }
 
-            // 2. 关键字模糊匹配（支持匹配编号、核查类型、图层、状态、位置坐标、备注）
+            return true;
+        }
+
+        private bool FilterRowByKeyword(PipeRowVm row)
+        {
+            if (row == null) return false;
+
+            // 关键字模糊匹配（支持匹配编号、核查类型、图层、状态、位置坐标、备注）
             if (!string.IsNullOrWhiteSpace(_keyword))
             {
                 string kw = _keyword.Trim();
@@ -955,14 +1303,24 @@ namespace process_pipeline.Forms
 
         /// <summary>
         /// 触发内存视图过滤刷新，清理已被隐藏行的选中残留，并同步底部状态栏记录数与连续行号。
-        /// 在 _rowsView.Refresh() 期间开启 _isSyncingSelection 保护，杜绝多选行被批量过滤归档时逐行触发 DataGrid_SelectionChanged -> SetImpliedSelection 风暴。
+        /// 在 _rowsView.Refresh() 期间开启 _isSyncingSelection 保护，并从跨节点持久选择集快照 _selectedFilterSnapshot 恢复所有当前可见的选中行（Stage 7 Commit 7.6）。
         /// </summary>
         public void RefreshFilter()
         {
+            _pendingFilterSelectionGuard = true;
             bool prevSyncing = _isSyncingSelection;
             _isSyncingSelection = true;
             try
             {
+                if (_grid != null)
+                {
+                    if (_grid.SelectionUnit != DataGridSelectionUnit.FullRow && _grid.SelectedCells != null)
+                    {
+                        _grid.SelectedCells.Clear();
+                    }
+                    _grid.SelectedItems.Clear();
+                }
+
                 _rowsView?.Refresh();
 
                 if (ContextTargetRow != null && !FilterRow(ContextTargetRow))
@@ -973,6 +1331,13 @@ namespace process_pipeline.Forms
                 {
                     SelectedRow = null;
                 }
+
+                var preservedSelection = Rows
+                    .Where(r => r != null && _selectedFilterSnapshot.Contains(r) && FilterRow(r))
+                    .Distinct()
+                    .ToList();
+
+                ApplyRowsToGridSelection(preservedSelection, scrollIntoView: false);
             }
             finally
             {
@@ -981,18 +1346,48 @@ namespace process_pipeline.Forms
 
             if (_grid != null)
             {
-                // 清理已被过滤隐藏的选中行，并异步刷新虚拟化可见行的连续行号（1, 2, 3...）
+                // 异步刷新虚拟化可见行的连续行号（1, 2, 3...）并在布局稳定后二次加固选中容器状态
                 _grid.Dispatcher.BeginInvoke(new Action(() =>
                 {
-                    for (int i = 0; i < _grid.Items.Count; i++)
+                    bool prev = _isSyncingSelection;
+                    _isSyncingSelection = true;
+                    try
                     {
-                        if (_grid.ItemContainerGenerator.ContainerFromIndex(i) is DataGridRow rowContainer)
+                        var expectedSelection = Rows
+                            .Where(r => r != null && _selectedFilterSnapshot.Contains(r) && FilterRow(r))
+                            .Distinct()
+                            .ToList();
+
+                        if (_grid.SelectedItems.Count != expectedSelection.Count)
                         {
-                            rowContainer.Header = (i + 1).ToString();
+                            _grid.SelectedItems.Clear();
+                            foreach (PipeRowVm row in expectedSelection)
+                            {
+                                _grid.SelectedItems.Add(row);
+                            }
+                        }
+
+                        for (int i = 0; i < _grid.Items.Count; i++)
+                        {
+                            if (_grid.ItemContainerGenerator.ContainerFromIndex(i) is DataGridRow rowContainer)
+                            {
+                                rowContainer.Header = (i + 1).ToString();
+                                if (rowContainer.Item is PipeRowVm rowVm)
+                                {
+                                    bool shouldSelect = _selectedFilterSnapshot.Contains(rowVm);
+                                    if (rowContainer.IsSelected != shouldSelect)
+                                    {
+                                        rowContainer.IsSelected = shouldSelect;
+                                    }
+                                }
+                            }
                         }
                     }
-                    SyncSelectedRowsFromGrid(syncCadSelection: false);
-                }), System.Windows.Threading.DispatcherPriority.Background);
+                    finally
+                    {
+                        _isSyncingSelection = prev;
+                    }
+                }), System.Windows.Threading.DispatcherPriority.ContextIdle);
             }
 
             OnPropertyChanged(nameof(RowCountText));
@@ -1196,8 +1591,112 @@ namespace process_pipeline.Forms
         }
 
         /// <summary>
-        /// 将问题行的主目标管线（TargetObjectId）及全部关联附属要素（RelatedObjectIds 与 PossibleMatches 中的属性块、文字标注、流向箭头）
-        /// 统一注册到 _objectIdToRowsMap 反向索引字典中（Stage 7 Commit 7.4）。
+        /// 判断指定列表行是否为“孤立/多余属性块或文字标注”行（TargetObjectId 本身为属性块/文字，RelatedObjectIds 为参考邻近管线）。
+        /// </summary>
+        private static bool IsOrphanAttachmentRow(PipeRowVm row)
+        {
+            if (row?.SourceIssue == null) return false;
+            if (row.SourceIssue.RulePayload is PipeAttachmentMatchItem matchPayload)
+            {
+                return matchPayload.Status == SpatialMatchStatus.OrphanAttachment;
+            }
+            return !string.IsNullOrWhiteSpace(row.SourceIssue.IssueId) &&
+                   row.SourceIssue.IssueId.IndexOf(":ATT_", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        /// <summary>
+        /// 判断指定列表行是否为“未配对管线（含多段共标）”行（其 RelatedObjectIds 指向邻居管线已占用的标注，不作为本管线的专属配对标注）。
+        /// </summary>
+        private static bool IsUnmatchedPipeRow(PipeRowVm row)
+        {
+            if (row?.SourceIssue == null) return false;
+            if (row.SourceIssue.RulePayload is PipeAttachmentMatchItem matchPayload)
+            {
+                return matchPayload.Status == SpatialMatchStatus.NoMatchPipe;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// 提取管线行所拥有的配对附属要素（属性块、文字标注、流向箭头）ObjectId 集合（Stage 7 Commit 7.6）：
+        /// - 孤立属性块行（OrphanAttachment）与缺标/多段共标管线行（NoMatchPipe）不拥有专属配对属性块；
+        /// - includeConflictCandidates 为 false 时仅返回 1:1 唯一配对/主配对要素；为 true 时包含一对多歧义候选要素。
+        /// </summary>
+        private static HashSet<ObjectId> GetRowPairedAttachmentIds(PipeRowVm row, bool includeConflictCandidates = true)
+        {
+            var result = new HashSet<ObjectId>();
+            if (row?.SourceIssue == null || IsOrphanAttachmentRow(row) || IsUnmatchedPipeRow(row))
+                return result;
+
+            CheckIssueItem issue = row.SourceIssue;
+            if (issue.RulePayload is PipeAttachmentMatchItem matchPayload)
+            {
+                if (matchPayload.MatchedAttachment != null && !matchPayload.MatchedAttachment.AttachmentId.IsNull)
+                {
+                    if (matchPayload.Status == SpatialMatchStatus.UniqueMatch ||
+                        matchPayload.Status == SpatialMatchStatus.InvalidGroupStructure ||
+                        includeConflictCandidates)
+                    {
+                        result.Add(matchPayload.MatchedAttachment.AttachmentId);
+                    }
+                }
+
+                if (matchPayload.Status == SpatialMatchStatus.InvalidGroupStructure && issue.RelatedObjectIds != null)
+                {
+                    foreach (ObjectId relId in issue.RelatedObjectIds)
+                    {
+                        if (!relId.IsNull && relId != matchPayload.GroupId)
+                        {
+                            result.Add(relId);
+                        }
+                    }
+                }
+
+                if (includeConflictCandidates &&
+                    matchPayload.Status == SpatialMatchStatus.OneToManyConflict &&
+                    matchPayload.PossibleMatches != null)
+                {
+                    foreach (MatchItem cand in matchPayload.PossibleMatches)
+                    {
+                        if (!cand.Id.IsNull)
+                        {
+                            result.Add(cand.Id);
+                        }
+                    }
+                }
+
+                return result;
+            }
+
+            if (issue.RelatedObjectIds != null)
+            {
+                foreach (ObjectId relId in issue.RelatedObjectIds)
+                {
+                    if (!relId.IsNull)
+                    {
+                        result.Add(relId);
+                    }
+                }
+            }
+
+            if (includeConflictCandidates && issue.PossibleMatches != null)
+            {
+                foreach (MatchItem match in issue.PossibleMatches)
+                {
+                    if (!match.Id.IsNull)
+                    {
+                        result.Add(match.Id);
+                    }
+                }
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// 将问题行的主目标图元（TargetObjectId）及专属配对附属要素（属性块、文字标注、流向箭头）
+        /// 注册到 _objectIdToRowsMap 反向索引字典中（Stage 7 Commit 7.4 & Commit 7.6）。
+        /// 孤立属性块行的参考邻近管线、以及多段共标缺标管线借用的邻居属性块不注册为归属索引，防止跨组误连带选中。
         /// </summary>
         private void IndexRowObjectIds(PipeRowVm row)
         {
@@ -1210,32 +1709,13 @@ namespace process_pipeline.Forms
                 AddRowToObjectIdMap(targetId, row);
             }
 
-            var issue = row.SourceIssue;
-            if (issue == null) return;
-
-            if (issue.RelatedObjectIds != null)
+            foreach (ObjectId pairedAttId in GetRowPairedAttachmentIds(row, includeConflictCandidates: true))
             {
-                foreach (ObjectId relId in issue.RelatedObjectIds)
+                if (pairedAttId.IsNull) continue;
+                AddRowToObjectIdMap(pairedAttId, row);
+                if (!_objectIdToRowMap.ContainsKey(pairedAttId))
                 {
-                    if (relId.IsNull) continue;
-                    AddRowToObjectIdMap(relId, row);
-                    if (!_objectIdToRowMap.ContainsKey(relId))
-                    {
-                        _objectIdToRowMap[relId] = row;
-                    }
-                }
-            }
-
-            if (issue.PossibleMatches != null)
-            {
-                foreach (var match in issue.PossibleMatches)
-                {
-                    if (match.Id.IsNull) continue;
-                    AddRowToObjectIdMap(match.Id, row);
-                    if (!_objectIdToRowMap.ContainsKey(match.Id))
-                    {
-                        _objectIdToRowMap[match.Id] = row;
-                    }
+                    _objectIdToRowMap[pairedAttId] = row;
                 }
             }
         }
@@ -2127,6 +2607,272 @@ namespace process_pipeline.Forms
             palCheckPipe.Instance.RefreshData();
         }
 
+        /// <summary>
+        /// 解析 CAD 图面选中的 ObjectId 集合（可包含多根管线、多个属性块/文字/箭头，或成对匹配的管线+属性块组合），
+        /// 按“管线-属性块配对组”逻辑归一化反查对应的列表行（Stage 7 Commit 7.6）：
+        /// 1. 若同时选中了一对匹配的管线与属性块（1:1 配对组），在按管线排列的列表中合并计为 1 组（仅选中对应的 1 行）；
+        /// 2. 若在图面上框选或点选了一堆管线与属性块（其中可能包含若干配对成功的组，也可能包含未选中配对另一半的独立管线、独立属性块或孤立属性块），
+        ///    自动识别配对组并汇总所有独立命中的行，在列表中完整多选高亮展示。
+        /// </summary>
+        public IReadOnlyList<PipeRowVm> ResolveRowsFromCadSelection(
+            IEnumerable<ObjectId> selectedIds,
+            out int matchedPairGroupCount)
+        {
+            matchedPairGroupCount = 0;
+            var result = new List<PipeRowVm>();
+            if (selectedIds == null)
+                return result;
+
+            var selectedSet = new HashSet<ObjectId>();
+            foreach (ObjectId id in selectedIds)
+            {
+                if (!id.IsNull && !id.IsErased)
+                {
+                    selectedSet.Add(id);
+                }
+            }
+            if (selectedSet.Count == 0)
+                return result;
+
+            var keywordRows = Rows.Where(r => r != null && FilterRowByKeyword(r)).ToList();
+            if (keywordRows.Count == 0)
+                return result;
+
+            // 若当前导航树正处于某一具体核查规则下（如“图属关系与Group核查”），且该规则下存在能命中本次图面选择的记录，
+            // 优先在当前规则范围内解析，防止同一管线在全量核查多规则并存时把其他规则的重复行一并拉入列表。
+            List<PipeRowVm> candidatePool = keywordRows;
+            string currentRuleFilter = _selectedTreeNode?.RuleNameFilter;
+            if (!string.IsNullOrWhiteSpace(currentRuleFilter))
+            {
+                var currentRuleRows = keywordRows
+                    .Where(r => string.Equals(r.RuleName, currentRuleFilter, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+                if (TryResolveRowsFromPool(currentRuleRows, selectedSet, out _) .Count > 0)
+                {
+                    candidatePool = currentRuleRows;
+                }
+            }
+
+            // 除非当前树节点正停留在“已修复”节点上，否则若存在未归档的活动记录（Status != Resolved），优先在活动记录中匹配
+            bool isViewingResolvedNode = _selectedTreeNode != null &&
+                                         _selectedTreeNode.FilterKind == TreeFilterKind.RuleStatus &&
+                                         _selectedTreeNode.StatusFilter == IssueReviewStatus.Resolved;
+            if (!isViewingResolvedNode)
+            {
+                var activePool = candidatePool
+                    .Where(r => (r.SourceIssue?.Status ?? IssueReviewStatus.Pending) != IssueReviewStatus.Resolved)
+                    .ToList();
+                if (TryResolveRowsFromPool(activePool, selectedSet, out _).Count > 0)
+                {
+                    candidatePool = activePool;
+                }
+            }
+
+            return TryResolveRowsFromPool(candidatePool, selectedSet, out matchedPairGroupCount);
+        }
+
+        private List<PipeRowVm> TryResolveRowsFromPool(
+            IReadOnlyList<PipeRowVm> pool,
+            HashSet<ObjectId> selectedSet,
+            out int matchedPairGroupCount)
+        {
+            matchedPairGroupCount = 0;
+            var resolvedSet = new HashSet<PipeRowVm>();
+            if (pool == null || pool.Count == 0 || selectedSet == null || selectedSet.Count == 0)
+                return new List<PipeRowVm>();
+
+            var matchedPipeIds = new HashSet<ObjectId>();
+            var consumedAttachmentIds = new HashSet<ObjectId>();
+            var pairedGroupRows = new HashSet<PipeRowVm>();
+
+            // 第一阶段：识别图面直接选中的管线行（TargetObjectId 命中），并判断其配对属性块是否也同时被选中（若同时选中则合并为 1 组）
+            foreach (PipeRowVm row in pool)
+            {
+                if (row == null || IsOrphanAttachmentRow(row))
+                    continue;
+
+                ObjectId pipeId = row.TargetObjectId;
+                if (pipeId.IsNull || !selectedSet.Contains(pipeId))
+                    continue;
+
+                resolvedSet.Add(row);
+                matchedPipeIds.Add(pipeId);
+
+                HashSet<ObjectId> pairedAtts = GetRowPairedAttachmentIds(row, includeConflictCandidates: true);
+                bool hasPairedAttSelected = false;
+                foreach (ObjectId attId in pairedAtts)
+                {
+                    if (selectedSet.Contains(attId))
+                    {
+                        consumedAttachmentIds.Add(attId);
+                        hasPairedAttSelected = true;
+                    }
+                }
+
+                if (hasPairedAttSelected)
+                {
+                    pairedGroupRows.Add(row);
+                }
+            }
+
+            // 第二阶段：识别图面直接选中的孤立/多余属性块行（IssueId 为 ATT_ 的独立属性块行）
+            foreach (PipeRowVm row in pool)
+            {
+                if (row == null || !IsOrphanAttachmentRow(row))
+                    continue;
+
+                ObjectId orphanAttId = row.TargetObjectId;
+                if (orphanAttId.IsNull || !selectedSet.Contains(orphanAttId) || consumedAttachmentIds.Contains(orphanAttId))
+                    continue;
+
+                resolvedSet.Add(row);
+                consumedAttachmentIds.Add(orphanAttId);
+            }
+
+            // 第三阶段：处理图面选中但尚未被消费的独立属性块/文字标注/流向箭头（例如用户仅点选/框选了属性块，或选中的属性块与选中的管线不属于同一组）
+            foreach (ObjectId selId in selectedSet)
+            {
+                if (matchedPipeIds.Contains(selId) || consumedAttachmentIds.Contains(selId))
+                    continue;
+
+                // 3.1 优先匹配以该属性块作为 1:1 唯一/主配对要素的管线行
+                var primaryOwnerRows = pool
+                    .Where(r => r != null &&
+                                !IsOrphanAttachmentRow(r) &&
+                                GetRowPairedAttachmentIds(r, includeConflictCandidates: false).Contains(selId))
+                    .ToList();
+
+                if (primaryOwnerRows.Count > 0)
+                {
+                    foreach (PipeRowVm ownerRow in primaryOwnerRows)
+                    {
+                        resolvedSet.Add(ownerRow);
+                    }
+                    consumedAttachmentIds.Add(selId);
+                    continue;
+                }
+
+                // 3.2 其次匹配以该属性块作为一对多歧义候选（PossibleMatches）的管线行
+                var conflictOwnerRows = pool
+                    .Where(r => r != null &&
+                                !IsOrphanAttachmentRow(r) &&
+                                GetRowPairedAttachmentIds(r, includeConflictCandidates: true).Contains(selId))
+                    .ToList();
+
+                if (conflictOwnerRows.Count > 0)
+                {
+                    foreach (PipeRowVm conflictRow in conflictOwnerRows)
+                    {
+                        resolvedSet.Add(conflictRow);
+                    }
+                    consumedAttachmentIds.Add(selId);
+                    continue;
+                }
+
+                // 3.3 兜底：若没有任何管线行专属拥有该属性块，检查是否有“多段共标”行引用了该属性块
+                var sharedFallbackRows = pool
+                    .Where(r => r != null &&
+                                IsUnmatchedPipeRow(r) &&
+                                r.SourceIssue?.RelatedObjectIds != null &&
+                                r.SourceIssue.RelatedObjectIds.Contains(selId))
+                    .ToList();
+
+                if (sharedFallbackRows.Count > 0)
+                {
+                    foreach (PipeRowVm fallbackRow in sharedFallbackRows)
+                    {
+                        resolvedSet.Add(fallbackRow);
+                    }
+                    consumedAttachmentIds.Add(selId);
+                }
+            }
+
+            matchedPairGroupCount = pairedGroupRows.Count;
+
+            // 按列表原有的管线排列顺序输出命中的全部行
+            return pool.Where(r => resolvedSet.Contains(r)).ToList();
+        }
+
+        /// <summary>
+        /// 应用来自 CAD 图面的 ObjectId 选择集，执行图属配对组归并、跨节点自动上卷、选中快照更新、列表多行选中、滚动定位与瞬态高亮（Stage 7 Commit 7.4 ~ 7.6）。
+        /// </summary>
+        public IReadOnlyList<PipeRowVm> ApplyCadObjectIdSelection(
+            IEnumerable<ObjectId> selectedIds,
+            AcadDb.Database targetDb = null,
+            Editor targetEd = null)
+        {
+            _pendingFilterSelectionGuard = true;
+            bool prevSync = _isSyncingSelection;
+            _isSyncingSelection = true;
+            try
+            {
+                IReadOnlyList<PipeRowVm> matchedRows = ResolveRowsFromCadSelection(selectedIds, out int matchedPairGroupCount);
+
+                bool treeAutoSwitched = false;
+                if (matchedRows.Count > 0)
+                {
+                    treeAutoSwitched = EnsureTreeNodeEnclosesRows(matchedRows);
+                }
+
+                UpdateSelectionSnapshotWithSameFeatureRows(matchedRows, clearExisting: true);
+
+                if (_isShowSelectedOnly || treeAutoSwitched)
+                {
+                    if (_grid != null)
+                    {
+                        _grid.SelectedItems.Clear();
+                    }
+                    _rowsView?.Refresh();
+                }
+
+                var visibleMatchedRows = Rows
+                    .Where(r => r != null && _selectedFilterSnapshot.Contains(r) && FilterRow(r))
+                    .Distinct()
+                    .ToList();
+
+                ApplyRowsToGridSelection(visibleMatchedRows, scrollIntoView: true);
+
+                if (targetDb != null)
+                {
+                    if (_selectedRows.Count > 0)
+                    {
+                        var selectedIssues = _selectedRows
+                            .Select(r => r.SourceIssue)
+                            .Where(i => i != null)
+                            .ToList();
+                        GraphicManager.DrawIssueHighlights(targetDb, selectedIssues);
+                        try { targetEd?.UpdateScreen(); } catch { }
+                    }
+                    else
+                    {
+                        GraphicManager.ClearAuxiliaryGraphics();
+                        try { targetEd?.UpdateScreen(); } catch { }
+                    }
+                }
+
+                if (_selectedRows.Count > 0)
+                {
+                    string nodeSuffix = treeAutoSwitched && _selectedTreeNode != null
+                        ? $"（已自动切换导航树至 [{_selectedTreeNode.Name}]）"
+                        : string.Empty;
+
+                    string pairSuffix = matchedPairGroupCount > 0
+                        ? $"（含 {matchedPairGroupCount} 组配对图属）"
+                        : string.Empty;
+
+                    StatusText = _selectedRows.Count == 1
+                        ? $"图面已选中记录 [{_selectedRows[0].Id}]{pairSuffix}{nodeSuffix}"
+                        : $"图面已批量选中 {_selectedRows.Count} 条记录{pairSuffix}{nodeSuffix}";
+                }
+
+                return _selectedRows;
+            }
+            finally
+            {
+                _isSyncingSelection = prevSync;
+            }
+        }
+
         public void OnImpliedSelectionChanged()
         {
             if (_isSyncingSelection) return;
@@ -2144,62 +2890,11 @@ namespace process_pipeline.Forms
                 try
                 {
                     var psr = activeDoc.Editor.SelectImplied();
-                    IReadOnlyList<PipeRowVm> matchedRows = Array.Empty<PipeRowVm>();
-                    if (psr.Status == PromptStatus.OK && psr.Value != null)
-                    {
-                        matchedRows = FindRowsByObjectIds(
-                            psr.Value.GetObjectIds(),
-                            applyFilter: true,
-                            ignoreSelectedOnlyFilter: true);
-                    }
+                    IEnumerable<ObjectId> selectedIds = (psr.Status == PromptStatus.OK && psr.Value != null)
+                        ? psr.Value.GetObjectIds()
+                        : Array.Empty<ObjectId>();
 
-                    _selectedFilterSnapshot.Clear();
-                    foreach (PipeRowVm row in matchedRows)
-                    {
-                        _selectedFilterSnapshot.Add(row);
-                    }
-
-                    if (_isShowSelectedOnly)
-                    {
-                        _rowsView?.Refresh();
-                    }
-
-                    _grid.SelectedItems.Clear();
-                    foreach (PipeRowVm row in matchedRows)
-                    {
-                        _grid.SelectedItems.Add(row);
-                    }
-
-                    SelectedRow = matchedRows.FirstOrDefault();
-                    SyncSelectedRowsFromGrid(syncCadSelection: false);
-
-                    if (SelectedRow != null)
-                    {
-                        _grid.UpdateLayout();
-                        _grid.ScrollIntoView(SelectedRow);
-                    }
-
-                    OnPropertyChanged(nameof(RowCountText));
-                    OnPropertyChanged(nameof(SelectionRecordSummaryText));
-
-                    if (matchedRows.Count > 0)
-                    {
-                        var selectedIssues = matchedRows
-                            .Select(r => r.SourceIssue)
-                            .Where(i => i != null)
-                            .ToList();
-                        GraphicManager.DrawIssueHighlights(activeDoc.Database, selectedIssues);
-                        try { activeDoc.Editor.UpdateScreen(); } catch { }
-
-                        StatusText = matchedRows.Count == 1
-                            ? $"图面已选中记录 [{matchedRows[0].Id}]"
-                            : $"图面已批量选中 {matchedRows.Count} 条记录";
-                    }
-                    else
-                    {
-                        GraphicManager.ClearAuxiliaryGraphics();
-                        try { activeDoc.Editor.UpdateScreen(); } catch { }
-                    }
+                    ApplyCadObjectIdSelection(selectedIds, activeDoc.Database, activeDoc.Editor);
                 }
                 catch
                 {
