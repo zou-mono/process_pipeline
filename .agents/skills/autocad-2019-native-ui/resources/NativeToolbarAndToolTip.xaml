@@ -1,0 +1,168 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=mscorlib">
+
+  <!-- ==================== AutoCAD 2019 原生 26px 紧凑工具栏样式 (含 7x2 蚀刻点阵把手) ==================== -->
+  <sys:Double x:Key="ToolbarHeight">26</sys:Double>
+
+  <Style x:Key="ToolBarStyle" TargetType="ToolBar">
+    <Setter Property="Height" Value="{StaticResource ToolbarHeight}" />
+    <Setter Property="MinHeight" Value="{StaticResource ToolbarHeight}" />
+    <Setter Property="MaxHeight" Value="{StaticResource ToolbarHeight}" />
+    <Setter Property="Background" Value="{DynamicResource Brush.ToolBar.Background}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Brush.ToolBar.OuterBorder}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="Padding" Value="2,0,4,0" />
+    <Setter Property="Margin" Value="0" />
+    <Setter Property="SnapsToDevicePixels" Value="True" />
+    <Setter Property="UseLayoutRounding" Value="True" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="ToolBar">
+          <Border Background="{TemplateBinding Background}"
+                  BorderBrush="{TemplateBinding BorderBrush}"
+                  BorderThickness="{TemplateBinding BorderThickness}"
+                  Padding="{TemplateBinding Padding}"
+                  CornerRadius="0"
+                  SnapsToDevicePixels="True"
+                  UseLayoutRounding="True">
+            <Grid VerticalAlignment="Center">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+              </Grid.ColumnDefinitions>
+              <!-- acad.exe (0x1402b5c1d..0x1402b5da4) 原生 7行x2列 蚀刻点阵把手 -->
+              <Canvas Grid.Column="0"
+                      Width="7"
+                      Height="19"
+                      Margin="1,0,4,0"
+                      VerticalAlignment="Center"
+                      Background="{DynamicResource Brush.ToolBar.GripBackground}"
+                      SnapsToDevicePixels="True"
+                      UseLayoutRounding="True">
+                <!-- 0xA6 暗点 (#FF000000 Dark / #FF1A1B1D Light)：2列(X=1, X=3) x 7行(Y=3,5,7,9,11,13,15) -->
+                <Path Fill="{DynamicResource Brush.ToolBar.GripDarkDot}"
+                      SnapsToDevicePixels="True"
+                      Data="M1,3 h1 v1 h-1 Z M3,3 h1 v1 h-1 Z
+                            M1,5 h1 v1 h-1 Z M3,5 h1 v1 h-1 Z
+                            M1,7 h1 v1 h-1 Z M3,7 h1 v1 h-1 Z
+                            M1,9 h1 v1 h-1 Z M3,9 h1 v1 h-1 Z
+                            M1,11 h1 v1 h-1 Z M3,11 h1 v1 h-1 Z
+                            M1,13 h1 v1 h-1 Z M3,13 h1 v1 h-1 Z
+                            M1,15 h1 v1 h-1 Z M3,15 h1 v1 h-1 Z"/>
+                <!-- 0xA7 亮点 (#FF909090 Dark / #FFEEEEF2 Light)：紧贴每个暗点右侧 (X=2, X=4) x 7行(Y=3,5,7,9,11,13,15) -->
+                <Path Fill="{DynamicResource Brush.ToolBar.GripLightDot}"
+                      SnapsToDevicePixels="True"
+                      Data="M2,3 h1 v1 h-1 Z M4,3 h1 v1 h-1 Z
+                            M2,5 h1 v1 h-1 Z M4,5 h1 v1 h-1 Z
+                            M2,7 h1 v1 h-1 Z M4,7 h1 v1 h-1 Z
+                            M2,9 h1 v1 h-1 Z M4,9 h1 v1 h-1 Z
+                            M2,11 h1 v1 h-1 Z M4,11 h1 v1 h-1 Z
+                            M2,13 h1 v1 h-1 Z M4,13 h1 v1 h-1 Z
+                            M2,15 h1 v1 h-1 Z M4,15 h1 v1 h-1 Z"/>
+              </Canvas>
+              <ToolBarPanel x:Name="PART_ToolBarPanel"
+                            Grid.Column="1"
+                            IsItemsHost="True"
+                            Margin="0"
+                            VerticalAlignment="Center"/>
+            </Grid>
+          </Border>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <!-- ==================== AutoCAD 2019 工具栏双线蚀刻分隔线样式 (1px暗线 + 1px亮线) ==================== -->
+  <Style x:Key="CadToolbarSeparatorStyle" TargetType="Border">
+    <Setter Property="Width" Value="2"/>
+    <Setter Property="Height" Value="18"/>
+    <Setter Property="Margin" Value="4,0,5,0"/>
+    <Setter Property="VerticalAlignment" Value="Center"/>
+    <Setter Property="Background" Value="{DynamicResource Brush.ToolBar.SeparatorDark}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource Brush.ToolBar.SeparatorLight}"/>
+    <Setter Property="BorderThickness" Value="0,0,1,0"/>
+    <Setter Property="SnapsToDevicePixels" Value="True"/>
+    <Setter Property="UseLayoutRounding" Value="True"/>
+  </Style>
+
+  <!-- ==================== AutoCAD 2019 工具栏图标按钮样式 (UxTheme TP_BUTTON 10.2%/20% #008CFF 透蓝膜与外框) ==================== -->
+  <Style x:Key="CadToolbarIconButtonStyle" TargetType="Button">
+    <Setter Property="Width" Value="22"/>
+    <Setter Property="Height" Value="22"/>
+    <Setter Property="Padding" Value="0"/>
+    <Setter Property="Margin" Value="0,0,2,0"/>
+    <Setter Property="Background" Value="{DynamicResource Brush.ToolBar.Button.Background}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource Brush.ToolBar.Button.Border}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="Cursor" Value="Hand"/>
+    <Setter Property="SnapsToDevicePixels" Value="True"/>
+    <Setter Property="UseLayoutRounding" Value="True"/>
+    <Setter Property="ToolTipService.InitialShowDelay" Value="120"/>
+    <Setter Property="ToolTipService.BetweenShowDelay" Value="50"/>
+    <Setter Property="ToolTipService.ShowDuration" Value="15000"/>
+    <Setter Property="ToolTipService.ShowOnDisabled" Value="True"/>
+    <Setter Property="ToolTipService.Placement" Value="Bottom"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="Button">
+          <Grid Width="{TemplateBinding Width}"
+                Height="{TemplateBinding Height}"
+                SnapsToDevicePixels="True"
+                UseLayoutRounding="True">
+            <!-- 内部透明膜填充层 (Margin="1" 与外层 1px 边框严格分离，避免 Alpha 二次叠加失真) -->
+            <Border x:Name="BtnFill"
+                    Margin="1"
+                    Background="{TemplateBinding Background}"
+                    CornerRadius="0"
+                    SnapsToDevicePixels="True"/>
+            <!-- 外层 1px 边框与图标承载层 -->
+            <Border x:Name="BtnBorder"
+                    Background="Transparent"
+                    BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}"
+                    CornerRadius="0"
+                    Padding="{TemplateBinding Padding}"
+                    SnapsToDevicePixels="True">
+              <ContentPresenter x:Name="BtnContent"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                RecognizesAccessKey="True"/>
+            </Border>
+          </Grid>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+              <Setter TargetName="BtnFill" Property="Background" Value="{DynamicResource Brush.ToolBar.Button.HoverBackground}"/>
+              <Setter TargetName="BtnBorder" Property="BorderBrush" Value="{DynamicResource Brush.ToolBar.Button.HoverBorder}"/>
+            </Trigger>
+            <Trigger Property="IsPressed" Value="True">
+              <Setter TargetName="BtnFill" Property="Background" Value="{DynamicResource Brush.ToolBar.Button.PressedBackground}"/>
+              <Setter TargetName="BtnBorder" Property="BorderBrush" Value="{DynamicResource Brush.ToolBar.Button.PressedBorder}"/>
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+              <Setter TargetName="BtnContent" Property="Opacity" Value="0.38"/>
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <!-- ==================== AutoCAD 2019 原生 RibbonToolTip 双层卡片样式 (AdWindows.dll themes/tooltip.xaml) ==================== -->
+  <!-- 注：配合首行/正文转换器 (如按 '\n' 或 '：' 拆分 Header 与 Body) 使用 -->
+  <Style x:Key="CadToolTipStyle" TargetType="ToolTip">
+    <Setter Property="FontFamily" Value="Microsoft YaHei UI, Microsoft YaHei, Segoe UI"/>
+    <Setter Property="FontSize" Value="12"/>
+    <Setter Property="Width" Value="240"/>
+    <Setter Property="Background" Value="{DynamicResource Brush.ToolTip.Background}"/>
+    <Setter Property="Foreground" Value="{DynamicResource Brush.ToolTip.Foreground}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource Brush.ToolTip.Border}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="Padding" Value="1"/>
+    <Setter Property="HasDropShadow" Value="True"/>
+    <Setter Property="SnapsToDevicePixels" Value="True"/>
+    <Setter Property="UseLayoutRounding" Value="True"/>
+    <Setter Property="TextOptions.TextFormattingMode" Value="Display"/>
+  </Style>
+
+</ResourceDictionary>

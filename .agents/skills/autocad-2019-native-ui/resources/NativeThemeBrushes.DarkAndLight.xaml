@@ -1,0 +1,63 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+  <!-- ========================================================================= -->
+  <!-- 1. AutoCAD 2019 Dark Theme Brushes (COLORTHEME = 0)                       -->
+  <!-- ========================================================================= -->
+  <SolidColorBrush x:Key="Brush.ToolBar.Background" Color="#FF494949"/>
+  <SolidColorBrush x:Key="Brush.ToolBar.OuterBorder" Color="#FF222933"/>
+  <SolidColorBrush x:Key="Brush.ToolBar.GripBackground" Color="#FF525252"/>
+  <SolidColorBrush x:Key="Brush.ToolBar.GripDarkDot" Color="#FF000000"/>
+  <SolidColorBrush x:Key="Brush.ToolBar.GripLightDot" Color="#FF909090"/>
+  <SolidColorBrush x:Key="Brush.ToolBar.SeparatorDark" Color="#FF222933"/>
+  <SolidColorBrush x:Key="Brush.ToolBar.SeparatorLight" Color="#FF6D6D6D"/>
+  <SolidColorBrush x:Key="Brush.ToolBar.Button.Background" Color="Transparent"/>
+  <SolidColorBrush x:Key="Brush.ToolBar.Button.Border" Color="Transparent"/>
+  <SolidColorBrush x:Key="Brush.ToolBar.Button.HoverBackground" Color="#1A008CFF"/>
+  <SolidColorBrush x:Key="Brush.ToolBar.Button.HoverBorder" Color="#33008CFF"/>
+  <SolidColorBrush x:Key="Brush.ToolBar.Button.PressedBackground" Color="#33008CFF"/>
+  <SolidColorBrush x:Key="Brush.ToolBar.Button.PressedBorder" Color="#66008CFF"/>
+
+  <!-- Dual-Tone Vector Icon Semantic Brushes (Dark) -->
+  <SolidColorBrush x:Key="Brush.Icon.Primary" Color="#E4E8EC"/>
+  <SolidColorBrush x:Key="Brush.Icon.Accent" Color="#38ABFF"/>
+  <SolidColorBrush x:Key="Brush.Icon.Success" Color="#3CC978"/>
+  <SolidColorBrush x:Key="Brush.Icon.Warning" Color="#FFB900"/>
+  <SolidColorBrush x:Key="Brush.Icon.Danger" Color="#F14C4C"/>
+  <SolidColorBrush x:Key="Brush.Icon.Muted" Color="#9AA2AC"/>
+  <SolidColorBrush x:Key="Brush.Icon.Surface" Color="#2238ABFF"/>
+
+  <!-- ========================================================================= -->
+  <!-- 2. AutoCAD 2019 Light Theme Overrides (COLORTHEME = 1)                    -->
+  <!-- ========================================================================= -->
+  <!--
+  <SolidColorBrush x:Key="Brush.ToolBar.Background" Color="#FFD9D9D9"/>
+  <SolidColorBrush x:Key="Brush.ToolBar.OuterBorder" Color="#FF656565"/>
+  <SolidColorBrush x:Key="Brush.ToolBar.GripBackground" Color="#FFA1A3AB"/>
+  <SolidColorBrush x:Key="Brush.ToolBar.GripDarkDot" Color="#FF1A1B1D"/>
+  <SolidColorBrush x:Key="Brush.ToolBar.GripLightDot" Color="#FFEEEEF2"/>
+  <SolidColorBrush x:Key="Brush.ToolBar.SeparatorDark" Color="#FFA1A3AB"/>
+  <SolidColorBrush x:Key="Brush.ToolBar.SeparatorLight" Color="#FFFFFFFF"/>
+  <SolidColorBrush x:Key="Brush.Icon.Primary" Color="#2B3540"/>
+  <SolidColorBrush x:Key="Brush.Icon.Accent" Color="#0078D7"/>
+  <SolidColorBrush x:Key="Brush.Icon.Success" Color="#107C41"/>
+  <SolidColorBrush x:Key="Brush.Icon.Warning" Color="#C87000"/>
+  <SolidColorBrush x:Key="Brush.Icon.Danger" Color="#D12F2F"/>
+  <SolidColorBrush x:Key="Brush.Icon.Muted" Color="#6E7781"/>
+  <SolidColorBrush x:Key="Brush.Icon.Surface" Color="#1A0078D7"/>
+  -->
+
+  <!-- ========================================================================= -->
+  <!-- 3. AutoCAD 2019 Native RibbonToolTip Brushes (Shared Dark & Light)        -->
+  <!-- ========================================================================= -->
+  <LinearGradientBrush x:Key="Brush.ToolTip.Background" StartPoint="0.5,0" EndPoint="0.5,1">
+    <GradientStop Color="#FFEFEFEF" Offset="0"/>
+    <GradientStop Color="#FFECECEC" Offset="1"/>
+  </LinearGradientBrush>
+  <SolidColorBrush x:Key="Brush.ToolTip.Border" Color="#FF818181"/>
+  <SolidColorBrush x:Key="Brush.ToolTip.Foreground" Color="#FF4C4C4C"/>
+  <SolidColorBrush x:Key="Brush.ToolTip.BodyForeground" Color="#FF4C4C4C"/>
+  <SolidColorBrush x:Key="Brush.ToolTip.ContentBackground" Color="#FFFBFBFB"/>
+  <SolidColorBrush x:Key="Brush.ToolTip.ContentBorder" Color="#FFDFDFDF"/>
+
+</ResourceDictionary>
