@@ -70,8 +70,38 @@ namespace process_pipeline.Utils
     {
         // 用来存储发生变化的特定受影响目标管线 ID（HashSet 自动去重）
         private static HashSet<ObjectId> _changedObjectIds = new HashSet<ObjectId>();
+        private static int _suppressEventDepth = 0;
         private AcadDb.Database _currentDb;
         private ICheckRule _activeRule;
+
+        /// <summary>
+        /// 当前是否处于内部批量事务事件抑制作用域中。
+        /// </summary>
+        public static bool IsEventsSuppressed => _suppressEventDepth > 0;
+
+        /// <summary>
+        /// 在插件内部执行批量事务（如批量绑定 Group 与 XData、批量翻转管线）期间暂时抑制 Db_ObjectChanged / Db_ObjectErased 事件重入，
+        /// 防止在未提交的 AppTransaction 中对半初始化的 Group/Entity 调用 GetAllEntityIds 或开启嵌套事务导致 AccessViolationException。
+        /// </summary>
+        public static IDisposable SuppressEventsScope()
+        {
+            _suppressEventDepth++;
+            return new EventSuppressionToken();
+        }
+
+        private sealed class EventSuppressionToken : IDisposable
+        {
+            private bool _disposed;
+            public void Dispose()
+            {
+                if (_disposed) return;
+                _disposed = true;
+                if (_suppressEventDepth > 0)
+                {
+                    _suppressEventDepth--;
+                }
+            }
+        }
 
         // 当 PaletteSet 打开或切换文档时，调用此方法开始监听
         public void StartListening(Document doc)
@@ -146,6 +176,7 @@ namespace process_pipeline.Utils
         // 数据库对象发生变化时的回调（极速执行）
         private void Db_ObjectChanged(object sender, ObjectEventArgs e)
         {
+            if (_suppressEventDepth > 0) return;
             ArrowCacheManager.UpdateArrow(e.DBObject);
             RecordIfTargetObject(e.DBObject);
         }
@@ -153,6 +184,7 @@ namespace process_pipeline.Utils
         // 处理 删除 和 撤销删除 (ObjectErasedEventArgs)
         private void Db_ObjectErased(object sender, ObjectErasedEventArgs e)
         {
+            if (_suppressEventDepth > 0) return;
             if (e.Erased)
             {
                 ArrowCacheManager.RemoveArrow(e.DBObject.Id);

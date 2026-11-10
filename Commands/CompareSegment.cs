@@ -480,10 +480,26 @@ namespace process_pipeline.Commands
                 if (changedObj is AttributeReference attrRef && !attrRef.OwnerId.IsNull && attrRef.OwnerId.IsValid)
                 {
                     datasetContext?.InvalidatePreviousData();
-                    Autodesk.AutoCAD.DatabaseServices.Database ownerDb = attrRef.Database ?? _db;
-                    using (OpenCloseTransaction tr = ownerDb.TransactionManager.StartOpenCloseTransaction())
+                    ObjectId ownerBlockId = attrRef.OwnerId;
+                    affected.Add(ownerBlockId);
+                    string ownerHandle = ownerBlockId.Handle.ToString();
+                    if (!string.IsNullOrWhiteSpace(ownerHandle) &&
+                        _prevBlockHandleToPrevPipeHandle.TryGetValue(ownerHandle, out string mappedPipeHandle))
                     {
-                        targetEnt = tr.GetObject(attrRef.OwnerId, OpenMode.ForRead, false) as BlockReference;
+                        AddAffectedPlanPipesByPreviousHandle(mappedPipeHandle, affected);
+                    }
+
+                    Autodesk.AutoCAD.DatabaseServices.Database ownerDb = attrRef.Database ?? _db;
+                    if (ownerDb?.TransactionManager == null || ownerDb.TransactionManager.NumberOfActiveTransactions == 0)
+                    {
+                        using (OpenCloseTransaction tr = ownerDb.TransactionManager.StartOpenCloseTransaction())
+                        {
+                            targetEnt = tr.GetObject(ownerBlockId, OpenMode.ForRead, false) as BlockReference;
+                        }
+                    }
+                    else
+                    {
+                        return affected;
                     }
                 }
 

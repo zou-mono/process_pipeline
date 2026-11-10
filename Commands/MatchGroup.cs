@@ -65,6 +65,12 @@ namespace process_pipeline.Commands
         private readonly Dictionary<ObjectId, HashSet<ObjectId>> _attachmentToPipes =
             new Dictionary<ObjectId, HashSet<ObjectId>>();
 
+        // 缓存最近一次探测出的目标管线图层与属性图层，避免在 Db_ObjectModified 事件回调中重复开启 OpenCloseTransaction 全图扫描
+        private HashSet<string> _cachedPipeLayers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private HashSet<string> _cachedAttrLayers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private bool _cachedIsPlanTextMode = false;
+        private bool _hasCachedTargetLayers = false;
+
         public string RuleId => DefaultRuleId;
         public string RuleName => DefaultRuleName;
 
@@ -294,19 +300,51 @@ namespace process_pipeline.Commands
                 }
 
                 // 情况 2：块内属性（AttributeReference，如修改 LEN / WIDTH 字段值）发生修改，追溯其父块 BlockReference
+                bool hasActiveTransaction = _db.TransactionManager != null && _db.TransactionManager.NumberOfActiveTransactions > 0;
                 Entity targetEnt = changedObj as Entity;
                 if (changedObj is AttributeReference attrRef && !attrRef.OwnerId.IsNull && attrRef.OwnerId.IsValid)
                 {
-                    using (OpenCloseTransaction tr = _db.TransactionManager.StartOpenCloseTransaction())
+                    ObjectId ownerBlockId = attrRef.OwnerId;
+                    if (_attachmentToPipes.TryGetValue(ownerBlockId, out HashSet<ObjectId> ownerBoundPipes))
                     {
-                        targetEnt = tr.GetObject(attrRef.OwnerId, OpenMode.ForRead, false) as BlockReference;
+                        affectedIds.Add(ownerBlockId);
+                        foreach (ObjectId pid in ownerBoundPipes)
+                            affectedIds.Add(pid);
+                    }
+
+                    if (!hasActiveTransaction)
+                    {
+                        using (OpenCloseTransaction tr = _db.TransactionManager.StartOpenCloseTransaction())
+                        {
+                            targetEnt = tr.GetObject(ownerBlockId, OpenMode.ForRead, false) as BlockReference;
+                        }
+                    }
+                    else
+                    {
+                        return affectedIds;
                     }
                 }
 
                 if (targetEnt == null)
                     return affectedIds;
 
-                ResolveTargetLayers(out HashSet<string> pipeLayers, out HashSet<string> attrLayers, out bool isPlanTextMode);
+                HashSet<string> pipeLayers;
+                HashSet<string> attrLayers;
+                bool isPlanTextMode;
+                if (_hasCachedTargetLayers && (PipeLayerNames == null || PipeLayerNames.Count == 0))
+                {
+                    pipeLayers = _cachedPipeLayers;
+                    attrLayers = _cachedAttrLayers;
+                    isPlanTextMode = _cachedIsPlanTextMode;
+                }
+                else if (hasActiveTransaction)
+                {
+                    GetFallbackLayersWithoutTransaction(out pipeLayers, out attrLayers, out isPlanTextMode);
+                }
+                else
+                {
+                    ResolveTargetLayers(out pipeLayers, out attrLayers, out isPlanTextMode);
+                }
 
                 // 情况 3：目标管线图层上的多段线或直线发生几何/图层变更
                 if ((targetEnt is Polyline || targetEnt is Line) &&
@@ -340,23 +378,28 @@ namespace process_pipeline.Commands
                             affectedIds.Add(pid);
                     }
 
-                    double defaultRadius = isPlanTextMode ? 85.0 : 25.0;
-                    double searchBuffer = (MatchOptions?.MaxCurveDistance ?? defaultRadius) * 1.5;
-                    using (OpenCloseTransaction tr = _db.TransactionManager.StartOpenCloseTransaction())
+                    // 严禁在外部 AppTransaction 正在 Commit 的数据库反应器回调（hasActiveTransaction == true）中开启 OpenCloseTransaction 遍历全图，
+                    // 否则 OpenCloseTransaction.Dispose() 会提前关闭外层事务中尚未完成 Commit 的 Entity 导致 AccessViolationException。
+                    if (!hasActiveTransaction)
                     {
-                        BlockTableRecord btr = (BlockTableRecord)tr.GetObject(_db.CurrentSpaceId, OpenMode.ForRead);
-                        foreach (ObjectId oid in btr)
+                        double defaultRadius = isPlanTextMode ? 85.0 : 25.0;
+                        double searchBuffer = (MatchOptions?.MaxCurveDistance ?? defaultRadius) * 1.5;
+                        using (OpenCloseTransaction tr = _db.TransactionManager.StartOpenCloseTransaction())
                         {
-                            string dxfName = oid.ObjectClass.DxfName;
-                            if (dxfName == "LINE" || dxfName == "LWPOLYLINE" || dxfName == "POLYLINE")
+                            BlockTableRecord btr = (BlockTableRecord)tr.GetObject(_db.CurrentSpaceId, OpenMode.ForRead);
+                            foreach (ObjectId oid in btr)
                             {
-                                Entity pipeCandidate = tr.GetObject(oid, OpenMode.ForRead) as Entity;
-                                if (pipeCandidate != null &&
-                                    !string.IsNullOrWhiteSpace(pipeCandidate.Layer) &&
-                                    pipeLayers.Contains(pipeCandidate.Layer) &&
-                                    GeometryHelper.IsIntersection2D(targetEnt, pipeCandidate, searchBuffer))
+                                string dxfName = oid.ObjectClass.DxfName;
+                                if (dxfName == "LINE" || dxfName == "LWPOLYLINE" || dxfName == "POLYLINE")
                                 {
-                                    affectedIds.Add(pipeCandidate.ObjectId);
+                                    Entity pipeCandidate = tr.GetObject(oid, OpenMode.ForRead) as Entity;
+                                    if (pipeCandidate != null &&
+                                        !string.IsNullOrWhiteSpace(pipeCandidate.Layer) &&
+                                        pipeLayers.Contains(pipeCandidate.Layer) &&
+                                        GeometryHelper.IsIntersection2D(targetEnt, pipeCandidate, searchBuffer))
+                                    {
+                                        affectedIds.Add(pipeCandidate.ObjectId);
+                                    }
                                 }
                             }
                         }
@@ -792,6 +835,45 @@ namespace process_pipeline.Commands
         /// 自动探测当前文档中的目标管线图层与属性块/文字标注图层（严格以当前 _db 为唯一数据源，按实有图元数识别规划文字图纸与上版/勘测属性块图纸）。
         /// </summary>
         private void ResolveTargetLayers(
+            out HashSet<string> pipeLayers,
+            out HashSet<string> attrLayers,
+            out bool isPlanningTextMode)
+        {
+            ResolveTargetLayersCore(out pipeLayers, out attrLayers, out isPlanningTextMode);
+            _cachedPipeLayers = new HashSet<string>(pipeLayers, StringComparer.OrdinalIgnoreCase);
+            _cachedAttrLayers = new HashSet<string>(attrLayers, StringComparer.OrdinalIgnoreCase);
+            _cachedIsPlanTextMode = isPlanningTextMode;
+            _hasCachedTargetLayers = true;
+        }
+
+        private void GetFallbackLayersWithoutTransaction(
+            out HashSet<string> pipeLayers,
+            out HashSet<string> attrLayers,
+            out bool isPlanningTextMode)
+        {
+            if (PipeLayerNames != null && PipeLayerNames.Count > 0 &&
+                AttributeLayerNames != null && AttributeLayerNames.Count > 0)
+            {
+                pipeLayers = new HashSet<string>(PipeLayerNames, StringComparer.OrdinalIgnoreCase);
+                attrLayers = new HashSet<string>(AttributeLayerNames, StringComparer.OrdinalIgnoreCase);
+                var cfgTextSet = CadConfig.PlanningData?.GetAllTextLayers() ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                isPlanningTextMode = UsePlanningTextMode ?? attrLayers.Any(l => cfgTextSet.Contains(l));
+                return;
+            }
+
+            var planPipes = CadConfig.PlanningData?.GetAllPipeLayers() ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var planTexts = CadConfig.PlanningData?.GetAllTextLayers() ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var prevPipes = CadConfig.PreviousData.PipeLayers ?? new List<string>();
+            var prevAttrs = CadConfig.PreviousData.AttributeLayers ?? new List<string>();
+            var surveyPipes = CadConfig.SurveyData.PipeLayers ?? new List<string>();
+            var surveyAttrs = CadConfig.SurveyData.AttributeLayers ?? new List<string>();
+
+            pipeLayers = new HashSet<string>(planPipes.Concat(prevPipes).Concat(surveyPipes), StringComparer.OrdinalIgnoreCase);
+            attrLayers = new HashSet<string>(planTexts.Concat(prevAttrs).Concat(surveyAttrs), StringComparer.OrdinalIgnoreCase);
+            isPlanningTextMode = UsePlanningTextMode ?? IsPlanningTextMode;
+        }
+
+        private void ResolveTargetLayersCore(
             out HashSet<string> pipeLayers,
             out HashSet<string> attrLayers,
             out bool isPlanningTextMode)

@@ -770,21 +770,25 @@ namespace process_pipeline.Commands
                     }
 
                     // 2.2 再通过包围盒粗筛箭头当前位置附近 1.5 倍缓冲距离内的候选管线
-                    double searchBuffer = MaxBufferDistance * 1.5;
-                    using (OpenCloseTransaction tr = _db.TransactionManager.StartOpenCloseTransaction())
+                    // （仅当外部无正在提交的事务时才开启 OpenCloseTransaction，防止在 AppTransaction.Commit() 回调中提前关闭外层事务对象）
+                    if (_db.TransactionManager == null || _db.TransactionManager.NumberOfActiveTransactions == 0)
                     {
-                        BlockTableRecord btr = (BlockTableRecord)tr.GetObject(_db.CurrentSpaceId, OpenMode.ForRead);
-                        foreach (ObjectId oid in btr)
+                        double searchBuffer = MaxBufferDistance * 1.5;
+                        using (OpenCloseTransaction tr = _db.TransactionManager.StartOpenCloseTransaction())
                         {
-                            string dxfName = oid.ObjectClass.DxfName;
-                            if (dxfName == "LINE" || dxfName == "LWPOLYLINE" || dxfName == "POLYLINE")
+                            BlockTableRecord btr = (BlockTableRecord)tr.GetObject(_db.CurrentSpaceId, OpenMode.ForRead);
+                            foreach (ObjectId oid in btr)
                             {
-                                Entity pipeCandidate = tr.GetObject(oid, OpenMode.ForRead) as Entity;
-                                if (pipeCandidate != null && PipeLayerName.Contains(pipeCandidate.Layer))
+                                string dxfName = oid.ObjectClass.DxfName;
+                                if (dxfName == "LINE" || dxfName == "LWPOLYLINE" || dxfName == "POLYLINE")
                                 {
-                                    if (GeometryHelper.IsIntersection2D(ent, pipeCandidate, searchBuffer))
+                                    Entity pipeCandidate = tr.GetObject(oid, OpenMode.ForRead) as Entity;
+                                    if (pipeCandidate != null && PipeLayerName.Contains(pipeCandidate.Layer))
                                     {
-                                        affectedIds.Add(pipeCandidate.Id);
+                                        if (GeometryHelper.IsIntersection2D(ent, pipeCandidate, searchBuffer))
+                                        {
+                                            affectedIds.Add(pipeCandidate.Id);
+                                        }
                                     }
                                 }
                             }

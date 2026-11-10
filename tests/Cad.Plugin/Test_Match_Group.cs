@@ -9,6 +9,7 @@ using Autodesk.AutoCAD.Runtime;
 using NLog;
 using process_pipeline.Commands;
 using process_pipeline.Core;
+using process_pipeline.Forms;
 using process_pipeline.Geometry;
 using process_pipeline.Models;
 
@@ -361,6 +362,104 @@ namespace Cad.Plugin
                         $"  [Redo 重做验证] Redo 后有效 Group 数={afterRedoSummary.ValidGroupPairCount}, Resolved 记录={resolvedAfterRedo}");
                     AssertTrue(afterRedoSummary.ValidGroupPairCount == 317 && resolvedAfterRedo == 317,
                         $"BindPipeGroupOperation.Redo 成功重建 317 个 1:1 Group 与 XData 并恢复 Resolved 状态");
+                }
+            }
+
+            // ====================================================================
+            // 场景 5：复现与验证 MdiActiveDocument (AppTransaction) + PaletteRefreshManager 实时监听下
+            //         MainCheckWindowViewModel 多行选中批量执行 BindSelectedPipeGroups() 不崩溃且支持 Undo/Redo
+            // ====================================================================
+            Logger.Info("--- 场景 5：验证 MdiActiveDocument (AppTransaction) 激活监听器下多行批量绑定 Group 与 XData ---");
+            if (Doc != null && Doc.Database != null)
+            {
+                var prevPipeLayers = new[]
+                {
+                    "0污水-待补测现状管",
+                    "0污水-规划新建",
+                    "0污水-规划改建",
+                    "0污水-已核实需新增"
+                };
+                var prevAttrLayers = new[] { "0污水-属性" };
+
+                var activeMatchSvc = new MatchGroupService(Doc.Database, Doc.Editor);
+                var session = DocumentSessionManager.GetOrCreateSession(Doc.Database);
+                session?.RegisterActiveRule(activeMatchSvc);
+
+                var refreshMgr = new process_pipeline.Utils.PaletteRefreshManager();
+                try
+                {
+                    refreshMgr.StartListening(Doc);
+
+                    Dictionary<ObjectId, CheckIssueItem> activeIssues = activeMatchSvc.CheckAll();
+                    if (activeIssues != null && activeIssues.Count > 0)
+                    {
+                        session?.MergeRuleIssues(MatchGroupService.DefaultRuleId, activeIssues, isIncremental: false);
+
+                        var vm = new MainCheckWindowViewModel();
+                        vm.UpdateFromIssues(activeIssues, isIncremental: false);
+
+                        // 5.1 先模拟用户在表格中多选前 25 行，执行右键“一键修复：批量绑定图属 Group 与 XData”
+                        var firstBatchRows = vm.Rows.Take(25).ToList();
+                        vm.SetSelectedRows(firstBatchRows, syncCadSelection: true);
+                        AssertTrue(vm.CanBindSelectedGroup() && vm.GetBindableGroupTargetRows().Count == 25,
+                            $"主面板多选 25 行时 CanBindSelectedGroup 为 true 且待绑定行数为 25 (实际={vm.GetBindableGroupTargetRows().Count})");
+
+                        vm.BindSelectedPipeGroups();
+
+                        PipeSpatialMatchSummary afterBatch25 = matcher.MatchDatabaseBlockAttributes(
+                            Doc.Database,
+                            prevPipeLayers,
+                            prevAttrLayers,
+                            PipeSpatialMatchOptions.FromConfig());
+
+                        int resolvedCount25 = vm.Rows.Count(r => r.SourceIssue?.Status == IssueReviewStatus.Resolved);
+                        Logger.Info(
+                            $"  [AppTransaction 批量绑定 25 行] 有效 Group 数={afterBatch25.ValidGroupPairCount}, 面板已修复行数={resolvedCount25}");
+                        AssertTrue(afterBatch25.ValidGroupPairCount == 25 && resolvedCount25 == 25,
+                            $"MdiActiveDocument (AppTransaction) 下多选 25 行批量绑定成功，0 异常崩溃 (Group={afterBatch25.ValidGroupPairCount}, Resolved={resolvedCount25})");
+
+                        // 5.2 继续多选剩余全部 292 行执行批量绑定
+                        var remainingRows = vm.Rows.Where(r => r.SourceIssue?.Status != IssueReviewStatus.Resolved).ToList();
+                        vm.SetSelectedRows(remainingRows, syncCadSelection: true);
+                        vm.BindSelectedPipeGroups();
+
+                        PipeSpatialMatchSummary afterAll317 = matcher.MatchDatabaseBlockAttributes(
+                            Doc.Database,
+                            prevPipeLayers,
+                            prevAttrLayers,
+                            PipeSpatialMatchOptions.FromConfig());
+
+                        int resolvedCountAll = vm.Rows.Count(r => r.SourceIssue?.Status == IssueReviewStatus.Resolved);
+                        AssertTrue(afterAll317.ValidGroupPairCount == 317 && resolvedCountAll == 317,
+                            $"MdiActiveDocument (AppTransaction) 下继续多选剩余 292 行批量绑定成功，累计 317 组全部成组 (Group={afterAll317.ValidGroupPairCount})");
+
+                        // 5.3 在 AppTransaction 环境下连续执行两次 Undo() 并验证 Redo()
+                        vm.ExecuteUndo();
+                        PipeSpatialMatchSummary afterUndo1 = matcher.MatchDatabaseBlockAttributes(
+                            Doc.Database,
+                            prevPipeLayers,
+                            prevAttrLayers,
+                            PipeSpatialMatchOptions.FromConfig());
+                        AssertTrue(afterUndo1.ValidGroupPairCount == 25,
+                            $"AppTransaction 环境下第一次 Undo 成功回滚 292 组，剩余 25 组 (实际={afterUndo1.ValidGroupPairCount})");
+
+                        vm.ExecuteRedo();
+                        PipeSpatialMatchSummary afterRedo1 = matcher.MatchDatabaseBlockAttributes(
+                            Doc.Database,
+                            prevPipeLayers,
+                            prevAttrLayers,
+                            PipeSpatialMatchOptions.FromConfig());
+                        AssertTrue(afterRedo1.ValidGroupPairCount == 317,
+                            $"AppTransaction 环境下 Redo 成功重新绑定 292 组，恢复 317 组 (实际={afterRedo1.ValidGroupPairCount})");
+
+                        // 还原宿主文档状态
+                        vm.ExecuteUndo();
+                        vm.ExecuteUndo();
+                    }
+                }
+                finally
+                {
+                    refreshMgr.StopListening(Doc);
                 }
             }
 

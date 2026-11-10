@@ -550,6 +550,31 @@ namespace process_pipeline.Forms
         }
 
         /// <summary>
+        /// 编程方式设置当前多选行集合（供自动化测试或批量操作直接指定目标行集合）。
+        /// </summary>
+        public void SetSelectedRows(IEnumerable<PipeRowVm> rows, bool syncCadSelection = false)
+        {
+            _selectedRows.Clear();
+            if (rows != null)
+            {
+                foreach (var r in rows)
+                {
+                    if (r != null && !_selectedRows.Contains(r))
+                    {
+                        _selectedRows.Add(r);
+                    }
+                }
+            }
+            SelectedRow = _selectedRows.FirstOrDefault();
+            NotifyUndoRedoStateChanged();
+
+            if (syncCadSelection && !_isSyncingSelection && _selectedRows.Count > 0)
+            {
+                ZoomToSelectedRow(isZoomTo: false);
+            }
+        }
+
+        /// <summary>
         /// 获取当前右键动作的目标行集合（优先使用表格多选集合，未多选时回退至右键落点行或当前焦点行，并过滤已隐藏行）。
         /// </summary>
         public IReadOnlyList<PipeRowVm> GetActionTargetRows()
@@ -727,18 +752,28 @@ namespace process_pipeline.Forms
 
         /// <summary>
         /// 触发内存视图过滤刷新，清理已被隐藏行的选中残留，并同步底部状态栏记录数与连续行号。
+        /// 在 _rowsView.Refresh() 期间开启 _isSyncingSelection 保护，杜绝多选行被批量过滤归档时逐行触发 DataGrid_SelectionChanged -> SetImpliedSelection 风暴。
         /// </summary>
         public void RefreshFilter()
         {
-            _rowsView?.Refresh();
+            bool prevSyncing = _isSyncingSelection;
+            _isSyncingSelection = true;
+            try
+            {
+                _rowsView?.Refresh();
 
-            if (ContextTargetRow != null && !FilterRow(ContextTargetRow))
-            {
-                ContextTargetRow = null;
+                if (ContextTargetRow != null && !FilterRow(ContextTargetRow))
+                {
+                    ContextTargetRow = null;
+                }
+                if (SelectedRow != null && !FilterRow(SelectedRow))
+                {
+                    SelectedRow = null;
+                }
             }
-            if (SelectedRow != null && !FilterRow(SelectedRow))
+            finally
             {
-                SelectedRow = null;
+                _isSyncingSelection = prevSyncing;
             }
 
             if (_grid != null)
@@ -1270,16 +1305,50 @@ namespace process_pipeline.Forms
                 return;
             }
 
-            var rowByPipeId = new Dictionary<ObjectId, PipeRowVm>(validRows.Count);
+            var rowsByPipeId = new Dictionary<ObjectId, List<(PipeRowVm Row, CheckIssueItem BeforeSnapshot)>>(validRows.Count);
             var batchItems = new List<(ObjectId PipeId, ObjectId AttachmentId, CheckIssueItem BeforeSnapshot)>(validRows.Count);
+            var seenEntities = new HashSet<ObjectId>();
 
             foreach (PipeRowVm row in validRows)
             {
                 ObjectId pipeId = row.TargetObjectId;
                 ObjectId attId = row.SourceIssue.RelatedObjectIds[0];
-                rowByPipeId[pipeId] = row;
-                batchItems.Add((pipeId, attId, row.SourceIssue.CloneSnapshot()));
+
+                // 兼容孤立属性块行（IssueId 以 MatchGroup:ATT_ 开头，或 RulePayload 明确记录了 PipeId / AttachmentId）
+                if (row.SourceIssue?.RulePayload is PipeAttachmentMatchItem matchPayload &&
+                    matchPayload.Pipe != null && !matchPayload.Pipe.PipeId.IsNull &&
+                    matchPayload.MatchedAttachment != null && !matchPayload.MatchedAttachment.AttachmentId.IsNull)
+                {
+                    pipeId = matchPayload.Pipe.PipeId;
+                    attId = matchPayload.MatchedAttachment.AttachmentId;
+                }
+
+                if (pipeId.IsNull || attId.IsNull || !pipeId.IsValid || !attId.IsValid || pipeId.IsErased || attId.IsErased)
+                    continue;
+
+                CheckIssueItem snapshot = row.SourceIssue.CloneSnapshot();
+                if (!rowsByPipeId.TryGetValue(pipeId, out var rowList))
+                {
+                    rowList = new List<(PipeRowVm Row, CheckIssueItem BeforeSnapshot)>();
+                    rowsByPipeId[pipeId] = rowList;
+                }
+                rowList.Add((row, snapshot));
+
+                // 确保每个管线与属性块在单次批量操作中只添加一次
+                if (seenEntities.Add(pipeId) && seenEntities.Add(attId))
+                {
+                    batchItems.Add((pipeId, attId, snapshot));
+                }
             }
+
+            if (batchItems.Count == 0)
+            {
+                StatusText = "选中的记录未关联有效 CAD 管线或属性块图元，无法绑定 Group";
+                return;
+            }
+
+            // 执行批量 Group 绑定前先清空 CAD Pickfirst 预选集与瞬态辅助线，防止 AcEdGripManager 在事务提交时重入
+            ClearCadSelection();
 
             var op = new BindPipeGroupOperation(
                 batchItems,
@@ -1291,13 +1360,36 @@ namespace process_pipeline.Forms
                         foreach (var item in restoredList)
                         {
                             affectedIds.Add(item.PipeId);
-                            if (item.Snapshot != null && rowByPipeId.TryGetValue(item.PipeId, out PipeRowVm targetRow))
+                            if (rowsByPipeId.TryGetValue(item.PipeId, out var targetRowEntries))
                             {
-                                if (targetRow.SourceIssue?.RelatedObjectIds != null)
+                                foreach (var entry in targetRowEntries)
                                 {
-                                    affectedIds.AddRange(targetRow.SourceIssue.RelatedObjectIds);
+                                    PipeRowVm targetRow = entry.Row;
+                                    if (targetRow?.SourceIssue?.RelatedObjectIds != null)
+                                    {
+                                        affectedIds.AddRange(targetRow.SourceIssue.RelatedObjectIds);
+                                    }
+
+                                    CheckIssueItem snapshotToApply = isUndo
+                                        ? entry.BeforeSnapshot?.CloneSnapshot()
+                                        : item.Snapshot?.CloneSnapshot();
+
+                                    if (snapshotToApply != null)
+                                    {
+                                        if (!isUndo)
+                                        {
+                                            // 保持各自行的原始 IssueId / TargetObjectId，仅同步 Resolved 状态与备注
+                                            CheckIssueItem rowSpecificSnapshot = entry.BeforeSnapshot?.CloneSnapshot() ?? snapshotToApply;
+                                            rowSpecificSnapshot.Status = snapshotToApply.Status;
+                                            rowSpecificSnapshot.Remark = snapshotToApply.Remark;
+                                            ApplyIssueSnapshotToRow(targetRow, rowSpecificSnapshot, refreshTreeAndFilter: false);
+                                        }
+                                        else
+                                        {
+                                            ApplyIssueSnapshotToRow(targetRow, snapshotToApply, refreshTreeAndFilter: false);
+                                        }
+                                    }
                                 }
-                                ApplyIssueSnapshotToRow(targetRow, item.Snapshot, refreshTreeAndFilter: false);
                             }
                         }
 
@@ -1311,13 +1403,13 @@ namespace process_pipeline.Forms
             ActiveUndoRedoManager.ExecuteOperation(op);
             NotifyUndoRedoStateChanged();
 
-            if (validRows.Count == 1)
+            if (batchItems.Count == 1)
             {
                 StatusText = $"已绑定管线 [{validRows[0].Id}] 的 Group 与 XData，并归档至【已修复】";
             }
             else
             {
-                StatusText = $"已批量绑定 {validRows.Count} 组管线 Group 与 XData，并归档至【已修复】";
+                StatusText = $"已批量绑定 {batchItems.Count} 组管线 Group 与 XData，并归档至【已修复】";
             }
         }
 
