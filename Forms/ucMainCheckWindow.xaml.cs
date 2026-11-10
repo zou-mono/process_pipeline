@@ -1557,8 +1557,24 @@ namespace process_pipeline.Forms
             var doc = AcadApp.DocumentManager.MdiActiveDocument;
             if (doc == null) return;
 
-            var validIds = targetRows
+            var primaryPipeIds = targetRows
                 .Select(r => r.TargetObjectId)
+                .Where(id => !id.IsNull && id.IsValid && !id.IsErased)
+                .Distinct()
+                .ToArray();
+
+            var validIds = targetRows
+                .SelectMany(r =>
+                {
+                    var ids = new List<ObjectId>();
+                    if (!r.TargetObjectId.IsNull)
+                        ids.Add(r.TargetObjectId);
+                    if (r.SourceIssue?.RelatedObjectIds != null)
+                        ids.AddRange(r.SourceIssue.RelatedObjectIds);
+                    if (r.SourceIssue?.PossibleMatches != null)
+                        ids.AddRange(r.SourceIssue.PossibleMatches.Select(m => m.Id));
+                    return ids;
+                })
                 .Where(id => !id.IsNull && id.IsValid && !id.IsErased)
                 .Distinct()
                 .ToArray();
@@ -1596,25 +1612,27 @@ namespace process_pipeline.Forms
             try
             {
                 var selector = new SelectByHandleService(doc.Database, doc.Editor);
-                selector.SelectByHandles(validIds, isZoomTo);
+                var impliedSelectIds = primaryPipeIds.Length > 0 ? primaryPipeIds : validIds;
+                selector.SelectByHandles(impliedSelectIds, isZoomTo, additionalZoomObjs: validIds);
 
-                GraphicManager.ClearAuxiliaryGraphics();
+                var selectedIssues = targetRows
+                    .Select(r => r.SourceIssue)
+                    .Where(i => i != null)
+                    .ToList();
+                GraphicManager.DrawIssueHighlights(doc.Database, selectedIssues);
+
+                try { doc.Editor.UpdateScreen(); } catch { }
+
                 if (targetRows.Count == 1)
                 {
-                    var issue = targetRows[0].SourceIssue;
-                    if (issue != null &&
-                        issue.PossibleMatches != null &&
-                        issue.PossibleMatches.Count > 0)
-                    {
-                        GraphicManager.DrawAuxiliaryLines(issue.PossibleMatches);
-                    }
                     StatusText = isZoomTo ? $"已定位到管线 [{targetRows[0].Id}]" : $"已选中管线 [{targetRows[0].Id}]";
                 }
                 else
                 {
+                    int displayCount = primaryPipeIds.Length > 0 ? primaryPipeIds.Length : targetRows.Count;
                     StatusText = isZoomTo
-                        ? $"已批量定位到 {validIds.Length} 条管线"
-                        : $"已批量选中 {validIds.Length} 条管线";
+                        ? $"已批量定位到 {displayCount} 条管线"
+                        : $"已批量选中 {displayCount} 条管线";
                 }
             }
             finally
@@ -1637,6 +1655,7 @@ namespace process_pipeline.Forms
             {
                 GraphicManager.ClearAuxiliaryGraphics();
                 doc.Editor.SetImpliedSelection(Array.Empty<ObjectId>());
+                try { doc.Editor.UpdateScreen(); } catch { }
                 StatusText = "已清空选择";
             }
             catch

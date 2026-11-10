@@ -81,42 +81,94 @@ namespace process_pipeline.Commands
             }
         }
 
-        public void SelectByHandles(IEnumerable<ObjectId> selObjs, bool bZoomToExtent=true)
+        public void SelectByHandles(
+            IEnumerable<ObjectId> selObjs,
+            bool bZoomToExtent = true,
+            IEnumerable<ObjectId> additionalZoomObjs = null)
         {
             if (selObjs == null || !selObjs.Any()) return;
 
             try
             {
                 // 转成数组，便于处理
-                var objectIds = selObjs.Where(id => !id.IsNull && !id.IsErased).ToArray();
-                //using (var docLock = Doc.LockDocument())
-                // 事务处理 + 打开实体
+                var initialIds = selObjs.Where(id => !id.IsNull && !id.IsErased).ToArray();
+                var expandedIds = new List<ObjectId>(initialIds.Length * 2);
+                var seenIds = new HashSet<ObjectId>();
+
                 Extents3d totalExtents = new Extents3d();
                 bool hasValidEntity = false;
 
-                using (Transaction tr = Db.TransactionManager.StartTransaction())
-                //using (OpenCloseTransaction tr = Db.TransactionManager.StartOpenCloseTransaction())
+                using (OpenCloseTransaction tr = Db.TransactionManager.StartOpenCloseTransaction())
                 {
-                    // 1. 高亮所有实体 + 计算联合包围盒            
-                    foreach (var oid in objectIds)
+                    // 1. 收集目标实体及其所属可选择 CAD Group 的全部同组成员，并计算联合包围盒
+                    foreach (var oid in initialIds)
                     {
                         if (oid.IsNull || oid.IsErased) continue;
 
                         Entity ent = tr.GetObject(oid, OpenMode.ForRead) as Entity;
                         if (ent == null) continue;
 
-                        //ent.Highlight();  // 高亮当前实体
-
-                        if (bZoomToExtent) 
-                        { 
-                            totalExtents.AddExtents(ent.GeometricExtents);
+                        if (seenIds.Add(oid))
+                        {
+                            expandedIds.Add(oid);
+                            if (bZoomToExtent)
+                            {
+                                try { totalExtents.AddExtents(ent.GeometricExtents); } catch { }
+                            }
+                            hasValidEntity = true;
                         }
-                            
-                        hasValidEntity = true;    
+
+                        // 若该图元已绑定至 CAD Group（通过 PersistentReactorIds 指向 Group），则将同组其它成员（如配对的 ws 属性块或管线）一并纳入选中集合
+                        ObjectIdCollection reactorIds = ent.GetPersistentReactorIds();
+                        if (reactorIds != null && reactorIds.Count > 0)
+                        {
+                            foreach (ObjectId rId in reactorIds)
+                            {
+                                if (rId.IsNull || !rId.IsValid || rId.IsErased)
+                                    continue;
+
+                                if (tr.GetObject(rId, OpenMode.ForRead, false) is Group grp && !grp.IsErased && grp.Selectable)
+                                {
+                                    ObjectId[] memberIds = grp.GetAllEntityIds();
+                                    if (memberIds == null) continue;
+
+                                    foreach (ObjectId mid in memberIds)
+                                    {
+                                        if (mid.IsNull || !mid.IsValid || mid.IsErased || !seenIds.Add(mid))
+                                            continue;
+
+                                        if (tr.GetObject(mid, OpenMode.ForRead, false) is Entity memberEnt)
+                                        {
+                                            expandedIds.Add(mid);
+                                            if (bZoomToExtent)
+                                            {
+                                                try { totalExtents.AddExtents(memberEnt.GeometricExtents); } catch { }
+                                            }
+                                            hasValidEntity = true;
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
-                    //tr.Commit();
-                    //Ed.WriteMessage($"\n成功：已选中句柄为 [{handleStr}] 的要素，并跳转到其范围！");
+
+                    // 2. 若需要缩放视口且传入了关联图元（如尚未成组的配对属性块/文字），将其几何范围一并纳入缩放视口而不强制加入预选集（避免 CAD 默认蓝色选中特效将未成组属性块染蓝）
+                    if (bZoomToExtent && additionalZoomObjs != null)
+                    {
+                        foreach (ObjectId zId in additionalZoomObjs)
+                        {
+                            if (zId.IsNull || !zId.IsValid || zId.IsErased || seenIds.Contains(zId))
+                                continue;
+
+                            if (tr.GetObject(zId, OpenMode.ForRead, false) is Entity zoomEnt)
+                            {
+                                try { totalExtents.AddExtents(zoomEnt.GeometricExtents); } catch { }
+                            }
+                        }
+                    }
                 }
+
+                var objectIds = expandedIds.ToArray();
 
                 if (!hasValidEntity)
                 {
@@ -149,7 +201,7 @@ namespace process_pipeline.Commands
                     Ed.ZoomToExtents(totalExtents);
                 }
 
-                //Ed.Regen();
+                try { Ed.UpdateScreen(); } catch { }
             }
             catch (System.Exception ex)
             {

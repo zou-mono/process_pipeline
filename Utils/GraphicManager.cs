@@ -24,22 +24,34 @@ namespace process_pipeline.Utils
         private static List<Drawable> _tempGraphics = new List<Drawable>();
 
         /// <summary>
+        /// 当前活动瞬态图形数量（供诊断与自动化测试断言）。
+        /// </summary>
+        public static int ActiveTransientCount => _tempGraphics.Count;
+
+        /// <summary>
         /// 将一个内存中的图形（如 Line）作为临时图形显示在屏幕最顶层
         /// </summary>
         public static void AddGraphic(Drawable drawable)
         {
             if (drawable == null) return;
 
-            // 调用 CAD 底层 API 渲染到屏幕
-            TransientManager.CurrentTransientManager.AddTransient(
-                drawable, 
-                TransientDrawingMode.DirectTopmost, // 直接画在最顶层，不会被遮挡
-                128, 
-                new IntegerCollection()
-            );
+            try
+            {
+                // 调用 CAD 底层 API 渲染到屏幕
+                TransientManager.CurrentTransientManager.AddTransient(
+                    drawable, 
+                    TransientDrawingMode.DirectTopmost, // 直接画在最顶层，不会被遮挡
+                    128, 
+                    new IntegerCollection()
+                );
 
-            // 加入全局列表以便后续清理
-            _tempGraphics.Add(drawable);
+                // 加入全局列表以便后续清理
+                _tempGraphics.Add(drawable);
+            }
+            catch
+            {
+                try { drawable.Dispose(); } catch { }
+            }
         }
 
         public static void ClearAuxiliaryGraphics()
@@ -48,14 +60,26 @@ namespace process_pipeline.Utils
 
             foreach (var drawable in _tempGraphics)
             {
-                // 从屏幕上抹除这个瞬态图形
-                TransientManager.CurrentTransientManager.EraseTransient(
-                    drawable, 
-                    new IntegerCollection()
-                );
-        
-                // 释放非托管内存
-                drawable.Dispose();
+                try
+                {
+                    // 从屏幕上抹除这个瞬态图形
+                    TransientManager.CurrentTransientManager.EraseTransient(
+                        drawable, 
+                        new IntegerCollection()
+                    );
+                }
+                catch
+                {
+                }
+
+                try
+                {
+                    // 释放非托管内存
+                    drawable.Dispose();
+                }
+                catch
+                {
+                }
             }
 
             _tempGraphics.Clear();
@@ -65,21 +89,232 @@ namespace process_pipeline.Utils
         {
             // 1. 每次画新线之前，先把旧的临时线清掉
             ClearAuxiliaryGraphics();
+            AppendAuxiliaryMatchLines(possibleMatches);
+        }
+
+        /// <summary>
+        /// 追加绘制候选配对的红色瞬态辅助连线与锚定圆圈（当属性块插入点恰好落在直管段上导致距离 &lt; 0.05m 时，自动绘制半径 1.2m 的醒目红色定位圆圈）。
+        /// </summary>
+        public static void AppendAuxiliaryMatchLines(IEnumerable<MatchItem> possibleMatches)
+        {
+            if (possibleMatches == null) return;
 
             foreach (MatchItem match in possibleMatches)
             {
-                Point3d arrowPt = match.Position; // 箭头起点
-                Point3d closePoint = match.closePoint; // 箭头终点
+                Point3d arrowPt = match.Position;      // 附属要素（块/文字/箭头）位置
+                Point3d closePoint = match.closePoint; // 管线最近投影点
+                double dist = arrowPt.DistanceTo(closePoint);
 
-                // 2. 直接在内存中 new 一个 Line，【绝对不要】把它加到图纸数据库(btr.AppendEntity)里！
-                Line auxLine = new Line(arrowPt, closePoint);
-                auxLine.ColorIndex = 1; // 1 = 红色
+                if (dist >= 0.05)
+                {
+                    // 在内存中创建红色瞬态连线与管线落点小圆圈（绝不加入数据库）
+                    Line auxLine = new Line(arrowPt, closePoint)
+                    {
+                        ColorIndex = 1, // 1 = 红色
+                        LineWeight = LineWeight.LineWeight030
+                    };
+                    AddGraphic(auxLine);
 
-                // 可选：如果你想让线型变成虚线，可以直接改 Linetype，但通常红色实线就够显眼了
-                // auxLine.LineWeight = LineWeight.LineWeight018; 
-
-                AddGraphic(auxLine);
+                    Circle anchorCircle = new Circle(closePoint, Vector3d.ZAxis, 0.8)
+                    {
+                        ColorIndex = 1,
+                        LineWeight = LineWeight.LineWeight030
+                    };
+                    AddGraphic(anchorCircle);
+                }
+                else
+                {
+                    // 当属性块恰好位于直管段中点（距离 < 0.05m，如 B8、CE 等）时，零长度 Line 不可见，绘制半径 1.2m 的醒目红色锚定圆圈
+                    Circle onPipeCircle = new Circle(closePoint, Vector3d.ZAxis, 1.2)
+                    {
+                        ColorIndex = 1,
+                        LineWeight = LineWeight.LineWeight030
+                    };
+                    AddGraphic(onPipeCircle);
+                }
             }
+        }
+
+        /// <summary>
+        /// 针对核查面板选中的一行或多行问题记录，在图面最顶层（DirectTopmost）绘制轻量级瞬态视觉高亮辅助图形（方案 B）：
+        /// 1. 目标管线（TargetObjectId）使用纯内存 Line 原语绘制为加粗洋红色（ACI=6，Magenta）；
+        /// 2. 配对属性块/文字标注/流向箭头（RelatedObjectIds 及 PossibleMatches）提取其几何包围盒（GeometricExtents），
+        ///    在属性块外围绘制同色（洋红色 ACI=6）矩形外框，不克隆块内子文字，兼顾视觉辨识度与多选流畅度；
+        /// 3. 配对连线与落点锚定圈（PossibleMatches）绘制为红色（ACI=1，Red）辅助图形，切换行时自动擦除恢复原状。
+        /// </summary>
+        public static void DrawIssueHighlights(Autodesk.AutoCAD.DatabaseServices.Database db, IEnumerable<CheckIssueItem> issues)
+        {
+            ClearAuxiliaryGraphics();
+            if (db == null || issues == null) return;
+
+            var targetIssues = issues.Where(i => i != null).Take(20).ToList();
+            if (targetIssues.Count == 0) return;
+
+            const short HighlightMagentaColor = 6; // 6 = 洋红色 (Magenta)，使目标管线与配对属性块外框保持同色高亮
+            var highlightedEntities = new HashSet<ObjectId>();
+
+            try
+            {
+                using (OpenCloseTransaction tr = db.TransactionManager.StartOpenCloseTransaction())
+                {
+                    foreach (CheckIssueItem issue in targetIssues)
+                    {
+                        // 1. 高亮主目标图元（洋红色 ACI=6）
+                        if (!issue.TargetObjectId.IsNull && issue.TargetObjectId.IsValid && !issue.TargetObjectId.IsErased &&
+                            highlightedEntities.Add(issue.TargetObjectId))
+                        {
+                            if (tr.GetObject(issue.TargetObjectId, OpenMode.ForRead, false) is Entity targetEnt)
+                            {
+                                AddTransientEntityDrawables(targetEnt, HighlightMagentaColor, LineWeight.LineWeight050);
+                            }
+                        }
+
+                        // 2. 收集并高亮关联图元（配对的 ws 属性块、文字标注、流向箭头绘制同色洋红色 ACI=6 矩形包围盒外框）
+                        var relIds = new List<ObjectId>();
+                        if (issue.RelatedObjectIds != null)
+                        {
+                            relIds.AddRange(issue.RelatedObjectIds);
+                        }
+                        if (issue.PossibleMatches != null)
+                        {
+                            foreach (MatchItem m in issue.PossibleMatches)
+                            {
+                                if (!m.Id.IsNull)
+                                    relIds.Add(m.Id);
+                            }
+                        }
+
+                        foreach (ObjectId relId in relIds)
+                        {
+                            if (relId.IsNull || !relId.IsValid || relId.IsErased || !highlightedEntities.Add(relId))
+                                continue;
+
+                            if (tr.GetObject(relId, OpenMode.ForRead, false) is Entity relEnt)
+                            {
+                                AddTransientEntityDrawables(relEnt, HighlightMagentaColor, LineWeight.LineWeight050);
+                            }
+                        }
+
+                        // 3. 绘制红色配对辅助连线与管线落点锚定圆圈
+                        if (issue.PossibleMatches != null && issue.PossibleMatches.Count > 0)
+                        {
+                            AppendAuxiliaryMatchLines(issue.PossibleMatches);
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                // 忽略瞬态图形构建异常
+            }
+        }
+
+        /// <summary>
+        /// 在内存中创建不依赖数据库 LayerId / TextStyleId 的纯几何 Line 原语加入 TransientManager：
+        /// - 针对管线（Polyline / Line）：按各管段顶点生成洋红色加粗 Line 原语；
+        /// - 针对属性块/文字（BlockReference / DBText / MText）：按方案 B 生成包围盒（GeometricExtents）同色洋红色矩形外框。
+        /// </summary>
+        private static void AddTransientEntityDrawables(Entity ent, short colorIndex, LineWeight lineWeight)
+        {
+            if (ent == null) return;
+
+            try
+            {
+                if (ent is Autodesk.AutoCAD.DatabaseServices.Polyline pl && pl.NumberOfVertices >= 2)
+                {
+                    int segCount = pl.Closed ? pl.NumberOfVertices : pl.NumberOfVertices - 1;
+                    for (int i = 0; i < segCount; i++)
+                    {
+                        SegmentType segType = pl.GetSegmentType(i);
+                        if (segType == SegmentType.Line)
+                        {
+                            LineSegment3d seg = pl.GetLineSegmentAt(i);
+                            AddGraphic(new Line(seg.StartPoint, seg.EndPoint)
+                            {
+                                ColorIndex = colorIndex,
+                                LineWeight = lineWeight
+                            });
+                        }
+                        else if (segType == SegmentType.Arc)
+                        {
+                            CircularArc3d arc = pl.GetArcSegmentAt(i);
+                            PointOnCurve3d[] samplePts = arc.GetSamplePoints(13);
+                            for (int k = 0; k < samplePts.Length - 1; k++)
+                            {
+                                AddGraphic(new Line(samplePts[k].Point, samplePts[k + 1].Point)
+                                {
+                                    ColorIndex = colorIndex,
+                                    LineWeight = lineWeight
+                                });
+                            }
+                        }
+                    }
+                    return;
+                }
+
+                if (ent is Line ln)
+                {
+                    AddGraphic(new Line(ln.StartPoint, ln.EndPoint)
+                    {
+                        ColorIndex = colorIndex,
+                        LineWeight = lineWeight
+                    });
+                    return;
+                }
+
+                if (ent is BlockReference || ent is DBText || ent is MText)
+                {
+                    AddTransientBoundingBox(ent, colorIndex, lineWeight);
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        /// <summary>
+        /// 方案 B：提取属性块或文字标注的几何外包框（GeometricExtents），在内存中绘制 4 条纯几何 Line 组成的同色矩形高亮外框。
+        /// </summary>
+        private static void AddTransientBoundingBox(Entity ent, short colorIndex, LineWeight lineWeight)
+        {
+            if (ent == null) return;
+
+            double minX, minY, maxX, maxY, z = 0.0;
+            try
+            {
+                Extents3d ext = ent.GeometricExtents;
+                minX = ext.MinPoint.X;
+                minY = ext.MinPoint.Y;
+                maxX = ext.MaxPoint.X;
+                maxY = ext.MaxPoint.Y;
+                z = ext.MinPoint.Z;
+            }
+            catch
+            {
+                Point3d fallbackPt = Point3d.Origin;
+                if (ent is BlockReference br) fallbackPt = br.Position;
+                else if (ent is DBText txt) fallbackPt = txt.Position;
+                else if (ent is MText mtxt) fallbackPt = mtxt.Location;
+
+                minX = fallbackPt.X - 1.5;
+                maxX = fallbackPt.X + 1.5;
+                minY = fallbackPt.Y - 1.5;
+                maxY = fallbackPt.Y + 1.5;
+                z = fallbackPt.Z;
+            }
+
+            double span = Math.Max(maxX - minX, maxY - minY);
+            double pad = Math.Max(0.4, Math.Min(1.5, span * 0.03));
+
+            Point3d p1 = new Point3d(minX - pad, minY - pad, z);
+            Point3d p2 = new Point3d(maxX + pad, minY - pad, z);
+            Point3d p3 = new Point3d(maxX + pad, maxY + pad, z);
+            Point3d p4 = new Point3d(minX - pad, maxY + pad, z);
+
+            AddGraphic(new Line(p1, p2) { ColorIndex = colorIndex, LineWeight = lineWeight });
+            AddGraphic(new Line(p2, p3) { ColorIndex = colorIndex, LineWeight = lineWeight });
+            AddGraphic(new Line(p3, p4) { ColorIndex = colorIndex, LineWeight = lineWeight });
+            AddGraphic(new Line(p4, p1) { ColorIndex = colorIndex, LineWeight = lineWeight });
         }
 
         public static void RefreshDataGrid(Document doc, List<ObjectId> idsToProcess)

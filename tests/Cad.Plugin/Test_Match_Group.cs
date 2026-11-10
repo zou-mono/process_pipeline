@@ -398,6 +398,16 @@ namespace Cad.Plugin
                         var vm = new MainCheckWindowViewModel();
                         vm.UpdateFromIssues(activeIssues, isIncremental: false);
 
+                        // 5.0 验证点击任意行（含 6B/6F/70 以外的 71、A1、B8、CE 等直管/折管行）均能按方案B生成轻量瞬态高亮（洋红管线 + 洋红属性块矩形外框 + 红色连线/锚圈）
+                        var row71 = vm.Rows.FirstOrDefault(r => string.Equals(r.Id, "71", StringComparison.OrdinalIgnoreCase));
+                        var rowB8 = vm.Rows.FirstOrDefault(r => string.Equals(r.Id, "B8", StringComparison.OrdinalIgnoreCase));
+                        vm.SetSelectedRows(new[] { row71 }, syncCadSelection: true);
+                        int transientsFor71 = process_pipeline.Utils.GraphicManager.ActiveTransientCount;
+                        vm.SetSelectedRows(new[] { rowB8 }, syncCadSelection: true);
+                        int transientsForB8 = process_pipeline.Utils.GraphicManager.ActiveTransientCount;
+                        AssertTrue(row71 != null && rowB8 != null && transientsFor71 >= 6 && transientsForB8 >= 6,
+                            $"点击常规图层管线行（如 Handle=71 与零距离直管 Handle=B8）均成功按方案B生成管线(洋红)+属性块矩形外框(洋红)+辅助连线/锚圈(红)瞬态高亮 (71={transientsFor71}, B8={transientsForB8})");
+
                         // 5.1 先模拟用户在表格中多选前 25 行，执行右键“一键修复：批量绑定图属 Group 与 XData”
                         var firstBatchRows = vm.Rows.Take(25).ToList();
                         vm.SetSelectedRows(firstBatchRows, syncCadSelection: true);
@@ -432,6 +442,35 @@ namespace Cad.Plugin
                         int resolvedCountAll = vm.Rows.Count(r => r.SourceIssue?.Status == IssueReviewStatus.Resolved);
                         AssertTrue(afterAll317.ValidGroupPairCount == 317 && resolvedCountAll == 317,
                             $"MdiActiveDocument (AppTransaction) 下继续多选剩余 292 行批量绑定成功，累计 317 组全部成组 (Group={afterAll317.ValidGroupPairCount})");
+
+                        // 检查 AppTransaction 绑定后，管线与属性块的 PersistentReactorIds 是否包含 Group ObjectId，以及 PICKSTYLE 值
+                        int pickStyleVal = Convert.ToInt32(Autodesk.AutoCAD.ApplicationServices.Application.GetSystemVariable("PICKSTYLE"));
+                        int pipeWithGroupReactorCount = 0;
+                        int attWithGroupReactorCount = 0;
+                        int selectableGroupCount = 0;
+                        using (OpenCloseTransaction trCheck = Doc.Database.TransactionManager.StartOpenCloseTransaction())
+                        {
+                            DBDictionary gDict = (DBDictionary)trCheck.GetObject(Doc.Database.GroupDictionaryId, OpenMode.ForRead);
+                            foreach (DBDictionaryEntry entry in gDict)
+                            {
+                                Group g = trCheck.GetObject(entry.Value, OpenMode.ForRead) as Group;
+                                if (g == null || g.IsErased) continue;
+                                if (g.Selectable) selectableGroupCount++;
+                                ObjectId[] mids = g.GetAllEntityIds();
+                                if (mids != null && mids.Length == 2)
+                                {
+                                    DBObject e0 = trCheck.GetObject(mids[0], OpenMode.ForRead);
+                                    DBObject e1 = trCheck.GetObject(mids[1], OpenMode.ForRead);
+                                    var r0 = e0?.GetPersistentReactorIds();
+                                    var r1 = e1?.GetPersistentReactorIds();
+                                    if (r0 != null && r0.Contains(entry.Value)) pipeWithGroupReactorCount++;
+                                    if (r1 != null && r1.Contains(entry.Value)) attWithGroupReactorCount++;
+                                }
+                            }
+                        }
+                        Logger.Info($"  [Group 反应器诊断] PICKSTYLE={pickStyleVal}, SelectableGroup={selectableGroupCount}, PipeReactorOK={pipeWithGroupReactorCount}/317, AttReactorOK={attWithGroupReactorCount}/317");
+                        AssertTrue((pickStyleVal & 1) != 0 && selectableGroupCount == 317 && pipeWithGroupReactorCount == 317 && attWithGroupReactorCount == 317,
+                            $"全部 317 组管线与属性块均已挂载 Group 持久反应器且已自动开启 PICKSTYLE 编组选择 (PICKSTYLE={pickStyleVal}, PipeReactor={pipeWithGroupReactorCount}, AttReactor={attWithGroupReactorCount})");
 
                         // 5.3 在 AppTransaction 环境下连续执行两次 Undo() 并验证 Redo()
                         vm.ExecuteUndo();

@@ -717,6 +717,25 @@ namespace process_pipeline.Core
                             throw;
                         }
                     }
+
+                    // 确保 CAD 系统变量 PICKSTYLE 开启“编组选择”位（bit 1 = 1，对应快捷键 Ctrl+Shift+A），
+                    // 否则当 PICKSTYLE=0 时用户在图面上点击已成组的管线或属性块时 CAD 不会整组联动选中。
+                    try
+                    {
+                        object pickStyleObj = AcadApp.GetSystemVariable("PICKSTYLE");
+                        if (pickStyleObj != null)
+                        {
+                            int pickStyle = Convert.ToInt32(pickStyleObj);
+                            if ((pickStyle & 1) == 0)
+                            {
+                                AcadApp.SetSystemVariable("PICKSTYLE", (short)(pickStyle | 1));
+                            }
+                        }
+                    }
+                    catch
+                    {
+                        // 忽略无头或特殊环境下的系统变量设置异常
+                    }
                 }
 
                 DocumentSessionManager.GetOrCreateSession(db)?.DatasetContext.InvalidatePreviousData();
