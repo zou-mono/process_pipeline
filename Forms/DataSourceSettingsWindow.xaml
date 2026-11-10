@@ -136,11 +136,11 @@
                        VerticalContentAlignment="Center"
                        Padding="4,0"/>
               <Button Grid.Column="2"
-                      Content="浏览..."
                       Command="{Binding BrowsePreviousFileCommand}"
-                      Width="68"
-                      Height="24"
-                      Margin="6,0,0,0"/>
+                      Style="{StaticResource CadBrowseIconButtonStyle}"
+                      ToolTip="浏览并选择外部【上版数据】DWG 图纸文件">
+                <ContentControl Template="{StaticResource IconTemplate.FolderBrowse}" Width="16" Height="16" Focusable="False"/>
+              </Button>
             </Grid>
 
             <TextBlock Text="{Binding PreviousValidationText}"
@@ -205,11 +205,11 @@
                        VerticalContentAlignment="Center"
                        Padding="4,0"/>
               <Button Grid.Column="2"
-                      Content="浏览..."
                       Command="{Binding BrowseSurveyFileCommand}"
-                      Width="68"
-                      Height="24"
-                      Margin="6,0,0,0"/>
+                      Style="{StaticResource CadBrowseIconButtonStyle}"
+                      ToolTip="浏览并选择外部【勘测数据】DWG 图纸文件">
+                <ContentControl Template="{StaticResource IconTemplate.FolderBrowse}" Width="16" Height="16" Focusable="False"/>
+              </Button>
             </Grid>
 
             <TextBlock Text="{Binding SurveyValidationText}"
@@ -243,8 +243,8 @@
       </StackPanel>
     </Border>
 
-    <!-- 4. 底部操作栏 -->
-    <Grid Grid.Row="3">
+    <!-- 4. 底部操作栏 (AutoCAD 2019 矢量图标按钮 + 悬停 ToolTip) -->
+    <Grid Grid.Row="3" MinHeight="30" Margin="0,2,0,0">
       <Grid.ColumnDefinitions>
         <ColumnDefinition Width="Auto"/>
         <ColumnDefinition Width="*"/>
@@ -252,10 +252,13 @@
       </Grid.ColumnDefinitions>
 
       <Button Grid.Column="0"
-              Content="重新智能探测"
               Command="{Binding AutoSniffCommand}"
-              Style="{StaticResource DialogActionButtonStyle}"
-              Margin="0"/>
+              Style="{StaticResource CadDialogIconButtonStyle}"
+              VerticalAlignment="Center"
+              Margin="0"
+              ToolTip="重新智能探测：自动扫描当前图纸图层、已打开 MDI 文档及同目录 DWG 文件">
+        <ContentControl Template="{StaticResource IconTemplate.AutoSniff}" Width="18" Height="18" Focusable="False"/>
+      </Button>
 
       <TextBlock Grid.Column="1"
                  Text="{Binding FooterStatusText}"
@@ -265,16 +268,19 @@
                  Opacity="0.85"
                  TextTrimming="CharacterEllipsis"/>
 
-      <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right">
-        <Button Content="确定并保存"
-                IsDefault="True"
+      <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+        <Button IsDefault="True"
                 Command="{Binding ConfirmCommand}"
-                Style="{StaticResource DialogActionButtonStyle}"
-                FontWeight="Bold"/>
-        <Button Content="取 消"
-                IsCancel="True"
+                Style="{StaticResource CadDialogPrimaryIconButtonStyle}"
+                ToolTip="确定并保存当前数据源配置（同步写入 Config.json）">
+          <ContentControl Template="{StaticResource IconTemplate.ConfirmSave}" Width="18" Height="18" Focusable="False"/>
+        </Button>
+        <Button IsCancel="True"
                 Command="{Binding CancelCommand}"
-                Style="{StaticResource DialogActionButtonStyle}"/>
+                Style="{StaticResource CadDialogIconButtonStyle}"
+                ToolTip="取消更改并关闭配置窗口">
+          <ContentControl Template="{StaticResource IconTemplate.CancelClose}" Width="16" Height="16" Focusable="False"/>
+        </Button>
       </StackPanel>
     </Grid>
   </Grid>

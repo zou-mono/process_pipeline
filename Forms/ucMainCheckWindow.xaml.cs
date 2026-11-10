@@ -399,15 +399,35 @@ namespace process_pipeline.Forms
         public CheckRuleOptionItem SelectedSingleRule
         {
             get => _selectedSingleRule;
-            set => Set(ref _selectedSingleRule, value);
+            set
+            {
+                if (Set(ref _selectedSingleRule, value))
+                {
+                    OnPropertyChanged(nameof(SingleRuleToolTipText));
+                }
+            }
         }
+
+        public string SingleRuleToolTipText =>
+            _selectedSingleRule != null
+                ? $"执行单项核查：运行【{_selectedSingleRule.DisplayName}】"
+                : "执行单项核查：运行下拉框当前选中的核查规则";
 
         private string _dataSourceSummaryText = "数据源: 自动嗅探就绪";
         public string DataSourceSummaryText
         {
             get => _dataSourceSummaryText;
-            set => Set(ref _dataSourceSummaryText, value);
+            set
+            {
+                if (Set(ref _dataSourceSummaryText, value))
+                {
+                    OnPropertyChanged(nameof(DataSourceToolTipText));
+                }
+            }
         }
+
+        public string DataSourceToolTipText =>
+            $"多数据源配置 (规划 / 上版 / 勘测) — {_dataSourceSummaryText}";
 
         /// <summary>
         /// 可选的测试环境自定义数据源弹窗委托（为空时走标准 WPF DataSourceSettingsWindow）。

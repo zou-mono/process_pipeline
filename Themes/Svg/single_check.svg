@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <!-- AutoCAD 2019 Style: Single Rule Check (Rule Checklist + CAD Cyan Execute Play Badge) -->
+  <path fill="#38ABFF" fill-opacity="0.16" d="M4,4 L17,4 L17,19 L4,19 Z"/>
+  <path fill="#E4E8EC" d="M4,3 C3.45,3 3,3.45 3,4 L3,19 C3,19.55 3.45,20 4,20 L12.5,20 L12.5,18.3 L4.7,18.3 L4.7,4.7 L16.3,4.7 L16.3,11.2 L18,11.2 L18,4 C18,3.45 17.55,3 17,3 L4,3 Z M6.5,7.2 L14.5,7.2 L14.5,8.9 L6.5,8.9 L6.5,7.2 Z M6.5,10.8 L13.5,10.8 L13.5,12.5 L6.5,12.5 L6.5,10.8 Z M6.5,14.4 L11,14.4 L11,16.1 L6.5,16.1 L6.5,14.4 Z"/>
+  <path fill="#38ABFF" d="M14.5,12.5 L14.5,22.5 L22.5,17.5 Z"/>
+</svg>

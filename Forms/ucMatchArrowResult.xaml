@@ -1,4 +1,4 @@
-﻿<UserControl x:Class="process_pipeline.Forms.ucMatchArrowResult"
+<UserControl x:Class="process_pipeline.Forms.ucMatchArrowResult"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
@@ -69,38 +69,41 @@
               LoadingRow="dgvProblems_LoadingRow" Loaded="dgvProblems_Loaded" 
               PreviewMouseRightButtonDown="dgvProblems_PreviewMouseRightButtonDown">
 
-      <!-- ====================== 【新增：右键菜单】 ====================== -->
+      <!-- ====================== 【新增：右键菜单 (Commit 7.7 统一矢量图标)】 ====================== -->
       <DataGrid.ContextMenu>
         <ContextMenu x:Name="ctxMenu">
-          <!-- 菜单选项（可自由增删） -->
           <MenuItem x:Name="ctxZoomToExtent" Header="定位到CAD图纸" Click="CtxZoomToExtent_Click">
             <MenuItem.Icon>
-              <!-- 只需要指定 Data 和 Style -->
-              <Path Data="{StaticResource Icon_ZoomToExtent}" 
-                    Style="{StaticResource Style.MenuItem.Path}"/>
+              <ContentControl Template="{StaticResource IconTemplate.ZoomTarget}" Width="16" Height="16" Focusable="False"/>
             </MenuItem.Icon>
           </MenuItem>
 
           <MenuItem Header="复制" 
                     x:Name="ctxCopy"
-                    Tag="Copy" 
-                    Style="{StaticResource Style.MenuItem.Image}"
-                    Click="CtxCopy_Click"/>
-
-          <MenuItem x:Name="ctxSelect" Header="选择/取消(实体)" Click="CtxSelect_Click">
+                    Click="CtxCopy_Click">
             <MenuItem.Icon>
-              <!-- 只需要指定 Data 和 Style -->
-              <Path Data="{StaticResource Icon_SelectRow}" Fill="{StaticResource Cad_SelectedRow}" 
-                    Style="{StaticResource Style.MenuItem.Path}"/>
+              <ContentControl Template="{StaticResource IconTemplate.CopyClipboard}" Width="16" Height="16" Focusable="False"/>
             </MenuItem.Icon>
           </MenuItem>
 
-          <MenuItem x:Name="ctxClearSelected" Header="清空选择" Click="CtxClearSelected_Click"/>
+          <MenuItem x:Name="ctxSelect" Header="选择/取消(实体)" Click="CtxSelect_Click">
+            <MenuItem.Icon>
+              <ContentControl Template="{StaticResource IconTemplate.SelectRow}" Width="16" Height="16" Focusable="False"/>
+            </MenuItem.Icon>
+          </MenuItem>
 
-          <!--<MenuItem x:Name="ctxFix" Header="🛠️ 一键修复当前项" Click="CtxFix_Click"/>-->
+          <MenuItem x:Name="ctxClearSelected" Header="清空选择" Click="CtxClearSelected_Click">
+            <MenuItem.Icon>
+              <ContentControl Template="{StaticResource IconTemplate.ClearSelection}" Width="16" Height="16" Focusable="False"/>
+            </MenuItem.Icon>
+          </MenuItem>
+
           <Separator/>
-          <!-- 分隔线 -->
-          <MenuItem x:Name="ctxRefresh" Header="刷新" Click="CtxRefresh_Click"/>
+          <MenuItem x:Name="ctxRefresh" Header="刷新" Click="CtxRefresh_Click">
+            <MenuItem.Icon>
+              <ContentControl Template="{StaticResource IconTemplate.Refresh}" Width="16" Height="16" Focusable="False"/>
+            </MenuItem.Icon>
+          </MenuItem>
         </ContextMenu>
       </DataGrid.ContextMenu>
 

@@ -63,4 +63,23 @@
   <SolidColorBrush x:Key="Brush.Dialog.Button.PressedBackground" Color="#005A9E"/>
   <SolidColorBrush x:Key="Brush.Dialog.Button.PressedForeground" Color="#FFFFFF"/>
 
+  <!-- CAD 2019 矢量图标双色调语义画刷 (Dark 主题, COLORTHEME = 0) -->
+  <SolidColorBrush x:Key="Brush.Icon.Primary" Color="#E4E8EC"/>
+  <SolidColorBrush x:Key="Brush.Icon.Accent" Color="#38ABFF"/>
+  <SolidColorBrush x:Key="Brush.Icon.Success" Color="#3CC978"/>
+  <SolidColorBrush x:Key="Brush.Icon.Warning" Color="#FFB900"/>
+  <SolidColorBrush x:Key="Brush.Icon.Danger" Color="#F14C4C"/>
+  <SolidColorBrush x:Key="Brush.Icon.Muted" Color="#9AA2AC"/>
+  <SolidColorBrush x:Key="Brush.Icon.Surface" Color="#2E38ABFF"/>
+
+  <!-- CAD 2019 工具栏图标按钮与悬停 ToolTip 专用画刷 (Dark 主题) -->
+  <SolidColorBrush x:Key="Brush.ToolBar.Button.Background" Color="Transparent"/>
+  <SolidColorBrush x:Key="Brush.ToolBar.Button.Border" Color="Transparent"/>
+  <SolidColorBrush x:Key="Brush.ToolBar.Button.HoverBackground" Color="#48494E"/>
+  <SolidColorBrush x:Key="Brush.ToolBar.Button.HoverBorder" Color="#1C97EA"/>
+  <SolidColorBrush x:Key="Brush.ToolBar.Button.PressedBackground" Color="#005A9E"/>
+  <SolidColorBrush x:Key="Brush.ToolTip.Background" Color="#252526"/>
+  <SolidColorBrush x:Key="Brush.ToolTip.Border" Color="#007ACC"/>
+  <SolidColorBrush x:Key="Brush.ToolTip.Foreground" Color="#F0F0F0"/>
+
 </ResourceDictionary>
