@@ -514,6 +514,25 @@ namespace Cad.Plugin
                         }
                         AssertTrue(pipeLookupHitCount == 317 && attLookupHitCount == 317,
                             $"Commit 7.4 图面双向反查索引验证通过：点选管线命中={pipeLookupHitCount}/317，点选 ws 属性块反向命中={attLookupHitCount}/317");
+
+                        // 5.5 验证 Commit 7.5：仿 ArcGIS 10.5 属性表底部“[显示所有行] / [仅显示选中行]”双模式切换过滤
+                        AssertTrue(vm.IsShowAllRows && !vm.IsShowSelectedOnly && vm.GetVisibleRows().Count == 317,
+                            $"Commit 7.5 初始默认为【显示所有行】模式，可见行数=317 (实际={vm.GetVisibleRows().Count})");
+
+                        var sampleSelected5 = vm.Rows.Take(5).ToList();
+                        vm.SetSelectedRows(sampleSelected5, syncCadSelection: false);
+                        vm.ShowSelectedRowsCommand.Execute(null);
+
+                        int visibleInSelectedMode = vm.GetVisibleRows().Count;
+                        string summarySelectedMode = vm.SelectionRecordSummaryText;
+                        AssertTrue(vm.IsShowSelectedOnly && !vm.IsShowAllRows && visibleInSelectedMode == 5,
+                            $"Commit 7.5 点击【仅显示选中行】后仅过滤展示选中的 5 行 (实际={visibleInSelectedMode}, 摘要='{summarySelectedMode}')");
+
+                        vm.ShowAllRowsCommand.Execute(null);
+                        int visibleInAllMode = vm.GetVisibleRows().Count;
+                        string summaryAllMode = vm.SelectionRecordSummaryText;
+                        AssertTrue(vm.IsShowAllRows && !vm.IsShowSelectedOnly && visibleInAllMode == 317 && summaryAllMode.Contains("已选中 5"),
+                            $"Commit 7.5 点击【显示所有行】后恢复全部 317 行展示且保留选中状态 (实际={visibleInAllMode}, 摘要='{summaryAllMode}')");
                     }
                 }
                 finally
