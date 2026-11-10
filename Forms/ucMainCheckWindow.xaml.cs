@@ -876,7 +876,9 @@ namespace process_pipeline.Forms
                     string issueId = DocumentCheckSession.EnsureIssueId(issue, issue.RuleId, seq++);
                     if (_issueIdToRowMap.TryGetValue(issueId, out PipeRowVm duplicateRow))
                     {
+                        UnindexRowObjectIds(duplicateRow);
                         duplicateRow.ApplyFromIssue(issue);
+                        IndexRowObjectIds(duplicateRow);
                         continue;
                     }
 
@@ -887,14 +889,8 @@ namespace process_pipeline.Forms
                     if (!issue.TargetObjectId.IsNull)
                     {
                         _currentIssues[issue.TargetObjectId] = issue;
-                        _objectIdToRowMap[issue.TargetObjectId] = rowVm;
-                        if (!_objectIdToRowsMap.TryGetValue(issue.TargetObjectId, out List<PipeRowVm> rowList))
-                        {
-                            rowList = new List<PipeRowVm>();
-                            _objectIdToRowsMap[issue.TargetObjectId] = rowList;
-                        }
-                        rowList.Add(rowVm);
                     }
+                    IndexRowObjectIds(rowVm);
                 }
 
                 RebuildNavigationTreeNodes();
@@ -922,7 +918,9 @@ namespace process_pipeline.Forms
                         }
                         else
                         {
+                            UnindexRowObjectIds(existingByIssueId);
                             existingByIssueId.ApplyFromIssue(issue);
+                            IndexRowObjectIds(existingByIssueId);
                         }
                     }
                     else if (!targetId.IsNull &&
@@ -935,8 +933,10 @@ namespace process_pipeline.Forms
                         }
                         else
                         {
+                            UnindexRowObjectIds(existingByOid);
                             existingByOid.ApplyFromIssue(issue);
                             _issueIdToRowMap[issueId] = existingByOid;
+                            IndexRowObjectIds(existingByOid);
                         }
                     }
                     else if (!isErased)
@@ -944,17 +944,7 @@ namespace process_pipeline.Forms
                         var newRow = new PipeRowVm(issue);
                         Rows.Add(newRow);
                         _issueIdToRowMap[issueId] = newRow;
-
-                        if (!targetId.IsNull)
-                        {
-                            _objectIdToRowMap[targetId] = newRow;
-                            if (!_objectIdToRowsMap.TryGetValue(targetId, out List<PipeRowVm> rowList))
-                            {
-                                rowList = new List<PipeRowVm>();
-                                _objectIdToRowsMap[targetId] = rowList;
-                            }
-                            rowList.Add(newRow);
-                        }
+                        IndexRowObjectIds(newRow);
                         hasNewRuleOrLayer = true;
                     }
                 }
@@ -998,26 +988,151 @@ namespace process_pipeline.Forms
             {
                 _issueIdToRowMap.Remove(issueId);
             }
+            UnindexRowObjectIds(row, targetId);
+        }
+
+        /// <summary>
+        /// 将问题行的主目标管线（TargetObjectId）及全部关联附属要素（RelatedObjectIds 与 PossibleMatches 中的属性块、文字标注、流向箭头）
+        /// 统一注册到 _objectIdToRowsMap 反向索引字典中（Stage 7 Commit 7.4）。
+        /// </summary>
+        private void IndexRowObjectIds(PipeRowVm row)
+        {
+            if (row == null) return;
+
+            ObjectId targetId = row.TargetObjectId;
             if (!targetId.IsNull)
             {
-                if (_objectIdToRowsMap.TryGetValue(targetId, out List<PipeRowVm> list) && list != null)
+                _objectIdToRowMap[targetId] = row;
+                AddRowToObjectIdMap(targetId, row);
+            }
+
+            var issue = row.SourceIssue;
+            if (issue == null) return;
+
+            if (issue.RelatedObjectIds != null)
+            {
+                foreach (ObjectId relId in issue.RelatedObjectIds)
+                {
+                    if (relId.IsNull) continue;
+                    AddRowToObjectIdMap(relId, row);
+                    if (!_objectIdToRowMap.ContainsKey(relId))
+                    {
+                        _objectIdToRowMap[relId] = row;
+                    }
+                }
+            }
+
+            if (issue.PossibleMatches != null)
+            {
+                foreach (var match in issue.PossibleMatches)
+                {
+                    if (match.Id.IsNull) continue;
+                    AddRowToObjectIdMap(match.Id, row);
+                    if (!_objectIdToRowMap.ContainsKey(match.Id))
+                    {
+                        _objectIdToRowMap[match.Id] = row;
+                    }
+                }
+            }
+        }
+
+        private void AddRowToObjectIdMap(ObjectId oid, PipeRowVm row)
+        {
+            if (oid.IsNull || row == null) return;
+            if (!_objectIdToRowsMap.TryGetValue(oid, out List<PipeRowVm> rowList) || rowList == null)
+            {
+                rowList = new List<PipeRowVm>();
+                _objectIdToRowsMap[oid] = rowList;
+            }
+            if (!rowList.Contains(row))
+            {
+                rowList.Add(row);
+            }
+        }
+
+        private void UnindexRowObjectIds(PipeRowVm row, ObjectId explicitTargetId = default)
+        {
+            if (row == null) return;
+
+            var candidateIds = new HashSet<ObjectId>();
+            if (!explicitTargetId.IsNull)
+                candidateIds.Add(explicitTargetId);
+            if (!row.TargetObjectId.IsNull)
+                candidateIds.Add(row.TargetObjectId);
+
+            var issue = row.SourceIssue;
+            if (issue != null)
+            {
+                if (issue.RelatedObjectIds != null)
+                {
+                    foreach (ObjectId relId in issue.RelatedObjectIds)
+                    {
+                        if (!relId.IsNull) candidateIds.Add(relId);
+                    }
+                }
+                if (issue.PossibleMatches != null)
+                {
+                    foreach (var match in issue.PossibleMatches)
+                    {
+                        if (!match.Id.IsNull) candidateIds.Add(match.Id);
+                    }
+                }
+            }
+
+            foreach (ObjectId oid in candidateIds)
+            {
+                if (_objectIdToRowsMap.TryGetValue(oid, out List<PipeRowVm> list) && list != null)
                 {
                     list.Remove(row);
                     if (list.Count == 0)
                     {
-                        _objectIdToRowsMap.Remove(targetId);
-                        _objectIdToRowMap.Remove(targetId);
+                        _objectIdToRowsMap.Remove(oid);
+                        _objectIdToRowMap.Remove(oid);
                     }
                     else
                     {
-                        _objectIdToRowMap[targetId] = list[list.Count - 1];
+                        _objectIdToRowMap[oid] = list[list.Count - 1];
                     }
                 }
-                else
+                else if (_objectIdToRowMap.TryGetValue(oid, out PipeRowVm mappedRow) && ReferenceEquals(mappedRow, row))
                 {
-                    _objectIdToRowMap.Remove(targetId);
+                    _objectIdToRowMap.Remove(oid);
                 }
             }
+        }
+
+        /// <summary>
+        /// 根据 CAD 图面选中的 ObjectId 集合（可为管线、配对属性块、文字标注或流向箭头）反查匹配的列表行（Stage 7 Commit 7.4）。
+        /// </summary>
+        public IReadOnlyList<PipeRowVm> FindRowsByObjectIds(IEnumerable<ObjectId> objectIds, bool applyFilter = true)
+        {
+            var matchedRows = new List<PipeRowVm>();
+            if (objectIds == null) return matchedRows;
+
+            foreach (ObjectId id in objectIds)
+            {
+                if (id.IsNull) continue;
+
+                if (_objectIdToRowsMap.TryGetValue(id, out List<PipeRowVm> rowsForId) && rowsForId != null)
+                {
+                    foreach (PipeRowVm row in rowsForId)
+                    {
+                        if (row != null && (!applyFilter || FilterRow(row)) && !matchedRows.Contains(row))
+                        {
+                            matchedRows.Add(row);
+                        }
+                    }
+                }
+                else if (_objectIdToRowMap.TryGetValue(id, out PipeRowVm matchedRow) && matchedRow != null)
+                {
+                    if ((!applyFilter || FilterRow(matchedRow)) && !matchedRows.Contains(matchedRow))
+                    {
+                        matchedRows.Add(matchedRow);
+                    }
+                }
+            }
+
+            return matchedRows;
         }
 
         /// <summary>
@@ -1508,7 +1623,9 @@ namespace process_pipeline.Forms
         {
             if (row == null || snapshot == null) return;
 
+            UnindexRowObjectIds(row);
             row.ApplyFromIssue(snapshot);
+            IndexRowObjectIds(row);
             var activeSession = DocumentSessionManager.GetActiveSession();
 
             if (!string.IsNullOrWhiteSpace(snapshot.IssueId) && activeSession != null)
@@ -1813,29 +1930,10 @@ namespace process_pipeline.Forms
                 try
                 {
                     var psr = activeDoc.Editor.SelectImplied();
-                    var matchedRows = new List<PipeRowVm>();
+                    IReadOnlyList<PipeRowVm> matchedRows = Array.Empty<PipeRowVm>();
                     if (psr.Status == PromptStatus.OK && psr.Value != null)
                     {
-                        foreach (ObjectId id in psr.Value.GetObjectIds())
-                        {
-                            if (_objectIdToRowsMap.TryGetValue(id, out List<PipeRowVm> rowsForId) && rowsForId != null)
-                            {
-                                foreach (PipeRowVm row in rowsForId)
-                                {
-                                    if (FilterRow(row) && !matchedRows.Contains(row))
-                                    {
-                                        matchedRows.Add(row);
-                                    }
-                                }
-                            }
-                            else if (_objectIdToRowMap.TryGetValue(id, out PipeRowVm matchedRow) && FilterRow(matchedRow))
-                            {
-                                if (!matchedRows.Contains(matchedRow))
-                                {
-                                    matchedRows.Add(matchedRow);
-                                }
-                            }
-                        }
+                        matchedRows = FindRowsByObjectIds(psr.Value.GetObjectIds(), applyFilter: true);
                     }
 
                     _grid.SelectedItems.Clear();
@@ -1846,6 +1944,25 @@ namespace process_pipeline.Forms
 
                     SelectedRow = matchedRows.FirstOrDefault();
                     SyncSelectedRowsFromGrid(syncCadSelection: false);
+
+                    if (matchedRows.Count > 0)
+                    {
+                        var selectedIssues = matchedRows
+                            .Select(r => r.SourceIssue)
+                            .Where(i => i != null)
+                            .ToList();
+                        GraphicManager.DrawIssueHighlights(activeDoc.Database, selectedIssues);
+                        try { activeDoc.Editor.UpdateScreen(); } catch { }
+
+                        StatusText = matchedRows.Count == 1
+                            ? $"图面已选中记录 [{matchedRows[0].Id}]"
+                            : $"图面已批量选中 {matchedRows.Count} 条记录";
+                    }
+                    else
+                    {
+                        GraphicManager.ClearAuxiliaryGraphics();
+                        try { activeDoc.Editor.UpdateScreen(); } catch { }
+                    }
                 }
                 catch
                 {

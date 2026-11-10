@@ -494,6 +494,26 @@ namespace Cad.Plugin
                         // 还原宿主文档状态
                         vm.ExecuteUndo();
                         vm.ExecuteUndo();
+
+                        // 5.4 验证 Commit 7.4：点选管线或点选配对 ws 属性块（RelatedObjectIds / PossibleMatches）均能反向定位到对应行
+                        int pipeLookupHitCount = 0;
+                        int attLookupHitCount = 0;
+                        foreach (PipeRowVm row in vm.Rows)
+                        {
+                            var byPipe = vm.FindRowsByObjectIds(new[] { row.TargetObjectId }, applyFilter: false);
+                            if (byPipe.Contains(row))
+                                pipeLookupHitCount++;
+
+                            if (row.SourceIssue?.RelatedObjectIds != null && row.SourceIssue.RelatedObjectIds.Count > 0)
+                            {
+                                ObjectId attId = row.SourceIssue.RelatedObjectIds[0];
+                                var byAtt = vm.FindRowsByObjectIds(new[] { attId }, applyFilter: false);
+                                if (byAtt.Contains(row))
+                                    attLookupHitCount++;
+                            }
+                        }
+                        AssertTrue(pipeLookupHitCount == 317 && attLookupHitCount == 317,
+                            $"Commit 7.4 图面双向反查索引验证通过：点选管线命中={pipeLookupHitCount}/317，点选 ws 属性块反向命中={attLookupHitCount}/317");
                     }
                 }
                 finally

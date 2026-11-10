@@ -40,9 +40,11 @@ namespace process_pipeline.Core
         }
     }
 
-    // Behavior: 处理 CAD 选择同步（可扩展为虚方法或事件）
+    // Behavior: 处理 CAD 选择同步（支持 MDI 多文档切换自动重绑，Stage 7 Commit 7.4）
     public class CadSelectionSyncBehavior : Behavior<UserControl>
     {
+        private Autodesk.AutoCAD.ApplicationServices.Document _subscribedDocument;
+
         // 可选：添加属性让 UserControl 自定义逻辑
         public static readonly DependencyProperty OnCadSelectionChangedProperty =
                 DependencyProperty.Register(nameof(OnCadSelectionChanged), typeof(ICommand),
@@ -57,21 +59,68 @@ namespace process_pipeline.Core
         protected override void OnAttached()
         {
             base.OnAttached();
-            var doc = AcadApp.DocumentManager.MdiActiveDocument;
-            if (doc != null)
+            if (AcadApp.DocumentManager != null)
             {
-                doc.ImpliedSelectionChanged += Editor_ImpliedSelectionChanged;
+                AcadApp.DocumentManager.DocumentActivated += DocumentManager_DocumentActivated;
+                AcadApp.DocumentManager.DocumentToBeDestroyed += DocumentManager_DocumentToBeDestroyed;
+                AttachToDocument(AcadApp.DocumentManager.MdiActiveDocument);
             }
         }
 
         protected override void OnDetaching()
         {
-            var doc = AcadApp.DocumentManager.MdiActiveDocument;
+            if (AcadApp.DocumentManager != null)
+            {
+                AcadApp.DocumentManager.DocumentActivated -= DocumentManager_DocumentActivated;
+                AcadApp.DocumentManager.DocumentToBeDestroyed -= DocumentManager_DocumentToBeDestroyed;
+            }
+            AttachToDocument(null);
+            base.OnDetaching();
+        }
+
+        private void DocumentManager_DocumentActivated(object sender, Autodesk.AutoCAD.ApplicationServices.DocumentCollectionEventArgs e)
+        {
+            AttachToDocument(e?.Document ?? AcadApp.DocumentManager?.MdiActiveDocument);
+        }
+
+        private void DocumentManager_DocumentToBeDestroyed(object sender, Autodesk.AutoCAD.ApplicationServices.DocumentCollectionEventArgs e)
+        {
+            if (e?.Document != null && ReferenceEquals(_subscribedDocument, e.Document))
+            {
+                AttachToDocument(null);
+            }
+        }
+
+        private void AttachToDocument(Autodesk.AutoCAD.ApplicationServices.Document doc)
+        {
+            if (ReferenceEquals(_subscribedDocument, doc))
+                return;
+
+            if (_subscribedDocument != null)
+            {
+                try
+                {
+                    _subscribedDocument.ImpliedSelectionChanged -= Editor_ImpliedSelectionChanged;
+                }
+                catch
+                {
+                    // 忽略已销毁文档的事件解绑异常
+                }
+                _subscribedDocument = null;
+            }
+
             if (doc != null)
             {
-                doc.ImpliedSelectionChanged -= Editor_ImpliedSelectionChanged;
+                try
+                {
+                    doc.ImpliedSelectionChanged += Editor_ImpliedSelectionChanged;
+                    _subscribedDocument = doc;
+                }
+                catch
+                {
+                    _subscribedDocument = null;
+                }
             }
-            base.OnDetaching();
         }
 
         private void Editor_ImpliedSelectionChanged(object sender, EventArgs e)
