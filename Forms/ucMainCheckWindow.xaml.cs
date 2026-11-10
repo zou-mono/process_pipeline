@@ -410,8 +410,8 @@ namespace process_pipeline.Forms
 
         public string SingleRuleToolTipText =>
             _selectedSingleRule != null
-                ? $"执行单项核查：运行【{_selectedSingleRule.DisplayName}】"
-                : "执行单项核查：运行下拉框当前选中的核查规则";
+                ? $"执行单项核查\n单独运行【{_selectedSingleRule.DisplayName}】，并将结果同步展示在列表中。"
+                : "执行单项核查\n单独运行当前下拉框所选的管线核查规则。";
 
         private string _dataSourceSummaryText = "数据源: 自动嗅探就绪";
         public string DataSourceSummaryText
@@ -427,7 +427,7 @@ namespace process_pipeline.Forms
         }
 
         public string DataSourceToolTipText =>
-            $"多数据源配置 (规划 / 上版 / 勘测) — {_dataSourceSummaryText}";
+            $"数据源配置\n配置规划、上版及勘测三方管线数据源（当前：{_dataSourceSummaryText}）。";
 
         /// <summary>
         /// 可选的测试环境自定义数据源弹窗委托（为空时走标准 WPF DataSourceSettingsWindow）。

@@ -57,9 +57,9 @@
   <SolidColorBrush x:Key="Brush.Dialog.Button.Border" Color="#5A5A5E"/>
   <SolidColorBrush x:Key="Brush.Dialog.Button.DefaultBorder" Color="#007ACC"/>
   <SolidColorBrush x:Key="Brush.Dialog.Button.Foreground" Color="#F0F0F0"/>
-  <SolidColorBrush x:Key="Brush.Dialog.Button.HoverBackground" Color="#4E4E52"/>
-  <SolidColorBrush x:Key="Brush.Dialog.Button.HoverBorder" Color="#1C97EA"/>
-  <SolidColorBrush x:Key="Brush.Dialog.Button.PressedBackground" Color="#005A9E"/>
+  <SolidColorBrush x:Key="Brush.Dialog.Button.HoverBackground" Color="#455768"/>
+  <SolidColorBrush x:Key="Brush.Dialog.Button.HoverBorder" Color="#66A9E0"/>
+  <SolidColorBrush x:Key="Brush.Dialog.Button.PressedBackground" Color="#3B4D5E"/>
   <SolidColorBrush x:Key="Brush.Dialog.Button.PressedForeground" Color="#FFFFFF"/>
   
   <!-- 通用窗口/面板背景类 -->
@@ -84,13 +84,24 @@
   <SolidColorBrush x:Key="Brush.Icon.Muted" Color="#9AA2AC"/>
   <SolidColorBrush x:Key="Brush.Icon.Surface" Color="#2E38ABFF"/>
 
-  <!-- CAD 2019 工具栏图标按钮与悬停 ToolTip 专用画刷 -->
+  <!-- CAD 2019 原生工具栏外框、拖动把手、分隔线与按钮悬停画刷 (提取自 DarkTheme.xbel / AdUiPalettes.dll / adui23.dll) -->
+  <SolidColorBrush x:Key="Brush.ToolBar.Background" Color="#FF585858"/>
+  <SolidColorBrush x:Key="Brush.ToolBar.OuterBorder" Color="#FF181818"/>
+  <SolidColorBrush x:Key="Brush.ToolBar.GripBackground" Color="#FF4E4E4E"/>
+  <SolidColorBrush x:Key="Brush.ToolBar.GripDarkDot" Color="#FF000000"/>
+  <SolidColorBrush x:Key="Brush.ToolBar.GripLightDot" Color="#FF949494"/>
+  <SolidColorBrush x:Key="Brush.ToolBar.SeparatorDark" Color="#FF242424"/>
+  <SolidColorBrush x:Key="Brush.ToolBar.SeparatorLight" Color="#FF7A7A7A"/>
   <SolidColorBrush x:Key="Brush.ToolBar.Button.Background" Color="Transparent"/>
   <SolidColorBrush x:Key="Brush.ToolBar.Button.Border" Color="Transparent"/>
-  <SolidColorBrush x:Key="Brush.ToolBar.Button.HoverBackground" Color="#48494E"/>
-  <SolidColorBrush x:Key="Brush.ToolBar.Button.HoverBorder" Color="#1C97EA"/>
-  <SolidColorBrush x:Key="Brush.ToolBar.Button.PressedBackground" Color="#005A9E"/>
-  <SolidColorBrush x:Key="Brush.ToolTip.Background" Color="#252526"/>
-  <SolidColorBrush x:Key="Brush.ToolTip.Border" Color="#007ACC"/>
-  <SolidColorBrush x:Key="Brush.ToolTip.Foreground" Color="#F0F0F0"/>
+  <SolidColorBrush x:Key="Brush.ToolBar.Button.HoverBackground" Color="#484A90D9"/>
+  <SolidColorBrush x:Key="Brush.ToolBar.Button.HoverBorder" Color="#FF66A9E0"/>
+  <SolidColorBrush x:Key="Brush.ToolBar.Button.PressedBackground" Color="#683579C2"/>
+  <SolidColorBrush x:Key="Brush.ToolBar.Button.PressedBorder" Color="#FF4FA0E8"/>
+
+  <!-- CAD 2019 原生灰色 ToolTip 画刷 (提取自 AdWindows.dll Autodesk.Internal.Windows.ToolTip / DarkTheme.xbel) -->
+  <SolidColorBrush x:Key="Brush.ToolTip.Background" Color="#FFEBEBEB"/>
+  <SolidColorBrush x:Key="Brush.ToolTip.Border" Color="#FF686868"/>
+  <SolidColorBrush x:Key="Brush.ToolTip.Foreground" Color="#FF141414"/>
+  <SolidColorBrush x:Key="Brush.ToolTip.BodyForeground" Color="#FF333333"/>
 </ResourceDictionary>

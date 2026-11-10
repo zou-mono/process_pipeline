@@ -138,7 +138,7 @@
               <Button Grid.Column="2"
                       Command="{Binding BrowsePreviousFileCommand}"
                       Style="{StaticResource CadBrowseIconButtonStyle}"
-                      ToolTip="浏览并选择外部【上版数据】DWG 图纸文件">
+                      ToolTip="浏览上版数据&#x0a;从本地磁盘选择外部【上版数据】DWG 图纸文件。">
                 <ContentControl Template="{StaticResource IconTemplate.FolderBrowse}" Width="16" Height="16" Focusable="False"/>
               </Button>
             </Grid>
@@ -207,7 +207,7 @@
               <Button Grid.Column="2"
                       Command="{Binding BrowseSurveyFileCommand}"
                       Style="{StaticResource CadBrowseIconButtonStyle}"
-                      ToolTip="浏览并选择外部【勘测数据】DWG 图纸文件">
+                      ToolTip="浏览勘测数据&#x0a;从本地磁盘选择外部【勘测数据】DWG 图纸文件。">
                 <ContentControl Template="{StaticResource IconTemplate.FolderBrowse}" Width="16" Height="16" Focusable="False"/>
               </Button>
             </Grid>
@@ -256,7 +256,7 @@
               Style="{StaticResource CadDialogIconButtonStyle}"
               VerticalAlignment="Center"
               Margin="0"
-              ToolTip="重新智能探测：自动扫描当前图纸图层、已打开 MDI 文档及同目录 DWG 文件">
+              ToolTip="重新智能探测&#x0a;自动扫描当前图纸内部图层、已打开的 MDI 文档及同目录下的 DWG 文件。">
         <ContentControl Template="{StaticResource IconTemplate.AutoSniff}" Width="18" Height="18" Focusable="False"/>
       </Button>
 
@@ -272,14 +272,14 @@
         <Button IsDefault="True"
                 Command="{Binding ConfirmCommand}"
                 Style="{StaticResource CadDialogPrimaryIconButtonStyle}"
-                ToolTip="确定并保存当前数据源配置（同步写入 Config.json）">
+                ToolTip="保存配置&#x0a;确认当前数据源配置并持久化保存至 Config.json 配置文件。">
           <ContentControl Template="{StaticResource IconTemplate.ConfirmSave}" Width="18" Height="18" Focusable="False"/>
         </Button>
         <Button IsCancel="True"
                 Command="{Binding CancelCommand}"
                 Style="{StaticResource CadDialogIconButtonStyle}"
-                ToolTip="取消更改并关闭配置窗口">
-          <ContentControl Template="{StaticResource IconTemplate.CancelClose}" Width="16" Height="16" Focusable="False"/>
+                ToolTip="取消更改&#x0a;放弃本次数据源配置修改并关闭当前窗口。">
+          <ContentControl Template="{StaticResource IconTemplate.CancelClose}" Width="18" Height="18" Focusable="False"/>
         </Button>
       </StackPanel>
     </Grid>

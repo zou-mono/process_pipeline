@@ -159,7 +159,7 @@
           <!-- 右上角 × 关闭按钮 -->
           <Button x:Name="btnClose"
                   Grid.Column="2"
-                  ToolTip="关闭提示窗口"
+                  ToolTip="关闭窗口&#x0a;关闭当前消息提示对话框。"
                   ToolTipService.InitialShowDelay="120"
                   ToolTipService.ShowDuration="15000"
                   Click="Ok_Click"
@@ -225,7 +225,7 @@
                 HorizontalAlignment="Right"
                 VerticalAlignment="Center"
                 Click="Ok_Click"
-                ToolTip="确定并关闭提示窗口"
+                ToolTip="确定&#x0a;确认消息内容并关闭当前提示窗口。"
                 Style="{StaticResource CadDialogPrimaryIconButtonStyle}">
           <ContentControl Template="{StaticResource IconTemplate.ConfirmSave}" Width="18" Height="18" Focusable="False"/>
         </Button>

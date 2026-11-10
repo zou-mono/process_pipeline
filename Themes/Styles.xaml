@@ -1,5 +1,9 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:utils="clr-namespace:process_pipeline.Utils">
+
+  <utils:ArcGisToolTipHeaderConverter x:Key="ArcGisToolTipHeaderConverter"/>
+  <utils:ArcGisToolTipBodyConverter x:Key="ArcGisToolTipBodyConverter"/>
 
   <Style x:Key="DefaultTextBlockStyle" TargetType="TextBlock">
     <Setter Property="FontFamily" Value="Segoe UI, Microsoft YaHei" />
@@ -14,15 +18,16 @@
     <Setter Property="FontSize" Value="9" />
   </Style>
 
-  <!-- ==================== AutoCAD 2019 工业级扁平 ToolTip 样式 (Commit 7.7) ==================== -->
+  <!-- ==================== 仿 ArcGIS 10.5 / AutoCAD 2019 固定宽度双行灰色 ToolTip 样式 ==================== -->
   <Style x:Key="CadToolTipStyle" TargetType="ToolTip">
     <Setter Property="FontFamily" Value="Segoe UI, Microsoft YaHei"/>
     <Setter Property="FontSize" Value="12"/>
+    <Setter Property="Width" Value="220"/>
     <Setter Property="Background" Value="{DynamicResource Brush.ToolTip.Background}"/>
     <Setter Property="Foreground" Value="{DynamicResource Brush.ToolTip.Foreground}"/>
     <Setter Property="BorderBrush" Value="{DynamicResource Brush.ToolTip.Border}"/>
     <Setter Property="BorderThickness" Value="1"/>
-    <Setter Property="Padding" Value="9,5"/>
+    <Setter Property="Padding" Value="10,7"/>
     <Setter Property="HasDropShadow" Value="True"/>
     <Setter Property="SnapsToDevicePixels" Value="True"/>
     <Setter Property="Template">
@@ -32,24 +37,46 @@
                   BorderBrush="{TemplateBinding BorderBrush}"
                   BorderThickness="{TemplateBinding BorderThickness}"
                   Padding="{TemplateBinding Padding}"
-                  CornerRadius="1"
+                  Width="{TemplateBinding Width}"
+                  CornerRadius="0"
                   SnapsToDevicePixels="True">
-            <ContentPresenter HorizontalAlignment="Left" VerticalAlignment="Center"/>
+            <StackPanel>
+              <!-- 第一行：简短易懂的功能名称（粗体深色） -->
+              <TextBlock x:Name="PartHeader"
+                         Text="{Binding Content, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource ArcGisToolTipHeaderConverter}}"
+                         FontWeight="Bold"
+                         FontSize="12"
+                         Foreground="{DynamicResource Brush.ToolTip.Foreground}"
+                         TextWrapping="Wrap"/>
+              <!-- 第二行起：功能详细描述（固定宽度内自动折行） -->
+              <TextBlock x:Name="PartBody"
+                         Text="{Binding Content, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource ArcGisToolTipBodyConverter}}"
+                         FontSize="11.5"
+                         LineHeight="17"
+                         Margin="0,4,0,0"
+                         Foreground="{DynamicResource Brush.ToolTip.BodyForeground}"
+                         TextWrapping="Wrap"/>
+            </StackPanel>
           </Border>
+          <ControlTemplate.Triggers>
+            <DataTrigger Binding="{Binding Content, RelativeSource={RelativeSource Self}, Converter={StaticResource ArcGisToolTipBodyConverter}}" Value="">
+              <Setter TargetName="PartBody" Property="Visibility" Value="Collapsed"/>
+            </DataTrigger>
+          </ControlTemplate.Triggers>
         </ControlTemplate>
       </Setter.Value>
     </Setter>
   </Style>
 
-  <!-- 全局默认应用 CAD 2019 ToolTip 样式 -->
+  <!-- 全局默认应用 ArcGIS 双行固定宽度灰色 ToolTip 样式 -->
   <Style TargetType="ToolTip" BasedOn="{StaticResource CadToolTipStyle}"/>
 
-  <!-- ==================== AutoCAD 2019 工具栏矢量图标按钮样式 (28x28, 悬停即显 ToolTip) ==================== -->
+  <!-- ==================== AutoCAD 2019 原生工具栏图标按钮样式 (22x22 紧凑按钮, 20x20 图标, 透蓝色半透明膜 + 蓝色系外框) ==================== -->
   <Style x:Key="CadToolbarIconButtonStyle" TargetType="Button">
-    <Setter Property="Width" Value="28"/>
-    <Setter Property="Height" Value="28"/>
-    <Setter Property="Padding" Value="3"/>
-    <Setter Property="Margin" Value="0,0,4,0"/>
+    <Setter Property="Width" Value="22"/>
+    <Setter Property="Height" Value="22"/>
+    <Setter Property="Padding" Value="0"/>
+    <Setter Property="Margin" Value="0,0,2,0"/>
     <Setter Property="Background" Value="{DynamicResource Brush.ToolBar.Button.Background}"/>
     <Setter Property="BorderBrush" Value="{DynamicResource Brush.ToolBar.Button.Border}"/>
     <Setter Property="Foreground" Value="{DynamicResource Brush.DataGrid.Text.Foreground}"/>
@@ -69,7 +96,7 @@
                   Background="{TemplateBinding Background}"
                   BorderBrush="{TemplateBinding BorderBrush}"
                   BorderThickness="{TemplateBinding BorderThickness}"
-                  CornerRadius="2"
+                  CornerRadius="0"
                   Padding="{TemplateBinding Padding}"
                   SnapsToDevicePixels="True">
             <ContentPresenter x:Name="BtnContent"
@@ -84,7 +111,7 @@
             </Trigger>
             <Trigger Property="IsPressed" Value="True">
               <Setter TargetName="BtnBorder" Property="Background" Value="{DynamicResource Brush.ToolBar.Button.PressedBackground}"/>
-              <Setter TargetName="BtnBorder" Property="BorderBrush" Value="{DynamicResource Brush.ToolBar.Button.HoverBorder}"/>
+              <Setter TargetName="BtnBorder" Property="BorderBrush" Value="{DynamicResource Brush.ToolBar.Button.PressedBorder}"/>
             </Trigger>
             <Trigger Property="IsEnabled" Value="False">
               <Setter TargetName="BtnContent" Property="Opacity" Value="0.38"/>
@@ -93,6 +120,19 @@
         </ControlTemplate>
       </Setter.Value>
     </Setter>
+  </Style>
+
+  <!-- ==================== AutoCAD 2019 工具栏双线蚀刻分隔线样式 (adui23.dll CAdUiToolBar 1px暗线 + 1px亮线) ==================== -->
+  <Style x:Key="CadToolbarSeparatorStyle" TargetType="Border">
+    <Setter Property="Width" Value="2"/>
+    <Setter Property="Height" Value="18"/>
+    <Setter Property="Margin" Value="4,0,5,0"/>
+    <Setter Property="VerticalAlignment" Value="Center"/>
+    <Setter Property="Background" Value="{DynamicResource Brush.ToolBar.SeparatorDark}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource Brush.ToolBar.SeparatorLight}"/>
+    <Setter Property="BorderThickness" Value="0,0,1,0"/>
+    <Setter Property="SnapsToDevicePixels" Value="True"/>
+    <Setter Property="UseLayoutRounding" Value="True"/>
   </Style>
 
   <!-- ==================== AutoCAD 2019 浏览文件图标按钮样式 (28x24) ==================== -->
@@ -106,7 +146,7 @@
     <Setter Property="ToolTipService.Placement" Value="Top"/>
   </Style>
 
-  <!-- ==================== AutoCAD 2019 对话框底部图标按钮样式 (36x28, 内部可用高度 20px) ==================== -->
+  <!-- ==================== AutoCAD 2019 对话框底部图标按钮样式 (36x28) ==================== -->
   <Style x:Key="CadDialogIconButtonStyle" TargetType="Button" BasedOn="{StaticResource CadToolbarIconButtonStyle}">
     <Setter Property="Width" Value="36"/>
     <Setter Property="Height" Value="28"/>
@@ -159,15 +199,15 @@
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="Button">
-          <Border Background="{TemplateBinding Background}" CornerRadius="2">
+          <Border Background="{TemplateBinding Background}" CornerRadius="0">
             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" Margin="{TemplateBinding Padding}"/>
           </Border>
           <ControlTemplate.Triggers>
             <Trigger Property="IsMouseOver" Value="True">
-              <Setter Property="Background" Value="#505050"/>
+              <Setter Property="Background" Value="#26FFFFFF"/>
             </Trigger>
             <Trigger Property="IsPressed" Value="True">
-              <Setter Property="Background" Value="#005A9E"/>
+              <Setter Property="Background" Value="#38000000"/>
             </Trigger>
           </ControlTemplate.Triggers>
         </ControlTemplate>

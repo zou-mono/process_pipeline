@@ -1,4 +1,3 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
-  <!-- AutoCAD 2019 / ArcGIS 10.5 Style: Show All Records (Pure Primary/White Rows, No Blue) -->
-  <path fill="#E4E8EC" d="M2,3 L22,3 L22,21 L2,21 L2,3 Z M3.8,4.8 L3.8,7.6 L20.2,7.6 L20.2,4.8 L3.8,4.8 Z M3.8,9.0 L3.8,19.2 L20.2,19.2 L20.2,9.0 L3.8,9.0 Z M5.4,10.2 L18.6,10.2 L18.6,12.0 L5.4,12.0 Z M5.4,13.2 L18.6,13.2 L18.6,15.0 L5.4,15.0 Z M5.4,16.2 L18.6,16.2 L18.6,18.0 L5.4,18.0 Z"/>
+  <path fill="none" stroke="#E4E8EC" stroke-width="1.25" stroke-linecap="square" stroke-linejoin="miter" d="M3,4 L21,4 L21,20 L3,20 Z M3,8 L21,8 M5.5,11.2 L18.5,11.2 M5.5,14.2 L18.5,14.2 M5.5,17.2 L18.5,17.2"/>
 </svg>

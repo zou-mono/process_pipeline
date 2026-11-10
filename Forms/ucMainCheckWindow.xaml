@@ -11,7 +11,9 @@
              xmlns:layout="clr-namespace:process_pipeline.Controls.CompositeSplitter.Layout"
              xmlns:splitter="clr-namespace:process_pipeline.Controls.CompositeSplitter"
              mc:Ignorable="d" 
-             d:DesignHeight="450" d:DesignWidth="800" Loaded="UserControl_Loaded">
+             d:DesignHeight="450" d:DesignWidth="800"
+             Background="{DynamicResource Brush.DataGrid.Panel.BackgroundColor}"
+             Loaded="UserControl_Loaded">
 
   <UserControl.Resources>
     <ResourceDictionary>
@@ -20,13 +22,13 @@
         <ResourceDictionary Source="/process_pipeline;component/Controls/CompositeSplitter/Styles.xaml"/>
       </ResourceDictionary.MergedDictionaries>
 
-      <!-- 统一尺寸 -->
-      <sys:Double x:Key="ToolbarHeight">40</sys:Double>
-      <sys:Double x:Key="StatusBarHeight">28</sys:Double>
+      <!-- 统一尺寸（对标 AutoCAD 2019 原生工具栏：紧凑高度 26px，按钮 22x22，图标保持 20x20） -->
+      <sys:Double x:Key="ToolbarHeight">26</sys:Double>
+      <sys:Double x:Key="StatusBarHeight">26</sys:Double>
       <sys:Double x:Key="SplitterWidth">2</sys:Double>
-      <sys:Double x:Key="CollapseButtonWidth">20</sys:Double>
-      <sys:Double x:Key="TitlePane.DockHeight">20</sys:Double>
-      <GridLength x:Key="TitlePane.HeaderHeight">30</GridLength>
+      <sys:Double x:Key="CollapseButtonWidth">22</sys:Double>
+      <sys:Double x:Key="TitlePane.DockHeight">22</sys:Double>
+      <GridLength x:Key="TitlePane.HeaderHeight">28</GridLength>
 
       <layout:PaneLayoutState x:Key="LeftPaneState"
                               DisplayState="Normal"
@@ -37,15 +39,70 @@
                               PrimaryMinExpandedLength="0"
                               SecondaryMinLength="0"/>
       
-      <!-- Toolbar 样式 -->
+      <!-- Toolbar 样式：还原 AutoCAD 2019 原生 26px 紧凑工具栏 + 1px 黑色细线外框 + adui23.dll CAdUiThemedGripDraw 双列蚀刻点阵把手 -->
       <Style x:Key="ToolBarStyle" TargetType="ToolBar">
         <Setter Property="Height" Value="{StaticResource ToolbarHeight}" />
         <Setter Property="MinHeight" Value="{StaticResource ToolbarHeight}" />
         <Setter Property="MaxHeight" Value="{StaticResource ToolbarHeight}" />
-        <Setter Property="Background" Value="{DynamicResource Brush.DataGrid.Panel.BackgroundColor}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource Brush.DataGrid.GridLine}" />
-        <Setter Property="BorderThickness" Value="0,0,0,1" />
-        <Setter Property="Padding" Value="8,4" />
+        <Setter Property="Background" Value="{DynamicResource Brush.ToolBar.Background}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.ToolBar.OuterBorder}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="2,0,4,0" />
+        <Setter Property="Margin" Value="0" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+        <Setter Property="UseLayoutRounding" Value="True" />
+        <Setter Property="Template">
+          <Setter.Value>
+            <ControlTemplate TargetType="ToolBar">
+              <Border Background="{TemplateBinding Background}"
+                      BorderBrush="{TemplateBinding BorderBrush}"
+                      BorderThickness="{TemplateBinding BorderThickness}"
+                      Padding="{TemplateBinding Padding}"
+                      CornerRadius="0"
+                      SnapsToDevicePixels="True"
+                      UseLayoutRounding="True">
+                <Grid VerticalAlignment="Center">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                  </Grid.ColumnDefinitions>
+                  <!-- AutoCAD 2019 adui23.dll CAdUiThemedGripDraw::DrawDoubleGrip 双列紧凑 3D 蚀刻点阵把手 (上黑 #000000 + 下亮灰 #949494) -->
+                  <Canvas Grid.Column="0"
+                          Width="5"
+                          Height="18"
+                          Margin="2,0,4,0"
+                          VerticalAlignment="Center"
+                          SnapsToDevicePixels="True"
+                          UseLayoutRounding="True">
+                    <!-- 上层暗点 (#000000)：2列(X=1, X=3) x 6行(Y=1,4,7,10,13,16) -->
+                    <Path Fill="{DynamicResource Brush.ToolBar.GripDarkDot}"
+                          SnapsToDevicePixels="True"
+                          Data="M1,1 h1 v1 h-1 Z M3,1 h1 v1 h-1 Z
+                                M1,4 h1 v1 h-1 Z M3,4 h1 v1 h-1 Z
+                                M1,7 h1 v1 h-1 Z M3,7 h1 v1 h-1 Z
+                                M1,10 h1 v1 h-1 Z M3,10 h1 v1 h-1 Z
+                                M1,13 h1 v1 h-1 Z M3,13 h1 v1 h-1 Z
+                                M1,16 h1 v1 h-1 Z M3,16 h1 v1 h-1 Z"/>
+                    <!-- 下层高光亮色点 (#949494)：紧贴每个暗点正下方 (Y=2,5,8,11,14,17)，形成内凹蚀刻竖线点阵 -->
+                    <Path Fill="{DynamicResource Brush.ToolBar.GripLightDot}"
+                          SnapsToDevicePixels="True"
+                          Data="M1,2 h1 v1 h-1 Z M3,2 h1 v1 h-1 Z
+                                M1,5 h1 v1 h-1 Z M3,5 h1 v1 h-1 Z
+                                M1,8 h1 v1 h-1 Z M3,8 h1 v1 h-1 Z
+                                M1,11 h1 v1 h-1 Z M3,11 h1 v1 h-1 Z
+                                M1,14 h1 v1 h-1 Z M3,14 h1 v1 h-1 Z
+                                M1,17 h1 v1 h-1 Z M3,17 h1 v1 h-1 Z"/>
+                  </Canvas>
+                  <ToolBarPanel x:Name="PART_ToolBarPanel"
+                                Grid.Column="1"
+                                IsItemsHost="True"
+                                Margin="0"
+                                VerticalAlignment="Center"/>
+                </Grid>
+              </Border>
+            </ControlTemplate>
+          </Setter.Value>
+        </Setter>
       </Style>
 
       <!-- StatusBar 样式 -->
@@ -384,7 +441,7 @@
         <Setter Property="ShowsPreview" Value="False" />
       </Style>
 
-      <!-- SplitterToggleButton 样式 (AutoCAD 2019 导航面板折叠/展开图标按钮) -->
+      <!-- SplitterToggleButton 样式 (AutoCAD 2019 导航面板折叠/展开图标按钮：半透明覆盖 + 黑色外框) -->
       <Style x:Key="TilePane.ButtonStyle" TargetType="Button">
         <Setter Property="Width" Value="{StaticResource CollapseButtonWidth}" />
         <Setter Property="Height" Value="{StaticResource CollapseButtonWidth}" />
@@ -404,7 +461,7 @@
                       Background="{TemplateBinding Background}"
                       BorderBrush="{TemplateBinding BorderBrush}"
                       BorderThickness="{TemplateBinding BorderThickness}"
-                      CornerRadius="2"
+                      CornerRadius="0"
                       Padding="{TemplateBinding Padding}"
                       SnapsToDevicePixels="True">
                 <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
@@ -416,6 +473,7 @@
                 </Trigger>
                 <Trigger Property="IsPressed" Value="True">
                   <Setter TargetName="CollapseBtnBorder" Property="Background" Value="{DynamicResource Brush.ToolBar.Button.PressedBackground}"/>
+                  <Setter TargetName="CollapseBtnBorder" Property="BorderBrush" Value="{DynamicResource Brush.ToolBar.Button.PressedBorder}"/>
                 </Trigger>
               </ControlTemplate.Triggers>
             </ControlTemplate>
@@ -428,16 +486,16 @@
         <Setter Property="Background" Value="{DynamicResource Brush.DataGrid.Header.Background}"/>
       </Style>
 
-      <!-- 仿 ArcGIS 10.5 属性表底部“显示所有行 / 仅显示选中行”双模式切换矢量图标按钮样式（Stage 7 Commit 7.5 & 7.7） -->
+      <!-- 仿 ArcGIS 10.5 属性表底部“显示所有行 / 仅显示选中行”双模式切换矢量图标按钮样式（CAD 2019 半透明悬停 + 黑色外框） -->
       <Style x:Key="ArcGisRecordModeToggleStyle" TargetType="ToggleButton">
-        <Setter Property="Width" Value="28"/>
+        <Setter Property="Width" Value="26"/>
         <Setter Property="Height" Value="24"/>
         <Setter Property="Padding" Value="2"/>
-        <Setter Property="Margin" Value="0,0,4,0"/>
+        <Setter Property="Margin" Value="0,0,3,0"/>
         <Setter Property="Cursor" Value="Hand"/>
-        <Setter Property="Background" Value="{DynamicResource Brush.Dialog.Button.Background}"/>
+        <Setter Property="Background" Value="Transparent"/>
         <Setter Property="Foreground" Value="{DynamicResource Brush.DataGrid.Text.Foreground}"/>
-        <Setter Property="BorderBrush" Value="{DynamicResource Brush.DataGrid.GridLine}"/>
+        <Setter Property="BorderBrush" Value="Transparent"/>
         <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="SnapsToDevicePixels" Value="True"/>
         <Setter Property="UseLayoutRounding" Value="True"/>
@@ -452,7 +510,7 @@
                       Background="{TemplateBinding Background}"
                       BorderBrush="{TemplateBinding BorderBrush}"
                       BorderThickness="{TemplateBinding BorderThickness}"
-                      CornerRadius="1"
+                      CornerRadius="0"
                       Padding="{TemplateBinding Padding}"
                       SnapsToDevicePixels="True">
                 <ContentPresenter HorizontalAlignment="Center"
@@ -460,18 +518,16 @@
               </Border>
               <ControlTemplate.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
-                  <Setter TargetName="ModeBorder" Property="Background" Value="{DynamicResource Brush.Dialog.Button.HoverBackground}"/>
-                  <Setter TargetName="ModeBorder" Property="BorderBrush" Value="{DynamicResource Brush.Dialog.Button.HoverBorder}"/>
+                  <Setter TargetName="ModeBorder" Property="Background" Value="{DynamicResource Brush.ToolBar.Button.HoverBackground}"/>
+                  <Setter TargetName="ModeBorder" Property="BorderBrush" Value="{DynamicResource Brush.ToolBar.Button.HoverBorder}"/>
                 </Trigger>
                 <Trigger Property="IsChecked" Value="True">
-                  <Setter TargetName="ModeBorder" Property="Background" Value="{DynamicResource Brush.ToolTip.Background}"/>
-                  <Setter TargetName="ModeBorder" Property="BorderBrush" Value="{DynamicResource Brush.Dialog.Button.HoverBorder}"/>
-                  <Setter TargetName="ModeBorder" Property="BorderThickness" Value="1.5"/>
-                  <Setter Property="Foreground" Value="{DynamicResource Brush.DataGrid.SelectedText.Foreground}"/>
+                  <Setter TargetName="ModeBorder" Property="Background" Value="{DynamicResource Brush.ToolBar.Button.PressedBackground}"/>
+                  <Setter TargetName="ModeBorder" Property="BorderBrush" Value="{DynamicResource Brush.ToolBar.Button.PressedBorder}"/>
                 </Trigger>
                 <Trigger Property="IsPressed" Value="True">
-                  <Setter TargetName="ModeBorder" Property="Background" Value="{DynamicResource Brush.Dialog.Button.PressedBackground}"/>
-                  <Setter Property="Foreground" Value="{DynamicResource Brush.Dialog.Button.PressedForeground}"/>
+                  <Setter TargetName="ModeBorder" Property="Background" Value="{DynamicResource Brush.ToolBar.Button.PressedBackground}"/>
+                  <Setter TargetName="ModeBorder" Property="BorderBrush" Value="{DynamicResource Brush.ToolBar.Button.PressedBorder}"/>
                 </Trigger>
               </ControlTemplate.Triggers>
             </ControlTemplate>
@@ -486,7 +542,7 @@
     <core:CadSelectionSyncBehavior OnCadSelectionChanged="{Binding CadSelectionChangedCommand}" />
   </i:Interaction.Behaviors>
 
-  <Grid>
+  <Grid Background="{DynamicResource Brush.DataGrid.Panel.BackgroundColor}">
     <Grid.RowDefinitions>
       <RowDefinition Height="Auto"/>
       <RowDefinition Height="*"/>
@@ -494,69 +550,72 @@
       <!-- StatusBar -->
     </Grid.RowDefinitions>
 
-    <!-- Toolbar (Stage 7 Commit 7.7：AutoCAD 2019 统一矢量图标按钮体系 + 悬停即显 ToolTip) -->
+    <!-- Toolbar (AutoCAD 2019 原生紧凑高度 26px + 1px 黑色细线外框 + 20x20 矢量图标 + 左侧双列蚀刻点阵把手 + 双线分隔线) -->
     <ToolBar Grid.Row="0" Style="{StaticResource ToolBarStyle}" ToolBarTray.IsLocked="True">
       <Button Style="{StaticResource CadToolbarIconButtonStyle}"
               Command="{Binding OpenDataSourceSettingsCommand}"
               ToolTip="{Binding DataSourceToolTipText}">
-        <ContentControl Template="{StaticResource IconTemplate.DataSource}" Width="18" Height="18" Focusable="False"/>
+        <ContentControl Template="{StaticResource IconTemplate.DataSource}" Width="20" Height="20" Focusable="False"/>
       </Button>
       <Button Style="{StaticResource CadToolbarIconButtonStyle}"
               Command="{Binding RunFullCheckCommand}"
-              ToolTip="一键全量核查：顺序执行全部五项管线核查规则并汇总展示">
-        <ContentControl Template="{StaticResource IconTemplate.FullCheck}" Width="18" Height="18" Focusable="False"/>
+              ToolTip="一键全量核查&#x0a;按顺序执行全部五项管线核查规则，并将检出的问题汇总展示在右侧列表中。">
+        <ContentControl Template="{StaticResource IconTemplate.FullCheck}" Width="20" Height="20" Focusable="False"/>
       </Button>
-      <Separator Margin="2,4,6,4"/>
-      <ComboBox Width="168"
-                Height="24"
+      <Border Style="{StaticResource CadToolbarSeparatorStyle}"/>
+      <ComboBox Width="162"
+                Height="20"
+                FontSize="11.5"
+                Padding="5,0,2,0"
                 ItemsSource="{Binding AvailableSingleRules}"
                 SelectedItem="{Binding SelectedSingleRule, Mode=TwoWay}"
                 DisplayMemberPath="DisplayName"
                 VerticalContentAlignment="Center"
-                ToolTip="选择要单独执行的管线核查规则"
+                ToolTip="核查规则选择&#x0a;从下拉列表中选择需要单独执行的管线核查规则。"
                 ToolTipService.InitialShowDelay="120"
                 ToolTipService.ShowDuration="15000"
-                Margin="0,0,4,0"/>
+                Margin="0,0,3,0"/>
       <Button Style="{StaticResource CadToolbarIconButtonStyle}"
               Command="{Binding RunSingleCheckCommand}"
               ToolTip="{Binding SingleRuleToolTipText}">
-        <ContentControl Template="{StaticResource IconTemplate.SingleCheck}" Width="18" Height="18" Focusable="False"/>
+        <ContentControl Template="{StaticResource IconTemplate.SingleCheck}" Width="20" Height="20" Focusable="False"/>
       </Button>
-      <Separator Margin="2,4,6,4"/>
+      <Border Style="{StaticResource CadToolbarSeparatorStyle}"/>
       <Button Style="{StaticResource CadToolbarIconButtonStyle}"
               Command="{Binding RefreshCommand}"
-              ToolTip="刷新核查列表：重新同步当前核查规则数据与状态统计">
-        <ContentControl Template="{StaticResource IconTemplate.Refresh}" Width="18" Height="18" Focusable="False"/>
+              ToolTip="刷新列表&#x0a;重新执行当前核查规则，同步图纸最新修改结果与状态统计数量。">
+        <ContentControl Template="{StaticResource IconTemplate.Refresh}" Width="20" Height="20" Focusable="False"/>
       </Button>
       <Button Style="{StaticResource CadToolbarIconButtonStyle}"
               Command="{Binding ZoomToCommand}"
-              ToolTip="定位到CAD图纸：缩放视口至当前选中管线并高亮配对图元 (或双击列表行)">
-        <ContentControl Template="{StaticResource IconTemplate.ZoomTarget}" Width="18" Height="18" Focusable="False"/>
+              ToolTip="图面定位&#x0a;将 CAD 视口缩放定位至当前选中管线位置，并同步高亮显示配对图元。">
+        <ContentControl Template="{StaticResource IconTemplate.ZoomTarget}" Width="20" Height="20" Focusable="False"/>
       </Button>
       <Button Style="{StaticResource CadToolbarIconButtonStyle}"
               Command="{Binding ExportCommand}"
-              ToolTip="导出核查报表：导出当前核查问题记录列表">
-        <ContentControl Template="{StaticResource IconTemplate.ExportReport}" Width="18" Height="18" Focusable="False"/>
+              ToolTip="导出报表&#x0a;将当前核查问题记录列表导出为报表文件以便存档或提交复核。">
+        <ContentControl Template="{StaticResource IconTemplate.ExportReport}" Width="20" Height="20" Focusable="False"/>
       </Button>
-      <Separator Margin="2,4,6,4"/>
-      <Border Height="24"
+      <Border Style="{StaticResource CadToolbarSeparatorStyle}"/>
+      <Border Height="20"
               Background="{DynamicResource Brush.DataGrid.Row.Background}"
-              BorderBrush="{DynamicResource Brush.DataGrid.GridLine}"
+              BorderBrush="{DynamicResource Brush.ToolBar.OuterBorder}"
               BorderThickness="1"
-              CornerRadius="1"
+              CornerRadius="0"
               Padding="5,0,2,0"
               VerticalAlignment="Center"
-              ToolTip="关键字过滤：输入编号、核查类型、图层、状态、坐标或备注实时筛选列表"
+              ToolTip="关键字筛选&#x0a;输入管线编号、核查类型、图层、状态、坐标或备注关键字，实时过滤当前列表。"
               ToolTipService.InitialShowDelay="120"
               ToolTipService.ShowDuration="15000">
         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
           <ContentControl Template="{StaticResource IconTemplate.SearchFilter}"
-                          Width="14"
-                          Height="14"
+                          Width="15"
+                          Height="15"
                           Focusable="False"
                           VerticalAlignment="Center"
-                          Margin="0,0,5,0"/>
-          <TextBox Width="165"
+                          Margin="0,0,4,0"/>
+          <TextBox Width="160"
+                   FontSize="11.5"
                    BorderThickness="0"
                    Background="Transparent"
                    Foreground="{DynamicResource Brush.DataGrid.Text.Foreground}"
@@ -590,10 +649,10 @@
               <Setter Property="ToggleContent">
                 <Setter.Value>
                   <ContentControl Template="{StaticResource IconTemplate.PaneCollapseLeft}"
-                                  Width="14"
-                                  Height="14"
+                                  Width="16"
+                                  Height="16"
                                   Focusable="False"
-                                  ToolTip="折叠左侧核查导航面板"/>
+                                  ToolTip="折叠导航栏&#x0a;收起左侧核查分类与图层导航树面板，扩大右侧列表显示区域。"/>
                 </Setter.Value>
               </Setter>
               <Setter Property="IsPaneCollapsed" Value="False"/>
@@ -608,10 +667,10 @@
                   <Setter Property="ToggleContent">
                     <Setter.Value>
                       <ContentControl Template="{StaticResource IconTemplate.PaneExpandRight}"
-                                      Width="14"
-                                      Height="14"
+                                      Width="16"
+                                      Height="16"
                                       Focusable="False"
-                                      ToolTip="展开左侧核查导航面板"/>
+                                      ToolTip="展开导航栏&#x0a;展开左侧核查分类与图层导航树面板。"/>
                     </Setter.Value>
                   </Setter>
                   <Setter Property="HeaderButtonStyle" Value="{StaticResource TilePane.ButtonStyle}"/>
@@ -805,16 +864,16 @@
                     Background="{DynamicResource Brush.DataGrid.Header.Background}"
                     BorderBrush="{DynamicResource Brush.DataGrid.GridLine}"
                     BorderThickness="0,1,0,0"
-                    Padding="6,2">
+                    Padding="6,1">
               <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                 <ToggleButton Style="{StaticResource ArcGisRecordModeToggleStyle}"
                               IsChecked="{Binding IsShowAllRows, Mode=TwoWay}"
-                              ToolTip="显示所有行：显示当前筛选分类下的全部记录行（图面选中时自动滚动定位）">
+                              ToolTip="显示所有行&#x0a;展示当前分类或筛选条件下的全部记录行，在图纸中点选管线时自动滚动定位。">
                   <ContentControl Template="{StaticResource IconTemplate.TableShowAll}" Width="18" Height="18" Focusable="False"/>
                 </ToggleButton>
                 <ToggleButton Style="{StaticResource ArcGisRecordModeToggleStyle}"
                               IsChecked="{Binding IsShowSelectedOnly, Mode=TwoWay}"
-                              ToolTip="仅显示选中行：仅过滤显示当前在 CAD 图面或列表中选中的记录行">
+                              ToolTip="仅显示选中行&#x0a;仅过滤显示当前在 CAD 图纸或列表中处于选中状态的记录行。">
                   <ContentControl Template="{StaticResource IconTemplate.TableShowSelected}" Width="18" Height="18" Focusable="False"/>
                 </ToggleButton>
                 <Rectangle Width="1"
