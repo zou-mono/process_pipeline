@@ -1,6 +1,12 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
-  <!-- AutoCAD 2019 Style: Browse DWG Folder -->
-  <path fill="#38ABFF" fill-opacity="0.18" d="M3,7 L10,7 L12,9 L21,9 L21,19 L3,19 Z"/>
-  <path fill="#E4E8EC" d="M2,5 L9.5,5 L11.5,7 L21,7 L21,11 L19.3,11 L19.3,8.7 L10.8,8.7 L8.8,6.7 L3.7,6.7 L3.7,18.3 L19.2,18.3 L20.5,12.5 L22.2,12.5 L20.6,20 L2,20 L2,5 Z"/>
-  <path fill="#38ABFF" d="M5.2,11 L22.2,11 L20.4,19 L3.7,19 Z" fill-opacity="0.45"/>
+﻿<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" shape-rendering="crispEdges">
+  <!-- AutoCAD 2019 Native 16x16 Icon: NativeIcon.FolderBrowse (acadbtn.xmx:RCDATA_16_OPEN) -->
+  <path fill="#FFFFFF" d="M0,2 H6 V3 H0 Z M0,3 H7 V4 H0 Z M0,4 H12 V5 H0 Z M0,5 H12 V6 H0 Z M0,6 H2 V7 H0 Z M0,7 H2 V8 H0 Z M0,8 H1 V9 H0 Z M0,9 H1 V10 H0 Z"/>
+  <path fill="#FFFFFF" fill-opacity="0.529" d="M6,2 H7 V3 H6 Z M7,3 H8 V4 H7 Z"/>
+  <path fill="#FFFFFF" fill-opacity="0.996" d="M2,6 H3 V7 H2 Z M1,8 H2 V9 H1 Z M0,10 H1 V11 H0 Z"/>
+  <path fill="#FFFFFF" fill-opacity="0.188" d="M3,6 H4 V7 H3 Z M2,8 H3 V9 H2 Z M1,10 H2 V11 H1 Z"/>
+  <path fill="#FFFFFF" fill-opacity="0.686" d="M2,7 H3 V8 H2 Z M1,9 H2 V10 H1 Z M0,11 H1 V12 H0 Z"/>
+  <path fill="#FFFFFF" fill-opacity="0.341" d="M3,7 H4 V8 H3 Z"/>
+  <path fill="#E6E6E6" d="M4,7 H15 V8 H4 Z M4,8 H15 V9 H4 Z M3,9 H14 V10 H3 Z M3,10 H14 V11 H3 Z M2,11 H13 V12 H2 Z M2,12 H13 V13 H2 Z M1,13 H12 V14 H1 Z M1,14 H12 V15 H1 Z"/>
+  <path fill="#E6E6E6" fill-opacity="0.843" d="M15,7 H16 V8 H15 Z M3,8 H4 V9 H3 Z M14,9 H15 V10 H14 Z M2,10 H3 V11 H2 Z M13,11 H14 V12 H13 Z M1,12 H2 V13 H1 Z M12,13 H13 V14 H12 Z M0,14 H1 V15 H0 Z"/>
+  <path fill="#E6E6E6" fill-opacity="0.341" d="M15,8 H16 V9 H15 Z M2,9 H3 V10 H2 Z M14,10 H15 V11 H14 Z M1,11 H2 V12 H1 Z M13,12 H14 V13 H13 Z M0,13 H1 V14 H0 Z M12,14 H13 V15 H12 Z"/>
 </svg>

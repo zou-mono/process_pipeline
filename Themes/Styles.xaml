@@ -423,7 +423,27 @@
     </Setter>
   </Style>
 
-  <!-- ==================== AutoCAD 2019 原生右键菜单 ContextMenu & MenuItem 样式 ==================== -->
+  <!-- ==================== AutoCAD 2019 原生右键菜单 ContextMenu, MenuItem & Separator 样式 (反编译自 AcWindows.dll contextmenuhost.baml) ==================== -->
+  <Style x:Key="CadContextMenuSeparatorStyle" TargetType="Separator">
+    <Setter Property="Height" Value="2"/>
+    <Setter Property="Margin" Value="28,3,2,3"/>
+    <Setter Property="SnapsToDevicePixels" Value="True"/>
+    <Setter Property="UseLayoutRounding" Value="True"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="Separator">
+          <Border Height="2"
+                  Background="{DynamicResource Brush.ToolBar.SeparatorDark}"
+                  BorderBrush="{DynamicResource Brush.ToolBar.SeparatorLight}"
+                  BorderThickness="0,0,0,1"
+                  SnapsToDevicePixels="True"/>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <Style x:Key="{x:Static MenuItem.SeparatorStyleKey}" TargetType="Separator" BasedOn="{StaticResource CadContextMenuSeparatorStyle}"/>
+
   <Style x:Key="CadMenuItemStyle" TargetType="MenuItem">
     <Setter Property="Height" Value="24"/>
     <Setter Property="FontSize" Value="12"/>
@@ -437,12 +457,12 @@
       <Setter.Value>
         <ControlTemplate TargetType="MenuItem">
           <Grid SnapsToDevicePixels="True" UseLayoutRounding="True">
-            <!-- 内部透明膜填充层 -->
+            <!-- 内部透明膜填充层 (UxTheme TP_BUTTON 10.2% #008CFF 悬停蓝膜) -->
             <Border x:Name="ItemFill"
                     Margin="1"
                     Background="{TemplateBinding Background}"
                     SnapsToDevicePixels="True"/>
-            <!-- 外层 1px 悬停框 -->
+            <!-- 外层 1px 悬停框 (20% #008CFF 悬停蓝框) -->
             <Border x:Name="ItemBorder"
                     Background="Transparent"
                     BorderBrush="{TemplateBinding BorderBrush}"
@@ -453,7 +473,7 @@
                   <ColumnDefinition Width="26" SharedSizeGroup="MenuItemIconColumnGroup"/>
                   <ColumnDefinition Width="*"/>
                   <ColumnDefinition Width="Auto" SharedSizeGroup="MenuItemIGTColumnGroup"/>
-                  <ColumnDefinition Width="12"/>
+                  <ColumnDefinition Width="10"/>
                 </Grid.ColumnDefinitions>
                 <ContentPresenter x:Name="Icon"
                                   Grid.Column="0"
@@ -461,11 +481,13 @@
                                   Width="16"
                                   Height="16"
                                   HorizontalAlignment="Center"
-                                  VerticalAlignment="Center"/>
+                                  VerticalAlignment="Center"
+                                  SnapsToDevicePixels="True"/>
                 <ContentPresenter Grid.Column="1"
                                   ContentSource="Header"
-                                  Margin="6,0,16,0"
+                                  Margin="8,0,16,0"
                                   VerticalAlignment="Center"
+                                  TextElement.Foreground="{DynamicResource Brush.DataGrid.Text.Foreground}"
                                   RecognizesAccessKey="True"/>
                 <TextBlock Grid.Column="2"
                            Text="{TemplateBinding InputGestureText}"
@@ -481,7 +503,7 @@
               <Setter TargetName="ItemBorder" Property="BorderBrush" Value="{DynamicResource Brush.ToolBar.Button.HoverBorder}"/>
             </Trigger>
             <Trigger Property="IsEnabled" Value="False">
-              <Setter Property="Opacity" Value="0.42"/>
+              <Setter Property="Opacity" Value="0.45"/>
             </Trigger>
           </ControlTemplate.Triggers>
         </ControlTemplate>
@@ -504,8 +526,9 @@
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="ContextMenu">
-          <Border Background="{TemplateBinding Background}"
-                  BorderBrush="{TemplateBinding BorderBrush}"
+          <Border x:Name="ContextMenuOuterBorder"
+                  Background="{DynamicResource Brush.ContextMenu.Background}"
+                  BorderBrush="{DynamicResource Brush.ContextMenu.Border}"
                   BorderThickness="{TemplateBinding BorderThickness}"
                   Padding="{TemplateBinding Padding}"
                   SnapsToDevicePixels="True"
@@ -514,6 +537,8 @@
               <Border HorizontalAlignment="Left"
                       Width="26"
                       Background="{DynamicResource Brush.ContextMenu.IconColumnBackground}"
+                      BorderBrush="{DynamicResource Brush.ContextMenu.Separator}"
+                      BorderThickness="0,0,1,0"
                       SnapsToDevicePixels="True"/>
               <StackPanel IsItemsHost="True"
                           KeyboardNavigation.DirectionalNavigation="Cycle"/>

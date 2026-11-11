@@ -1,6 +1,27 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
-  <!-- AutoCAD 2019 Style: Auto Sniff & Detect DataSource (Radar Compass) -->
-  <circle fill="#38ABFF" fill-opacity="0.16" cx="12" cy="12" r="8"/>
-  <path fill="#E4E8EC" d="M12,2 C6.48,2 2,6.48 2,12 C2,17.52 6.48,22 12,22 C17.52,22 22,17.52 22,12 C22,6.48 17.52,2 12,2 Z M12,3.7 C16.58,3.7 20.3,7.42 20.3,12 C20.3,16.58 16.58,20.3 12,20.3 C7.42,20.3 3.7,16.58 3.7,12 C3.7,7.42 7.42,3.7 12,3.7 Z"/>
-  <path fill="#38ABFF" d="M16.8,7.2 L10.2,10.2 L7.2,16.8 L13.8,13.8 L16.8,7.2 Z M12,10.7 C12.72,10.7 13.3,11.28 13.3,12 C13.3,12.72 12.72,13.3 12,13.3 C11.28,13.3 10.7,12.72 10.7,12 C10.7,11.28 11.28,10.7 12,10.7 Z"/>
+﻿<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" shape-rendering="crispEdges">
+  <!-- AutoCAD 2019 Native 16x16 Icon: NativeIcon.AutoSniff (acadbtn.xmx:RCDATA_16_QUICK_SELECT) -->
+  <path fill="#FFD580" fill-opacity="0.275" d="M7,0 H8 V1 H7 Z M8,1 H9 V2 H8 Z M3,3 H4 V4 H3 Z M10,4 H11 V5 H10 Z M5,6 H6 V7 H5 Z M6,7 H7 V8 H6 Z"/>
+  <path fill="#FFD580" d="M8,0 H9 V1 H8 Z M7,1 H8 V2 H7 Z M6,2 H8 V3 H6 Z M4,3 H9 V4 H4 Z M5,4 H10 V5 H5 Z M6,5 H8 V6 H6 Z M6,6 H7 V7 H6 Z M5,7 H6 V8 H5 Z"/>
+  <path fill="#FFD580" fill-opacity="0.475" d="M6,1 H7 V2 H6 Z M7,6 H8 V7 H7 Z"/>
+  <path fill="#FFD580" fill-opacity="0.384" d="M4,2 H5 V3 H4 Z M9,5 H10 V6 H9 Z"/>
+  <path fill="#FFD580" fill-opacity="0.62" d="M5,2 H6 V3 H5 Z M8,5 H9 V6 H8 Z"/>
+  <path fill="#FFD580" fill-opacity="0.149" d="M9,3 H10 V4 H9 Z M4,4 H5 V5 H4 Z"/>
+  <path fill="#FFFFFF" fill-opacity="0.498" d="M0,4 H1 V5 H0 Z M1,5 H2 V6 H1 Z M2,6 H3 V7 H2 Z M3,7 H4 V8 H3 Z M4,8 H5 V9 H4 Z M5,9 H6 V10 H5 Z M6,10 H7 V11 H6 Z"/>
+  <path fill="#FFFFFF" d="M0,5 H1 V6 H0 Z M0,6 H2 V7 H0 Z M0,7 H3 V8 H0 Z M0,8 H4 V9 H0 Z M0,9 H5 V10 H0 Z M0,10 H6 V11 H0 Z M0,11 H2 V12 H0 Z M3,11 H4 V12 H3 Z M0,12 H1 V13 H0 Z M4,13 H5 V14 H4 Z M5,14 H6 V15 H5 Z"/>
+  <path fill="#F3F3F3" d="M7,7 H16 V8 H7 Z M7,8 H16 V9 H7 Z M7,9 H9 V10 H7 Z M10,9 H11 V10 H10 Z M14,9 H16 V10 H14 Z M7,10 H16 V11 H7 Z M7,11 H9 V12 H7 Z M10,11 H11 V12 H10 Z M14,11 H16 V12 H14 Z M7,12 H16 V13 H7 Z M7,13 H9 V14 H7 Z M10,13 H11 V14 H10 Z M14,13 H16 V14 H14 Z M7,14 H16 V15 H7 Z M7,15 H16 V16 H7 Z"/>
+  <path fill="#178FE6" d="M9,9 H10 V10 H9 Z M11,9 H14 V10 H11 Z M9,11 H10 V12 H9 Z M11,11 H14 V12 H11 Z M9,13 H10 V14 H9 Z M11,13 H14 V14 H11 Z"/>
+  <path fill="#FFFFFF" fill-opacity="0.773" d="M2,11 H3 V12 H2 Z"/>
+  <path fill="#FFFFFF" fill-opacity="0.592" d="M4,11 H5 V12 H4 Z"/>
+  <path fill="#FFFFFF" fill-opacity="0.502" d="M1,12 H2 V13 H1 Z M0,13 H1 V14 H0 Z M5,15 H6 V16 H5 Z"/>
+  <path fill="#FFFFFF" fill-opacity="0.118" d="M2,12 H3 V13 H2 Z"/>
+  <path fill="#FFFFFF" fill-opacity="0.976" d="M3,12 H4 V13 H3 Z"/>
+  <path fill="#FFFFFF" fill-opacity="0.984" d="M4,12 H5 V13 H4 Z"/>
+  <path fill="#FFFFFF" fill-opacity="0.153" d="M5,12 H6 V13 H5 Z"/>
+  <path fill="#FFFFFF" fill-opacity="0.631" d="M3,13 H4 V14 H3 Z"/>
+  <path fill="#FFFFFF" fill-opacity="0.682" d="M5,13 H6 V14 H5 Z"/>
+  <path fill="#FFFFFF" fill-opacity="0.192" d="M3,14 H4 V15 H3 Z"/>
+  <path fill="#FFFFFF" fill-opacity="0.996" d="M4,14 H5 V15 H4 Z"/>
+  <path fill="#FFFFFF" fill-opacity="0.227" d="M6,14 H7 V15 H6 Z"/>
+  <path fill="#FFFFFF" fill-opacity="0.663" d="M4,15 H5 V16 H4 Z"/>
+  <path fill="#FFFFFF" fill-opacity="0.063" d="M6,15 H7 V16 H6 Z"/>
 </svg>

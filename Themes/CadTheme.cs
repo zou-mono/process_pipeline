@@ -1,19 +1,20 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using System.Windows.Media;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media;
 using AcadApp = Autodesk.AutoCAD.ApplicationServices.Application;
 
 namespace process_pipeline.Themes
 {
     public static class CadThemes
     {
-        // 建议使用 pack URI 绝对路径，这是 WPF 最稳健的路径格式
-        //private static readonly string ResourcePath = "pack://application:,,,/process_pipeline;component/Forms/App.xaml";
         private static readonly ResourceDictionary _cache = new ResourceDictionary();
+        private static string _lastActiveThemeName = "Dark";
 
         static CadThemes()
         {
@@ -23,9 +24,8 @@ namespace process_pipeline.Themes
             }
             catch (Exception ex)
             {
-                // 如果路径不对，这里会抛错，方便你第一时间定位问题
                 System.Diagnostics.Debug.WriteLine($"[Res] 资源加载失败: {ex.Message}");
-                _cache = new ResourceDictionary(); 
+                _cache = new ResourceDictionary();
             }
         }
 
@@ -35,40 +35,57 @@ namespace process_pipeline.Themes
             {
                 string _ = System.IO.Packaging.PackUriHelper.UriSchemePack;
             }
-            // 触发 System.Windows.Application 静态构造函数以注册 pack:// WebRequest 协议处理器
             var __ = System.Windows.Application.Current;
         }
 
-        public static void RefreshTheme(string explicitThemeName = null) 
-        { 
+        public static void RefreshTheme(string explicitThemeName = null)
+        {
             try
             {
                 EnsurePackUriRegistered();
                 string themeName = NormalizeThemeName(explicitThemeName ?? CadThemeName());
+                _lastActiveThemeName = themeName;
 
-                // 加载对应的字典 (Dark.xaml 或 Light.xaml)
-                var themeDict = new ResourceDictionary { 
-                    Source = new Uri($"pack://application:,,,/process_pipeline;component/Themes/{themeName}.xaml", UriKind.Absolute) 
+                var themeDict = new ResourceDictionary
+                {
+                    Source = new Uri($"pack://application:,,,/process_pipeline;component/Themes/{themeName}.xaml", UriKind.Absolute)
                 };
 
-                _cache.MergedDictionaries.Clear();
+                if (_cache.MergedDictionaries.Count == 0)
+                {
+                    var commonDict = new ResourceDictionary
+                    {
+                        Source = new Uri("pack://application:,,,/process_pipeline;component/Themes/Common.xaml", UriKind.Absolute)
+                    };
 
-                // 合并通用资源 (Common.xaml / Icons.xaml / Styles.xaml)
-                var CommonDict = new ResourceDictionary { 
-                    Source = new Uri("pack://application:,,,/process_pipeline;component/Themes/Common.xaml", UriKind.Absolute) 
-                };
-                
-                var IconsDict = new ResourceDictionary { 
-                    Source = new Uri("pack://application:,,,/process_pipeline;component/Themes/Icons.xaml", UriKind.Absolute) 
-                };
+                    var iconsDict = new ResourceDictionary
+                    {
+                        Source = new Uri("pack://application:,,,/process_pipeline;component/Themes/Icons.xaml", UriKind.Absolute)
+                    };
 
-                var StylesDict = new ResourceDictionary { 
-                    Source = new Uri("pack://application:,,,/process_pipeline;component/Themes/Styles.xaml", UriKind.Absolute) 
-                };
+                    var stylesDict = new ResourceDictionary
+                    {
+                        Source = new Uri("pack://application:,,,/process_pipeline;component/Themes/Styles.xaml", UriKind.Absolute)
+                    };
 
-                _cache.MergedDictionaries.Add(CommonDict);
-                _cache.MergedDictionaries.Add(IconsDict);
-                _cache.MergedDictionaries.Add(StylesDict);
+                    _cache.MergedDictionaries.Add(commonDict);
+                    _cache.MergedDictionaries.Add(iconsDict);
+                    _cache.MergedDictionaries.Add(stylesDict);
+                }
+                else
+                {
+                    for (int i = _cache.MergedDictionaries.Count - 1; i >= 0; i--)
+                    {
+                        string src = _cache.MergedDictionaries[i]?.Source?.OriginalString;
+                        if (!string.IsNullOrEmpty(src) &&
+                            (src.IndexOf("Dark.xaml", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                             src.IndexOf("Light.xaml", StringComparison.OrdinalIgnoreCase) >= 0))
+                        {
+                            _cache.MergedDictionaries.RemoveAt(i);
+                        }
+                    }
+                }
+
                 _cache.MergedDictionaries.Add(themeDict);
             }
             catch (Exception ex)
@@ -77,12 +94,10 @@ namespace process_pipeline.Themes
             }
         }
 
-       // 【核心】：根据 CAD 主题动态设置 WPF 颜色（支持 Dark / Light 双主题）
         /// <summary>
-        /// 为指定的 WPF 控件或窗体应用 AutoCAD 当前的主题配色（COLORTHEME: 0=Dark, 1=Light）
+        /// 为指定的 WPF 控件或窗体应用 AutoCAD 当前的主题配色与原生图标（COLORTHEME: 0=Dark, 1=Light），
+        /// 并同步更新其挂载的所有 ContextMenu（解决 WPF PopupRoot 独立视觉树无法向上查找 UserControl.Resources 的问题）。
         /// </summary>
-        /// <param name="element">WPF的 Window 或 UserControl</param>
-        /// <param name="explicitThemeName">可选显式指定主题名称（"Dark" 或 "Light"），为空则自动读取 CAD COLORTHEME 系统变量</param>
         public static void ApplyCadTheme(FrameworkElement element, string explicitThemeName = null)
         {
             if (element == null) return;
@@ -91,36 +106,153 @@ namespace process_pipeline.Themes
             {
                 EnsurePackUriRegistered();
 
-                // 1. 获取 CAD 的主题变量：0 是深色(Dark)，1 是浅色(Light)
                 string themeName = NormalizeThemeName(explicitThemeName ?? CadThemeName());
                 RefreshTheme(themeName);
 
-                // 2. 构造资源字典的 URI
-                string uriPath = $"pack://application:,,,/process_pipeline;component/Themes/{themeName}.xaml";
-                var newThemeDict = new ResourceDictionary 
-                { 
-                    Source = new Uri(uriPath, UriKind.Absolute) 
-                };
+                ResourceDictionary newThemeDict = CreateThemeDictionary(themeName);
+                ApplyThemeDictionaryToResources(element.Resources, newThemeDict, ensureBaseAppDict: false);
 
-                // 3. 优雅地替换旧主题
-                var dictionaries = element.Resources.MergedDictionaries;
-                for (int i = dictionaries.Count - 1; i >= 0; i--)
-                {
-                    string src = dictionaries[i]?.Source?.OriginalString;
-                    if (!string.IsNullOrEmpty(src) &&
-                        (src.IndexOf("Dark", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                         src.IndexOf("Light", StringComparison.OrdinalIgnoreCase) >= 0))
-                    {
-                        dictionaries.RemoveAt(i);
-                    }
-                }
-
-                dictionaries.Add(newThemeDict);
+                // 同步所有挂载在当前控件或子控件（如 DataGrid）上的 ContextMenu，避免 PopupRoot 隔离导致配色/图标冲突
+                SyncDescendantContextMenus(element, themeName);
             }
             catch (Exception ex)
             {
-                // 容错处理：如果获取系统变量失败，可以在这里记录日志
                 AcadApp.DocumentManager?.MdiActiveDocument?.Editor?.WriteMessage($"\n主题加载失败: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 显式同步指定 ContextMenu 的主题资源字典与 AutoCAD 2019 原生图标（供右键弹出前或初始化时调用）。
+        /// </summary>
+        public static void SyncContextMenuTheme(ContextMenu contextMenu, string explicitThemeName = null)
+        {
+            if (contextMenu == null) return;
+
+            try
+            {
+                EnsurePackUriRegistered();
+                string themeName = NormalizeThemeName(explicitThemeName ?? _lastActiveThemeName ?? CadThemeName());
+                ResourceDictionary newThemeDict = CreateThemeDictionary(themeName);
+                ApplyThemeDictionaryToResources(contextMenu.Resources, newThemeDict, ensureBaseAppDict: true);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[CadThemes.SyncContextMenuTheme] {ex.Message}");
+            }
+        }
+
+        private static ResourceDictionary CreateThemeDictionary(string themeName)
+        {
+            string uriPath = $"pack://application:,,,/process_pipeline;component/Themes/{themeName}.xaml";
+            return new ResourceDictionary
+            {
+                Source = new Uri(uriPath, UriKind.Absolute)
+            };
+        }
+
+        private static void ApplyThemeDictionaryToResources(
+            ResourceDictionary targetResources,
+            ResourceDictionary newThemeDict,
+            bool ensureBaseAppDict)
+        {
+            if (targetResources == null || newThemeDict == null) return;
+
+            var dictionaries = targetResources.MergedDictionaries;
+
+            if (ensureBaseAppDict)
+            {
+                bool hasAppDict = false;
+                for (int i = 0; i < dictionaries.Count; i++)
+                {
+                    string src = dictionaries[i]?.Source?.OriginalString;
+                    if (!string.IsNullOrEmpty(src) &&
+                        (src.IndexOf("Themes/App.xaml", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                         src.IndexOf("Themes/Common.xaml", StringComparison.OrdinalIgnoreCase) >= 0))
+                    {
+                        hasAppDict = true;
+                        break;
+                    }
+                }
+
+                if (!hasAppDict)
+                {
+                    dictionaries.Insert(0, new ResourceDictionary
+                    {
+                        Source = new Uri("pack://application:,,,/process_pipeline;component/Themes/App.xaml", UriKind.Absolute)
+                    });
+                }
+            }
+
+            for (int i = dictionaries.Count - 1; i >= 0; i--)
+            {
+                string src = dictionaries[i]?.Source?.OriginalString;
+                if (!string.IsNullOrEmpty(src) &&
+                    (src.IndexOf("Dark.xaml", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                     src.IndexOf("Light.xaml", StringComparison.OrdinalIgnoreCase) >= 0))
+                {
+                    dictionaries.RemoveAt(i);
+                }
+            }
+
+            dictionaries.Add(newThemeDict);
+        }
+
+        private static void SyncDescendantContextMenus(DependencyObject root, string themeName)
+        {
+            if (root == null) return;
+
+            var visited = new HashSet<DependencyObject>();
+            var queue = new Queue<DependencyObject>();
+            queue.Enqueue(root);
+            visited.Add(root);
+
+            while (queue.Count > 0)
+            {
+                DependencyObject current = queue.Dequeue();
+
+                if (current is ContextMenu directCm)
+                {
+                    SyncContextMenuTheme(directCm, themeName);
+                }
+                else if (current is FrameworkElement fe && fe.ContextMenu != null)
+                {
+                    SyncContextMenuTheme(fe.ContextMenu, themeName);
+                }
+
+                LocalValueEnumerator localEnum = current.GetLocalValueEnumerator();
+                while (localEnum.MoveNext())
+                {
+                    object val = localEnum.Current.Value;
+                    if (val is FrameworkElement || val is FrameworkContentElement)
+                    {
+                        var depPropVal = (DependencyObject)val;
+                        if (visited.Add(depPropVal))
+                        {
+                            queue.Enqueue(depPropVal);
+                        }
+                    }
+                }
+
+                foreach (object logicalChildObj in LogicalTreeHelper.GetChildren(current))
+                {
+                    if (logicalChildObj is DependencyObject logicalChild && visited.Add(logicalChild))
+                    {
+                        queue.Enqueue(logicalChild);
+                    }
+                }
+
+                if (current is Visual || current is System.Windows.Media.Media3D.Visual3D)
+                {
+                    int vCount = VisualTreeHelper.GetChildrenCount(current);
+                    for (int i = 0; i < vCount; i++)
+                    {
+                        DependencyObject vChild = VisualTreeHelper.GetChild(current, i);
+                        if (vChild != null && visited.Add(vChild))
+                        {
+                            queue.Enqueue(vChild);
+                        }
+                    }
+                }
             }
         }
 
@@ -136,11 +268,11 @@ namespace process_pipeline.Themes
                 var obj = _cache[key];
                 if (obj is T result) return result;
             }
-            
+
             return default;
         }
 
-        public static string CadThemeName() 
+        public static string CadThemeName()
         {
             try
             {

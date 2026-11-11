@@ -71,7 +71,14 @@
 
       <!-- ====================== 【新增：右键菜单 (Commit 7.7 统一矢量图标)】 ====================== -->
       <DataGrid.ContextMenu>
-        <ContextMenu x:Name="ctxMenu">
+        <ContextMenu x:Name="ctxMenu" Style="{StaticResource CadContextMenuStyle}">
+          <ContextMenu.Resources>
+            <ResourceDictionary>
+              <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/process_pipeline;component/Themes/App.xaml"/>
+              </ResourceDictionary.MergedDictionaries>
+            </ResourceDictionary>
+          </ContextMenu.Resources>
           <MenuItem x:Name="ctxZoomToExtent" Header="定位到CAD图纸" Click="CtxZoomToExtent_Click">
             <MenuItem.Icon>
               <ContentControl Template="{StaticResource IconTemplate.ZoomTarget}" Width="16" Height="16" Focusable="False"/>

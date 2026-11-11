@@ -1,4 +1,29 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
-  <!-- AutoCAD 2019 Style: Redo Operation -->
-  <path fill="#38ABFF" d="M18.4,10.6 C16.55,9 14.15,8 11.5,8 C6.85,8 2.92,11.03 1.53,15.22 L3.9,16 C4.95,12.81 7.96,10.5 11.5,10.5 C13.46,10.5 15.23,11.22 16.62,12.38 L13,16 L22,16 L22,7 L18.4,10.6 Z"/>
+﻿<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" shape-rendering="crispEdges">
+  <!-- AutoCAD 2019 Native 16x16 Icon: NativeIcon.RedoAction (acadbtn.xmx:RCDATA_16_REDO) -->
+  <path fill="#EEEEEE" fill-opacity="0.718" d="M8,3 H9 V4 H8 Z"/>
+  <path fill="#EEEEEE" fill-opacity="0.165" d="M9,3 H10 V4 H9 Z"/>
+  <path fill="#EEEEEE" d="M8,4 H9 V5 H8 Z M8,5 H11 V6 H8 Z M5,6 H13 V7 H5 Z M2,7 H15 V8 H2 Z M1,8 H13 V9 H1 Z M8,9 H11 V10 H8 Z M8,10 H9 V11 H8 Z"/>
+  <path fill="#EEEEEE" fill-opacity="0.992" d="M9,4 H10 V5 H9 Z M4,6 H5 V7 H4 Z M9,10 H10 V11 H9 Z"/>
+  <path fill="#EEEEEE" fill-opacity="0.616" d="M10,4 H11 V5 H10 Z M1,7 H2 V8 H1 Z M10,10 H11 V11 H10 Z"/>
+  <path fill="#EEEEEE" fill-opacity="0.098" d="M11,4 H12 V5 H11 Z M11,10 H12 V11 H11 Z"/>
+  <path fill="#EEEEEE" fill-opacity="0.016" d="M4,5 H5 V6 H4 Z"/>
+  <path fill="#EEEEEE" fill-opacity="0.067" d="M5,5 H8 V6 H5 Z"/>
+  <path fill="#EEEEEE" fill-opacity="0.953" d="M11,5 H12 V6 H11 Z M11,9 H12 V10 H11 Z"/>
+  <path fill="#EEEEEE" fill-opacity="0.482" d="M12,5 H13 V6 H12 Z M12,9 H13 V10 H12 Z"/>
+  <path fill="#EEEEEE" fill-opacity="0.035" d="M13,5 H14 V6 H13 Z M13,9 H14 V10 H13 Z"/>
+  <path fill="#EEEEEE" fill-opacity="0.369" d="M2,6 H3 V7 H2 Z M0,8 H1 V9 H0 Z"/>
+  <path fill="#EEEEEE" fill-opacity="0.804" d="M3,6 H4 V7 H3 Z"/>
+  <path fill="#EEEEEE" fill-opacity="0.882" d="M13,6 H14 V7 H13 Z M13,8 H14 V9 H13 Z"/>
+  <path fill="#EEEEEE" fill-opacity="0.349" d="M14,6 H15 V7 H14 Z M14,8 H15 V9 H14 Z"/>
+  <path fill="#EEEEEE" fill-opacity="0.004" d="M15,6 H16 V7 H15 Z M0,7 H1 V8 H0 Z M15,8 H16 V9 H15 Z"/>
+  <path fill="#EEEEEE" fill-opacity="0.561" d="M15,7 H16 V8 H15 Z"/>
+  <path fill="#EEEEEE" fill-opacity="0.78" d="M0,9 H1 V10 H0 Z"/>
+  <path fill="#EEEEEE" fill-opacity="0.902" d="M1,9 H2 V10 H1 Z"/>
+  <path fill="#EEEEEE" fill-opacity="0.431" d="M2,9 H3 V10 H2 Z"/>
+  <path fill="#EEEEEE" fill-opacity="0.075" d="M3,9 H4 V10 H3 Z"/>
+  <path fill="#EEEEEE" fill-opacity="0.792" d="M0,10 H1 V11 H0 Z"/>
+  <path fill="#EEEEEE" fill-opacity="0.082" d="M1,10 H2 V11 H1 Z"/>
+  <path fill="#EEEEEE" fill-opacity="0.09" d="M0,11 H1 V12 H0 Z"/>
+  <path fill="#EEEEEE" fill-opacity="0.749" d="M8,11 H9 V12 H8 Z"/>
+  <path fill="#EEEEEE" fill-opacity="0.192" d="M9,11 H10 V12 H9 Z"/>
 </svg>

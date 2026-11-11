@@ -697,8 +697,8 @@
               ToolTipService.ShowDuration="15000">
         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
           <ContentControl Template="{StaticResource IconTemplate.SearchFilter}"
-                          Width="15"
-                          Height="15"
+                          Width="16"
+                          Height="16"
                           Focusable="False"
                           VerticalAlignment="Center"
                           Margin="0,0,4,0"/>
@@ -832,6 +832,13 @@
 
             <DataGrid.ContextMenu>
               <ContextMenu Style="{StaticResource CadContextMenuStyle}">
+                <ContextMenu.Resources>
+                  <ResourceDictionary>
+                    <ResourceDictionary.MergedDictionaries>
+                      <ResourceDictionary Source="/process_pipeline;component/Themes/App.xaml"/>
+                    </ResourceDictionary.MergedDictionaries>
+                  </ResourceDictionary>
+                </ContextMenu.Resources>
                 <MenuItem Header="定位到CAD图纸" Command="{Binding ZoomToCommand}">
                   <MenuItem.Icon>
                     <ContentControl Template="{StaticResource IconTemplate.ZoomTarget}" Width="16" Height="16" Focusable="False"/>
@@ -852,7 +859,7 @@
                     <ContentControl Template="{StaticResource IconTemplate.ClearSelection}" Width="16" Height="16" Focusable="False"/>
                   </MenuItem.Icon>
                 </MenuItem>
-                <Separator />
+                <Separator Style="{StaticResource CadContextMenuSeparatorStyle}" />
                 <!-- 专属修复区：当选中行（单行或多行）包含流向冲突（DirectionConflict / OneToMany）时动态显示 -->
                 <MenuItem Header="{Binding ReversePipeMenuHeader}"
                           Command="{Binding ReverseSelectedPipeCommand}"
@@ -861,7 +868,7 @@
                     <ContentControl Template="{StaticResource IconTemplate.ReverseFlow}" Width="16" Height="16" Focusable="False"/>
                   </MenuItem.Icon>
                 </MenuItem>
-                <Separator Visibility="{Binding ReversePipeMenuVisibility}" />
+                <Separator Style="{StaticResource CadContextMenuSeparatorStyle}" Visibility="{Binding ReversePipeMenuVisibility}" />
                 <!-- 专属修复区：当选中行（单行或多行）属于图属 Group 核查（MatchGroup）且存在可绑定候选属性块时动态显示 -->
                 <MenuItem Header="{Binding BindGroupMenuHeader}"
                           Command="{Binding BindSelectedGroupCommand}"
@@ -870,7 +877,7 @@
                     <ContentControl Template="{StaticResource IconTemplate.BindGroup}" Width="16" Height="16" Focusable="False"/>
                   </MenuItem.Icon>
                 </MenuItem>
-                <Separator Visibility="{Binding BindGroupMenuVisibility}" />
+                <Separator Style="{StaticResource CadContextMenuSeparatorStyle}" Visibility="{Binding BindGroupMenuVisibility}" />
                 <MenuItem Header="人工判定：标记为【已修复】" Command="{Binding MarkModifiedCommand}">
                   <MenuItem.Icon>
                     <ContentControl Template="{StaticResource IconTemplate.StatusResolved}" Width="16" Height="16" Focusable="False"/>
@@ -886,7 +893,7 @@
                     <ContentControl Template="{StaticResource IconTemplate.StatusIgnored}" Width="16" Height="16" Focusable="False"/>
                   </MenuItem.Icon>
                 </MenuItem>
-                <Separator />
+                <Separator Style="{StaticResource CadContextMenuSeparatorStyle}" />
                 <MenuItem Header="{Binding UndoMenuHeader}" Command="{Binding UndoCommand}" InputGestureText="Ctrl+Z">
                   <MenuItem.Icon>
                     <ContentControl Template="{StaticResource IconTemplate.UndoAction}" Width="16" Height="16" Focusable="False"/>
@@ -897,7 +904,7 @@
                     <ContentControl Template="{StaticResource IconTemplate.RedoAction}" Width="16" Height="16" Focusable="False"/>
                   </MenuItem.Icon>
                 </MenuItem>
-                <Separator />
+                <Separator Style="{StaticResource CadContextMenuSeparatorStyle}" />
                 <MenuItem Header="刷新核查列表" Command="{Binding RefreshCommand}">
                   <MenuItem.Icon>
                     <ContentControl Template="{StaticResource IconTemplate.Refresh}" Width="16" Height="16" Focusable="False"/>

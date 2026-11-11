@@ -657,10 +657,22 @@ namespace Cad.Plugin
                         var darkAccent = realWin.TryFindResource("Brush.Icon.Accent") as System.Windows.Media.SolidColorBrush;
                         var iconTplFullCheck = realWin.TryFindResource("IconTemplate.FullCheck") as System.Windows.Controls.ControlTemplate;
                         var iconTplShowSelected = realWin.TryFindResource("IconTemplate.TableShowSelected") as System.Windows.Controls.ControlTemplate;
+                        var realGrid = realWin.FindName("dgIssues") as System.Windows.Controls.DataGrid;
+                        var darkNativeUndo = realWin.TryFindResource("NativeIcon.UndoAction") as System.Windows.Media.ImageSource;
+                        var darkNativeSave = realWin.TryFindResource("NativeIcon.ConfirmSave") as System.Windows.Media.ImageSource;
+                        var darkNativeRefresh = realWin.TryFindResource("NativeIcon.Refresh") as System.Windows.Media.ImageSource;
+                        var darkMenuBg = realGrid?.ContextMenu?.TryFindResource("Brush.ContextMenu.Background") as System.Windows.Media.SolidColorBrush;
+                        var darkMenuUndo = realGrid?.ContextMenu?.TryFindResource("NativeIcon.UndoAction") as System.Windows.Media.ImageSource;
 
                         process_pipeline.Themes.CadThemes.ApplyCadTheme(realWin, "Light");
                         var lightPrimary = realWin.TryFindResource("Brush.Icon.Primary") as System.Windows.Media.SolidColorBrush;
                         var lightAccent = realWin.TryFindResource("Brush.Icon.Accent") as System.Windows.Media.SolidColorBrush;
+                        var lightNativeUndo = realWin.TryFindResource("NativeIcon.UndoAction") as System.Windows.Media.ImageSource;
+                        var lightNativeSave = realWin.TryFindResource("NativeIcon.ConfirmSave") as System.Windows.Media.ImageSource;
+                        var lightMenuBg = realGrid?.ContextMenu?.TryFindResource("Brush.ContextMenu.Background") as System.Windows.Media.SolidColorBrush;
+                        var lightMenuUndo = realGrid?.ContextMenu?.TryFindResource("NativeIcon.UndoAction") as System.Windows.Media.ImageSource;
+                        string lightSvgDir = @"D:\Codes\Tools\process_pipeline\Themes\Svg\Light";
+                        var lightSvgFiles = Directory.Exists(lightSvgDir) ? Directory.GetFiles(lightSvgDir, "*.svg") : Array.Empty<string>();
 
                         AssertTrue(
                             dsWin != null && msgWin != null && arrowCtrl != null &&
@@ -671,6 +683,17 @@ namespace Cad.Plugin
                             !string.IsNullOrWhiteSpace(vm.DataSourceToolTipText) &&
                             !string.IsNullOrWhiteSpace(vm.SingleRuleToolTipText),
                             $"Commit 7.7 全窗体矢量图标模板与 Dark/Light 双主题动态配色验证通过 (DarkPrimary={darkPrimary?.Color}, LightPrimary={lightPrimary?.Color})");
+
+                        AssertTrue(
+                            svgFiles.Length == 25 && lightSvgFiles.Length == 25 &&
+                            darkNativeUndo != null && Math.Abs(darkNativeUndo.Width - 16.0) < 0.01 && Math.Abs(darkNativeUndo.Height - 16.0) < 0.01 &&
+                            darkNativeSave != null && Math.Abs(darkNativeSave.Width - 16.0) < 0.01 &&
+                            darkNativeRefresh != null && Math.Abs(darkNativeRefresh.Width - 16.0) < 0.01 &&
+                            lightNativeUndo != null && lightNativeSave != null &&
+                            !ReferenceEquals(darkNativeUndo, lightNativeUndo) &&
+                            darkMenuBg != null && lightMenuBg != null && darkMenuBg.Color != lightMenuBg.Color &&
+                            darkMenuUndo != null && lightMenuUndo != null && !ReferenceEquals(darkMenuUndo, lightMenuUndo),
+                            $"AutoCAD 2019 原生图标库静态化 (Themes/Svg 25 Dark + 25 Light SVG & NativeIcons.*.xaml) 与右键菜单 ContextMenu 双主题同步验证通过 (DarkMenuBg={darkMenuBg?.Color}, LightMenuBg={lightMenuBg?.Color}, UndoIcon={darkNativeUndo?.Width}x{darkNativeUndo?.Height})");
                     }
                 }
                 finally

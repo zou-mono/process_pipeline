@@ -51,11 +51,12 @@ namespace process_pipeline.Forms
             InitializeComponent();
             // 【移除】：mock 数据和命令初始化（现在在 MainViewModel 中）
 
-            //CadThemes.ApplyCadTheme(this);
+            CadThemes.ApplyCadTheme(this);
             _vm.AttachGrid(dgIssues);
             if (dgIssues?.ContextMenu != null)
             {
                 dgIssues.ContextMenu.DataContext = _vm;
+                CadThemes.SyncContextMenuTheme(dgIssues.ContextMenu);
             }
             this.DataContext = _vm;
         }
@@ -142,6 +143,7 @@ namespace process_pipeline.Forms
                     var contextMenu = row.ContextMenu ?? dgIssues.ContextMenu;
                     if (contextMenu != null)
                     {
+                        CadThemes.SyncContextMenuTheme(contextMenu);
                         contextMenu.DataContext = _vm;
                         contextMenu.PlacementTarget = dgIssues;
                         contextMenu.IsOpen = true;
@@ -156,6 +158,7 @@ namespace process_pipeline.Forms
                     _vm.SyncSelectedRowsFromGrid(syncCadSelection: true);
                     if (dgIssues.ContextMenu != null)
                     {
+                        CadThemes.SyncContextMenuTheme(dgIssues.ContextMenu);
                         dgIssues.ContextMenu.DataContext = _vm;
                     }
                 }
@@ -165,6 +168,7 @@ namespace process_pipeline.Forms
                 // 点击在表格空白处或表头时：保持菜单 DataContext 正确并刷新按钮可用性
                 if (dgIssues.ContextMenu != null)
                 {
+                    CadThemes.SyncContextMenuTheme(dgIssues.ContextMenu);
                     dgIssues.ContextMenu.DataContext = _vm;
                 }
                 _vm.SyncSelectedRowsFromGrid(syncCadSelection: false);

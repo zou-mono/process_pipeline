@@ -1,6 +1,10 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
+  <ResourceDictionary.MergedDictionaries>
+    <ResourceDictionary Source="/process_pipeline;component/Themes/NativeIcons.Dark.xaml"/>
+  </ResourceDictionary.MergedDictionaries>
+
   <Color x:Key="White">#ffffff</Color>
 
   <Color x:Key="CadBlueColor">#003399</Color>
@@ -123,11 +127,11 @@
   </LinearGradientBrush>
   <SolidColorBrush x:Key="Brush.SquareButton.ClickBackground" Color="#FF4D4D4D"/>
 
-  <!-- ContextMenu 原生右键菜单画刷 -->
-  <SolidColorBrush x:Key="Brush.ContextMenu.Background" Color="#FF4A4A4A"/>
+  <!-- ContextMenu 原生右键菜单画刷 (反编译自 AcWindows.dll features/statusbar/contextmenuhost.baml & statusbarresource.baml) -->
+  <SolidColorBrush x:Key="Brush.ContextMenu.Background" Color="#FF3B3B3B"/>
   <SolidColorBrush x:Key="Brush.ContextMenu.Border" Color="#FF222933"/>
-  <SolidColorBrush x:Key="Brush.ContextMenu.IconColumnBackground" Color="#FF424242"/>
-  <SolidColorBrush x:Key="Brush.ContextMenu.Separator" Color="#FF333333"/>
+  <SolidColorBrush x:Key="Brush.ContextMenu.IconColumnBackground" Color="#FF333333"/>
+  <SolidColorBrush x:Key="Brush.ContextMenu.Separator" Color="#FF222933"/>
 
   <!-- ============================================================ -->
   <!-- 3. 对话框与通用窗口画刷 (默认 Dark 主题，运行时随 COLORTHEME 动态切换) -->

@@ -222,3 +222,19 @@ In `acad.exe` (`0x1402b5c1d..0x1402b5da4`):
 - `BackgroundBorderColorProperty`: **`#FF818181`**
 - `RibbonToolTipBase.Foreground`: **`#FF4C4C4C`**
 - `mContentBorder`: `Background="#FFFBFBFB"`, `BorderBrush="#FFDFDFDF"`, `BorderThickness="1"`, `CornerRadius="3"`, `Padding="8"`, `Margin="4,3,4,4"`
+
+---
+
+## 7. Decompiled Native Icon Libraries (`acadbtn.xmx`, `acadbtn_light.xmx`, & `AcLayer.dll`) and `ContextMenu` (`AcWindows.dll` `contextmenuhost.baml`)
+
+### 7.1 `acadbtn.xmx` & `acadbtn_light.xmx` Binary Structure
+- Located in `C:\Program Files\Autodesk\AutoCAD 2019\`:
+  - `acadbtn.xmx` (`14,030,336` bytes): Dark theme (`COLORTHEME = 0`) command icon library (`3,222` `RT_RCDATA` (`#10`) entries).
+  - `acadbtn_light.xmx` (`15,232,512` bytes): Light theme (`COLORTHEME = 1`) command icon library (`3,222` `RT_RCDATA` (`#10`) entries).
+- Naming convention: `RCDATA_16_<COMMAND_ID>` (`16×16` pixels) and `RCDATA_32_<COMMAND_ID>` (`32×32` pixels).
+- Stream format: `49 49 2A 00` (Little-Endian 32-bit `Bgra32` TIFF with alpha channel) or `00 00 01 00` (32-bit ICO).
+- Every `RCDATA_16_*` icon has distinct Dark (`acadbtn.xmx`, light strokes on dark background) and Light (`acadbtn_light.xmx`, dark strokes on light background) artwork.
+
+### 7.2 `AcWindows.dll` `features/statusbar/contextmenuhost.baml` & `statusbarresource.baml`
+- Native WPF `ContextMenu` surface uses `SolidColorBrush_34 = #FF3B3B3B` (`CurrentTheme.ContainerBackgroundBrush` Dark) / `#FFF0F0F0` (Light), outer border `#FF222933` (Dark) / `#FF9E9E9E` (Light), left icon gutter `#FF333333` (Dark) / `#FFE4E4E4` (Light), and `SquareButtonHoverBackgroundBrush` / `SquareButtonHoverBorderBrush` (`#1A008CFF` fill + `#33008CFF` border) on `Trigger IsHighlighted="True"`.
+- Because WPF `ContextMenu` opens inside its own top-level `PopupRoot` (disconnected from `UserControl`'s visual and logical tree) and `Application.Current` inside AutoCAD is `AcWindows.dll`, `ContextMenu.Resources.MergedDictionaries` must explicitly merge the plugin's base `App.xaml` and active `Dark.xaml`/`Light.xaml` dictionary (`CadThemes.SyncContextMenuTheme`).

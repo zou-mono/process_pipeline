@@ -2,6 +2,10 @@
                     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
+  <ResourceDictionary.MergedDictionaries>
+    <ResourceDictionary Source="/process_pipeline;component/Themes/NativeIcons.Light.xaml"/>
+  </ResourceDictionary.MergedDictionaries>
+
   <!-- ============================================================ -->
   <!-- AutoCAD 2019 浅色主题 (COLORTHEME = 1) -->
   <!-- 反编译自 AcLayer.dll (LayerGrid / MultiTreeView) & AdUiPalettes.dll (PaletteThemeDefaults.LightColors) -->
@@ -101,11 +105,11 @@
   </LinearGradientBrush>
   <SolidColorBrush x:Key="Brush.SquareButton.ClickBackground" Color="#FFE6E6E6"/>
 
-  <!-- ContextMenu 原生右键菜单画刷 (Light) -->
-  <SolidColorBrush x:Key="Brush.ContextMenu.Background" Color="#FFF5F5F5"/>
+  <!-- ContextMenu 原生右键菜单画刷 (Light, AcWindows.dll contextmenuhost.baml #FFF0F0F0) -->
+  <SolidColorBrush x:Key="Brush.ContextMenu.Background" Color="#FFF0F0F0"/>
   <SolidColorBrush x:Key="Brush.ContextMenu.Border" Color="#FF9E9E9E"/>
-  <SolidColorBrush x:Key="Brush.ContextMenu.IconColumnBackground" Color="#FFEBEBEB"/>
-  <SolidColorBrush x:Key="Brush.ContextMenu.Separator" Color="#FFD4D4D4"/>
+  <SolidColorBrush x:Key="Brush.ContextMenu.IconColumnBackground" Color="#FFE4E4E4"/>
+  <SolidColorBrush x:Key="Brush.ContextMenu.Separator" Color="#FFD0D0D0"/>
 
   <!-- 通用窗口/面板类 (CAD 2019 Light, COLORTHEME = 1) -->
   <SolidColorBrush x:Key="Cad_WindowBackground" Color="#FFE6E6E6"/>

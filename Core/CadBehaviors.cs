@@ -35,7 +35,11 @@ namespace process_pipeline.Core
         {
             if (e.Name.Equals("COLORTHEME", StringComparison.OrdinalIgnoreCase))
             {
-                AssociatedObject?.Dispatcher.Invoke(() => CadThemes.ApplyCadTheme(AssociatedObject));
+                // 使用 Background 优先级异步调度，避免在 AutoCAD 原生 SysVarReactor 广播栈中
+                // 与 AcLayer.dll (LayerManagerControl.SyncTheme) 同步竞争 Win32 GDI/ImageList 上下文
+                AssociatedObject?.Dispatcher.BeginInvoke(
+                    new Action(() => CadThemes.ApplyCadTheme(AssociatedObject)),
+                    System.Windows.Threading.DispatcherPriority.Background);
             }
         }
     }

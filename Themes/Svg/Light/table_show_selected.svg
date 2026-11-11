@@ -1,0 +1,22 @@
+﻿<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" shape-rendering="crispEdges">
+  <!-- AutoCAD 2019 Native 16x16 Icon: NativeIcon.TableShowSelected (acadbtn_light.xmx:RCDATA_16_GROUPSELECT) -->
+  <path fill="#333333" d="M0,0 H3 V1 H0 Z M8,0 H11 V1 H8 Z M0,1 H1 V2 H0 Z M10,1 H11 V2 H10 Z M0,2 H1 V3 H0 Z M10,2 H11 V3 H10 Z M0,3 H1 V4 H0 Z M10,3 H11 V4 H10 Z M0,4 H1 V5 H0 Z M0,5 H1 V6 H0 Z M9,5 H10 V6 H9 Z M0,6 H1 V7 H0 Z M9,6 H11 V7 H9 Z M0,7 H1 V8 H0 Z M9,7 H10 V8 H9 Z M11,7 H12 V8 H11 Z M0,8 H1 V9 H0 Z M9,8 H10 V9 H9 Z M12,8 H13 V9 H12 Z M0,9 H1 V10 H0 Z M9,9 H10 V10 H9 Z M13,9 H14 V10 H13 Z M0,10 H1 V11 H0 Z M9,10 H10 V11 H9 Z M14,10 H15 V11 H14 Z M0,11 H1 V12 H0 Z M9,11 H10 V12 H9 Z M14,11 H16 V12 H14 Z M0,12 H1 V13 H0 Z M9,12 H11 V13 H9 Z M13,12 H14 V13 H13 Z M0,13 H3 V14 H0 Z M9,13 H10 V14 H9 Z M11,13 H12 V14 H11 Z M12,14 H13 V15 H12 Z M14,14 H15 V15 H14 Z M13,15 H14 V16 H13 Z"/>
+  <path fill="#24B353" d="M3,2 H8 V3 H3 Z M3,3 H4 V4 H3 Z M7,3 H8 V4 H7 Z M3,4 H4 V5 H3 Z M7,4 H8 V5 H7 Z M3,5 H8 V6 H3 Z"/>
+  <path fill="#5AC77E" fill-opacity="0.302" d="M4,3 H7 V4 H4 Z M4,4 H7 V5 H4 Z M5,9 H6 V10 H5 Z"/>
+  <path fill="#2FB75C" fill-opacity="0.149" d="M3,7 H4 V8 H3 Z M7,7 H8 V8 H7 Z M3,11 H4 V12 H3 Z"/>
+  <path fill="#28B456" fill-opacity="0.788" d="M4,7 H5 V8 H4 Z M6,7 H7 V8 H6 Z"/>
+  <path fill="#25B354" fill-opacity="0.965" d="M5,7 H6 V8 H5 Z M3,9 H4 V10 H3 Z"/>
+  <path fill="#E1E1E1" d="M10,7 H11 V8 H10 Z M11,8 H12 V9 H11 Z M12,9 H13 V10 H12 Z M13,10 H14 V11 H13 Z M12,13 H14 V14 H12 Z"/>
+  <path fill="#28B456" fill-opacity="0.792" d="M3,8 H4 V9 H3 Z M3,10 H4 V11 H3 Z M4,11 H5 V12 H4 Z M6,11 H7 V12 H6 Z"/>
+  <path fill="#31B85E" fill-opacity="0.635" d="M4,8 H5 V9 H4 Z M6,8 H7 V9 H6 Z M4,10 H5 V11 H4 Z M6,10 H7 V11 H6 Z"/>
+  <path fill="#52C478" fill-opacity="0.333" d="M5,8 H6 V9 H5 Z M6,9 H7 V10 H6 Z M5,10 H6 V11 H5 Z"/>
+  <path fill="#28B456" fill-opacity="0.808" d="M7,8 H8 V9 H7 Z M7,10 H8 V11 H7 Z"/>
+  <path fill="#FFFFFF" d="M10,8 H11 V9 H10 Z M10,9 H12 V10 H10 Z M10,10 H13 V11 H10 Z M10,11 H13 V12 H10 Z M12,12 H13 V13 H12 Z M13,14 H14 V15 H13 Z"/>
+  <path fill="#56C67B" fill-opacity="0.318" d="M4,9 H5 V10 H4 Z"/>
+  <path fill="#24B353" fill-opacity="0.984" d="M7,9 H8 V10 H7 Z"/>
+  <path fill="#25B354" fill-opacity="0.969" d="M5,11 H6 V12 H5 Z"/>
+  <path fill="#2FB75C" fill-opacity="0.153" d="M7,11 H8 V12 H7 Z"/>
+  <path fill="#717171" d="M13,11 H14 V12 H13 Z M11,12 H12 V13 H11 Z"/>
+  <path fill="#333333" fill-opacity="0.149" d="M14,12 H15 V13 H14 Z M14,15 H15 V16 H14 Z"/>
+  <path fill="#333333" fill-opacity="0.698" d="M14,13 H15 V14 H14 Z M12,15 H13 V16 H12 Z"/>
+</svg>

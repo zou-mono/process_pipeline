@@ -1,5 +1,74 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
-  <!-- AutoCAD 2019 Style: Refresh Check List (Precision Dual Sync Arcs + Center CAD Node) -->
-  <path fill="#E4E8EC" d="M12,4 C8.27,4 5.14,6.55 4.25,10 L6.05,10 C6.88,7.49 9.23,5.7 12,5.7 C13.74,5.7 15.31,6.41 16.45,7.55 L14,10 L20,10 L20,4 L17.65,6.35 C16.2,4.9 14.21,4 12,4 Z M17.95,14 C17.12,16.51 14.77,18.3 12,18.3 C10.26,18.3 8.69,17.59 7.55,16.45 L10,14 L4,14 L4,20 L6.35,17.65 C7.8,19.1 9.79,20 12,20 C15.73,20 18.86,17.45 19.75,14 L17.95,14 Z"/>
-  <circle fill="#38ABFF" cx="12" cy="12" r="2.2"/>
+﻿<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" shape-rendering="crispEdges">
+  <!-- AutoCAD 2019 Native 16x16 Icon: NativeIcon.Refresh (AcLayer.dll:layer_refresh_dark) -->
+  <path fill="#BEBDBB" fill-opacity="0.141" d="M4,2 H5 V3 H4 Z M2,4 H3 V5 H2 Z"/>
+  <path fill="#BEBDBB" fill-opacity="0.753" d="M5,2 H6 V3 H5 Z"/>
+  <path fill="#BEBDBB" fill-opacity="0.937" d="M6,2 H7 V3 H6 Z"/>
+  <path fill="#BEBDBB" fill-opacity="0.984" d="M7,2 H8 V3 H7 Z M4,3 H5 V4 H4 Z M3,4 H4 V5 H3 Z"/>
+  <path fill="#BEBDBB" fill-opacity="0.961" d="M8,2 H9 V3 H8 Z"/>
+  <path fill="#BEBDBB" fill-opacity="0.384" d="M9,2 H10 V3 H9 Z"/>
+  <path fill="#BEBDBB" fill-opacity="0.125" d="M10,2 H11 V3 H10 Z"/>
+  <path fill="#BEBDBB" d="M11,2 H12 V3 H11 Z M10,3 H12 V4 H10 Z M4,4 H5 V5 H4 Z M9,4 H12 V5 H9 Z M8,5 H12 V6 H8 Z M3,8 H6 V9 H3 Z M2,9 H3 V10 H2 Z M4,9 H5 V10 H4 Z M2,10 H4 V11 H2 Z M10,10 H11 V11 H10 Z M2,11 H3 V12 H2 Z"/>
+  <path fill="#BEBDBB" fill-opacity="0.271" d="M3,3 H4 V4 H3 Z"/>
+  <path fill="#BEBDBB" fill-opacity="0.992" d="M5,3 H6 V4 H5 Z M9,3 H10 V4 H9 Z"/>
+  <path fill="#BDBCBA" fill-opacity="0.992" d="M6,3 H9 V4 H6 Z"/>
+  <path fill="#B2B1AF" fill-opacity="0.867" d="M5,4 H6 V5 H5 Z M4,5 H5 V6 H4 Z"/>
+  <path fill="#71706F" fill-opacity="0.51" d="M6,4 H7 V5 H6 Z"/>
+  <path fill="#2E2E2D" fill-opacity="0.357" d="M7,4 H8 V5 H7 Z"/>
+  <path fill="#464645" fill-opacity="0.404" d="M8,4 H9 V5 H8 Z"/>
+  <path fill="#BEBDBB" fill-opacity="0.012" d="M12,4 H13 V5 H12 Z"/>
+  <path fill="#BBBAB8" fill-opacity="0.765" d="M2,5 H3 V6 H2 Z"/>
+  <path fill="#BDBCBA" fill-opacity="0.996" d="M3,5 H4 V6 H3 Z M3,9 H4 V10 H3 Z M11,9 H12 V10 H11 Z M5,11 H6 V12 H5 Z M9,11 H10 V12 H9 Z"/>
+  <path fill="#000000" fill-opacity="0.247" d="M5,5 H6 V6 H5 Z"/>
+  <path fill="#000000" fill-opacity="0.09" d="M6,5 H7 V6 H6 Z"/>
+  <path fill="#000000" fill-opacity="0.027" d="M7,5 H8 V6 H7 Z"/>
+  <path fill="#989796" fill-opacity="0.02" d="M12,5 H13 V6 H12 Z"/>
+  <path fill="#9C9C9A" fill-opacity="0.62" d="M2,6 H3 V7 H2 Z"/>
+  <path fill="#969594" fill-opacity="0.671" d="M3,6 H4 V7 H3 Z"/>
+  <path fill="#535252" fill-opacity="0.369" d="M4,6 H5 V7 H4 Z"/>
+  <path fill="#000000" fill-opacity="0.302" d="M8,6 H10 V7 H8 Z M2,12 H3 V13 H2 Z"/>
+  <path fill="#10100F" fill-opacity="0.322" d="M10,6 H11 V7 H10 Z"/>
+  <path fill="#2A2A29" fill-opacity="0.357" d="M11,6 H12 V7 H11 Z"/>
+  <path fill="#B4B3B1" fill-opacity="0.078" d="M12,6 H13 V7 H12 Z"/>
+  <path fill="#464645" fill-opacity="0.224" d="M2,7 H3 V8 H2 Z"/>
+  <path fill="#444343" fill-opacity="0.231" d="M3,7 H4 V8 H3 Z"/>
+  <path fill="#262625" fill-opacity="0.059" d="M4,7 H5 V8 H4 Z"/>
+  <path fill="#888785" fill-opacity="0.027" d="M10,7 H11 V8 H10 Z"/>
+  <path fill="#BAB9B7" fill-opacity="0.537" d="M11,7 H13 V8 H11 Z"/>
+  <path fill="#BEBDBB" fill-opacity="0.976" d="M2,8 H3 V9 H2 Z"/>
+  <path fill="#BCBBB9" fill-opacity="0.353" d="M10,8 H11 V9 H10 Z"/>
+  <path fill="#BEBDBB" fill-opacity="0.988" d="M11,8 H12 V9 H11 Z M6,11 H9 V12 H6 Z"/>
+  <path fill="#BBBAB8" fill-opacity="0.949" d="M12,8 H13 V9 H12 Z"/>
+  <path fill="#171616" fill-opacity="0.329" d="M5,9 H6 V10 H5 Z"/>
+  <path fill="#BEBDBB" fill-opacity="0.039" d="M9,9 H10 V10 H9 Z"/>
+  <path fill="#BBBAB8" fill-opacity="0.894" d="M10,9 H11 V10 H10 Z"/>
+  <path fill="#A8A7A5" fill-opacity="0.769" d="M12,9 H13 V10 H12 Z"/>
+  <path fill="#BEBDBB" fill-opacity="0.996" d="M4,10 H5 V11 H4 Z"/>
+  <path fill="#BEBDBB" fill-opacity="0.855" d="M5,10 H6 V11 H5 Z"/>
+  <path fill="#BEBDBB" fill-opacity="0.184" d="M6,10 H7 V11 H6 Z"/>
+  <path fill="#BEBDBB" fill-opacity="0.075" d="M7,10 H8 V11 H7 Z"/>
+  <path fill="#BEBDBB" fill-opacity="0.2" d="M8,10 H9 V11 H8 Z"/>
+  <path fill="#BEBDBB" fill-opacity="0.859" d="M9,10 H10 V11 H9 Z"/>
+  <path fill="#BCBBB9" fill-opacity="0.984" d="M11,10 H12 V11 H11 Z"/>
+  <path fill="#464645" fill-opacity="0.286" d="M12,10 H13 V11 H12 Z"/>
+  <path fill="#626261" fill-opacity="0.471" d="M3,11 H4 V12 H3 Z"/>
+  <path fill="#BCBBBA" fill-opacity="0.988" d="M4,11 H5 V12 H4 Z"/>
+  <path fill="#BBBAB8" fill-opacity="0.973" d="M10,11 H11 V12 H10 Z"/>
+  <path fill="#5C5B5A" fill-opacity="0.447" d="M11,11 H12 V12 H11 Z"/>
+  <path fill="#000000" fill-opacity="0.031" d="M12,11 H13 V12 H12 Z"/>
+  <path fill="#1A1A19" fill-opacity="0.086" d="M3,12 H4 V13 H3 Z"/>
+  <path fill="#414140" fill-opacity="0.388" d="M4,12 H5 V13 H4 Z"/>
+  <path fill="#A8A7A5" fill-opacity="0.784" d="M5,12 H6 V13 H5 Z"/>
+  <path fill="#BAB9B7" fill-opacity="0.949" d="M6,12 H7 V13 H6 Z"/>
+  <path fill="#BDBCBA" fill-opacity="0.988" d="M7,12 H8 V13 H7 Z"/>
+  <path fill="#B9B8B6" fill-opacity="0.949" d="M8,12 H9 V13 H8 Z"/>
+  <path fill="#A8A7A6" fill-opacity="0.788" d="M9,12 H10 V13 H9 Z"/>
+  <path fill="#3F3E3E" fill-opacity="0.38" d="M10,12 H11 V13 H10 Z"/>
+  <path fill="#000000" fill-opacity="0.067" d="M11,12 H12 V13 H11 Z"/>
+  <path fill="#000000" fill-opacity="0.004" d="M3,13 H4 V14 H3 Z"/>
+  <path fill="#000000" fill-opacity="0.039" d="M4,13 H5 V14 H4 Z M10,13 H11 V14 H10 Z"/>
+  <path fill="#000000" fill-opacity="0.208" d="M5,13 H6 V14 H5 Z"/>
+  <path fill="#000000" fill-opacity="0.282" d="M6,13 H7 V14 H6 Z"/>
+  <path fill="#000000" fill-opacity="0.298" d="M7,13 H8 V14 H7 Z"/>
+  <path fill="#000000" fill-opacity="0.278" d="M8,13 H9 V14 H8 Z"/>
+  <path fill="#000000" fill-opacity="0.212" d="M9,13 H10 V14 H9 Z"/>
 </svg>

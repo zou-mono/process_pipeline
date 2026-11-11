@@ -1,6 +1,13 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
-  <!-- AutoCAD 2019 Style: Single Rule Check (Rule Checklist + CAD Cyan Execute Play Badge) -->
-  <path fill="#38ABFF" fill-opacity="0.16" d="M4,4 L17,4 L17,19 L4,19 Z"/>
-  <path fill="#E4E8EC" d="M4,3 C3.45,3 3,3.45 3,4 L3,19 C3,19.55 3.45,20 4,20 L12.5,20 L12.5,18.3 L4.7,18.3 L4.7,4.7 L16.3,4.7 L16.3,11.2 L18,11.2 L18,4 C18,3.45 17.55,3 17,3 L4,3 Z M6.5,7.2 L14.5,7.2 L14.5,8.9 L6.5,8.9 L6.5,7.2 Z M6.5,10.8 L13.5,10.8 L13.5,12.5 L6.5,12.5 L6.5,10.8 Z M6.5,14.4 L11,14.4 L11,16.1 L6.5,16.1 L6.5,14.4 Z"/>
-  <path fill="#38ABFF" d="M14.5,12.5 L14.5,22.5 L22.5,17.5 Z"/>
+﻿<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" shape-rendering="crispEdges">
+  <!-- AutoCAD 2019 Native 16x16 Icon: NativeIcon.SingleCheck (acadbtn.xmx:RCDATA_16_CHECK) -->
+  <path fill="#F3F3F3" fill-opacity="0.149" d="M5,0 H6 V1 H5 Z M4,1 H5 V2 H4 Z M3,2 H4 V3 H3 Z"/>
+  <path fill="#F3F3F3" d="M6,0 H15 V1 H6 Z M5,1 H14 V2 H5 Z M4,2 H13 V3 H4 Z"/>
+  <path fill="#CACACA" fill-opacity="0.863" d="M15,0 H16 V1 H15 Z M14,1 H15 V2 H14 Z M13,2 H14 V3 H13 Z"/>
+  <path fill="#BBBBBB" d="M15,1 H16 V2 H15 Z M14,2 H16 V3 H14 Z M13,3 H16 V4 H13 Z M13,4 H16 V5 H13 Z M13,5 H16 V6 H13 Z M13,6 H16 V7 H13 Z M13,7 H16 V8 H13 Z M13,8 H16 V9 H13 Z M13,9 H16 V10 H13 Z M13,10 H15 V11 H13 Z M13,11 H14 V12 H13 Z"/>
+  <path fill="#D9D9D9" d="M3,3 H13 V4 H3 Z M3,4 H13 V5 H3 Z M3,5 H13 V6 H3 Z M3,6 H13 V7 H3 Z M3,7 H13 V8 H3 Z M3,8 H13 V9 H3 Z M3,9 H5 V10 H3 Z M8,9 H13 V10 H8 Z M3,10 H4 V11 H3 Z M9,10 H13 V11 H9 Z M9,11 H13 V12 H9 Z M9,12 H13 V13 H9 Z"/>
+  <path fill="#D9D9D9" fill-opacity="0.71" d="M5,9 H6 V10 H5 Z M7,9 H8 V10 H7 Z M4,10 H5 V11 H4 Z M8,10 H9 V11 H8 Z M3,11 H4 V12 H3 Z M8,12 H9 V13 H8 Z"/>
+  <path fill="#D9D9D9" fill-opacity="0.298" d="M6,9 H7 V10 H6 Z M5,10 H6 V11 H5 Z M7,10 H8 V11 H7 Z M4,11 H5 V12 H4 Z M8,11 H9 V12 H8 Z M3,12 H4 V13 H3 Z M7,12 H8 V13 H7 Z"/>
+  <path fill="#62D987" fill-opacity="0.702" d="M6,10 H7 V11 H6 Z M1,11 H2 V12 H1 Z M5,11 H6 V12 H5 Z M7,11 H8 V12 H7 Z M0,12 H1 V13 H0 Z M2,12 H3 V13 H2 Z M4,12 H5 V13 H4 Z M6,12 H7 V13 H6 Z M1,13 H2 V14 H1 Z M3,13 H4 V14 H3 Z M5,13 H6 V14 H5 Z M2,14 H3 V15 H2 Z M4,14 H5 V15 H4 Z M3,15 H4 V16 H3 Z"/>
+  <path fill="#BBBBBB" fill-opacity="0.149" d="M15,10 H16 V11 H15 Z M14,11 H15 V12 H14 Z M13,12 H14 V13 H13 Z"/>
+  <path fill="#62D987" d="M6,11 H7 V12 H6 Z M1,12 H2 V13 H1 Z M5,12 H6 V13 H5 Z M2,13 H3 V14 H2 Z M4,13 H5 V14 H4 Z M3,14 H4 V15 H3 Z"/>
 </svg>
