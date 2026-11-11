@@ -1,6 +1,6 @@
 # AutoCAD 2019 (R23.0) Binary-Decompiled UI Color & Layout Specification
 
-This reference contains the complete color tables, BAML templates, and disassembly-verified coordinates extracted from AutoCAD 2019 (`acad.exe`, `AdUiPalettes.dll`, `adui23.dll`, `AdWindows.dll`, `AcWindows.dll`, and Windows 10 `UxTheme.dll`).
+This reference contains the complete color tables (including all 113 `PaletteThemeDefaults` Dark & Light RGB colors), BAML templates, and disassembly-verified coordinates extracted from AutoCAD 2019 (`acad.exe`, `AcLayer.dll`, `AdUiPalettes.dll`, `adui23.dll`, `AdWindows.dll`, `AcWindows.dll`, and Windows 10 `UxTheme.dll`).
 
 ---
 
@@ -10,22 +10,12 @@ Initialized by `AdUiImpMgdPaletteTheme.InitializeTheme` in `adui23.dll` (`0x1800
 
 | `CAcColorTheme` Index | `PaletteTheme` Property | Dark Theme (`COLORTHEME=0`) | Light Theme (`COLORTHEME=1`) | Usage in AutoCAD 2019 |
 | :--- | :--- | :--- | :--- | :--- |
-| `0x05` (`5`) | `PaletteBackgroundColor` | `#FF3B4453` | `#FFCFD4DF` | Palette client background |
+| `0x05` (`5`) | `PaletteBackgroundColor` | `#FF3B4453` | `#FFCFD4DF` | Legacy MFC Palette client background |
 | `0x06` (`6`) | `PaletteBorderColor` | `#FF222933` | `#FFA1A3AB` | Palette & toolbar outer dark border |
 | `0x07..0x0C` | `PaletteTab*` | `#FF2D3642` / `#FFFFFFFF` | `#FFB8BDC8` / `#FF1A1B1D` | Palette vertical/horizontal tabs |
 | `0x0D..0x18` | `PaletteCaption*` | `#FF222933` / `#FFD5D7DC` | `#FFA1A3AB` / `#FF1A1B1D` | Floating palette title bar |
-| `0x5F` (`95`) | `PaletteTreeViewBackground` | `#FF313946` | `#FFEEEEF2` | Tree/list background inside palette |
+| `0x5F` (`95`) | `PaletteTreeViewBackground` | `#FF313946` | `#FFEEEEF2` | Legacy tree/list background |
 | `0x60` (`96`) | `PaletteContainerBackground` | `#FF222933` | `#FFA1A3AB` | Outer container / recessed background |
-| `0x98` (`152`) | `SquareButtonHoverTop1` | `#FFF9FCFD` | `#FFF9FCFD` | Split-band GDI+ button top half start |
-| `0x99` (`153`) | `SquareButtonHoverTop2` | `#FFDCEFF2` | `#FFDCEFF2` | Split-band GDI+ button top half end |
-| `0x9A` (`154`) | `SquareButtonHoverBottom1` | `#FFC2E2EC` | `#FFC2E2EC` | Split-band GDI+ button bottom half start |
-| `0x9B` (`155`) | `SquareButtonHoverBottom2` | `#FFD7ECF2` | `#FFD7ECF2` | Split-band GDI+ button bottom half end |
-| `0x9C` (`156`) | `SquareButtonRolloverTop1` | `#FFF5FAFC` | `#FFF5FAFC` | Split-band GDI+ rollover top half start |
-| `0x9D` (`157`) | `SquareButtonRolloverTop2` | `#FFA5D4E0` | `#FFA5D4E0` | Split-band GDI+ rollover top half end |
-| `0x9E` (`158`) | `SquareButtonRolloverBottom1` | `#FF89C5D6` | `#FF89C5D6` | Split-band GDI+ rollover bottom half start |
-| `0x9F` (`159`) | `SquareButtonRolloverBottom2` | `#FFB3D8E5` | `#FFB3D8E5` | Split-band GDI+ rollover bottom half end |
-| `0xA0` (`160`) | `SquareButtonOuterBorder` | `#FF9B9B9B` | `#FF9B9B9B` | Square button outer border |
-| `0xA1` (`161`) | `SquareButtonInnerBorder` | `#FFFFFFFF` | `#FFFFFFFF` | Square button inner highlight border |
 | `0xA2` (`162`) | `ToolbarBackground` | **`#FF494949`** | **`#FFD9D9D9`** | **`CAcToolBar` background (`0x1402b5b9e`)** |
 | `0xA6` (`166`) | `ToolbarGripDarkDotColor` | **`#FF000000`** | **`#FF1A1B1D`** | **`CAcToolBar` gripper dark etched dot (`0x1402b5c1d`)** |
 | `0xA7` (`167`) | `ToolbarGripLightDotColor` | **`#FF909090`** | **`#FFEEEEF2`** | **`CAcToolBar` gripper light etched dot (`0x1402b5c28`)** |
@@ -33,7 +23,172 @@ Initialized by `AdUiImpMgdPaletteTheme.InitializeTheme` in `adui23.dll` (`0x1800
 
 ---
 
-## 2. `acad.exe` `CAcToolBar` Gripper Drawing Disassembly (`0x1402b5c1d..0x1402b5da4`)
+## 2. All 113 `PaletteThemeDefaults` Dark & Light Colors (`AdUiPalettes.dll`)
+
+Generated directly via `Autodesk.Windows.Themes.ThemeBase.GenerateColors` on `PaletteThemeDefaults.DarkColors` (`DarkOverallColor`, `DarkTextColor`) and `PaletteThemeDefaults.LightColors` (`LightOverallColor`, `LightTextColor`):
+
+| `PaletteTheme` Key (`AdUiPalettes.dll`) | Dark (`COLORTHEME = 0`) | Light (`COLORTHEME = 1`) |
+| :--- | :--- | :--- |
+| `CategoryExpanderColor` | `#FFEBEBEB` | `#FF616161` |
+| `CategoryExpanderFillColor` | `#FFFFFFFF` | `#FFE6E6E6` |
+| `CategoryExpanderShadowColor` | `#A6000000` | `#6EFFFFFF` |
+| `ComboBoxActiveBackgroundBottomColor` | `#FF333333` | `#FFFCFCFC` |
+| `ComboBoxActiveBackgroundTopColor` | `#FF4D4D4D` | `#FFF0F0F0` |
+| `ComboBoxArrowColor` | `#CCFFFFFF` | `#FF8F8F8F` |
+| `ComboBoxArrowShadowColor` | `#59424242` | `#268F8F8F` |
+| `ComboBoxBackgroundBottomColor` | `#FF5C5C5C` | `#FFF0F0F0` |
+| `ComboBoxBackgroundTopColor` | `#FF787878` | `#FFFFFFFF` |
+| `ComboBoxHoverBackgroundBottomColor` | `#FF949494` | `#FFD4D4D4` |
+| `ComboBoxHoverBackgroundTopColor` | `#FFADADAD` | `#FFEBEBEB` |
+| `ComboBoxHoverSelectHighlightColor` | `#21FFFFFF` | `#21FFFFFF` |
+| `ComboBoxHoverTextColor` | `#FF000000` | `#FF000000` |
+| `ComboBoxSelectBackgroundBottomColor` | `#FF0056F5` | `#FF0056F5` |
+| `ComboBoxSelectBackgroundTopColor` | `#FF009BF5` | `#FF009BF5` |
+| `ComboBoxSelectTextColor` | `#FFFFFFFF` | `#FFFFFFFF` |
+| `CommandLineCommandOptionsTextHighlightedColor` | `#FF0095EB` | `#FF0052EB` |
+| `CommandLineHistoryBackgroundColor` | `#B3858585` | `#B3E6E6E6` |
+| `CommandLineSuggestionListExpandedBackgroundColor` | `#CC333333` | `#CCE6E6E6` |
+| `ControlActiveOuterBorderColor` | `#FF0056F5` | `#FF0099F7` |
+| `ControlActiveTextColor` | `#FFFFFFFF` | `#FF000000` |
+| `ControlBorderColor` | `#FF333333` | `#FF9E9E9E` |
+| `ControlCaretColor` | `#FF009BF5` | `#FF0099F7` |
+| `ControlErrorOuterBorderColor` | `#FFFFCC00` | `#FFFFCC00` |
+| `ControlHighlightColor` | `#1AFFFFFF` | `#FFFFFFFF` |
+| `ControlTextColor` | `#FFFFFFFF` | `#FF000000` |
+| `FileTabsActiveBackgroundTopColor` | `#FF8F8F8F` | `#FFFFFFFF` |
+| `FileTabsHighlightBottomColor` | `#FF636363` | `#FFE6E6E6` |
+| `FileTabsHighlightTopColor` | `#FF7D7D7D` | `#FFF7F7F7` |
+| `FileTabsHorizListBoxBackgroundColor` | `#CC5C5C5C` | `#CCF0F0F0` |
+| `FileTabsInactiveBackgroundBottomColor` | `#FF525252` | `#FFD4D4D4` |
+| `FileTabsInactiveBackgroundTopColor` | `#FF666666` | `#FFE6E6E6` |
+| `FileTabsInnerHighlightColor` | `#0DFFFFFF` | `#1BFFFFFF` |
+| `FileTabsRowBackgroundColor` | `#FF383838` | `#FFB3B3B3` |
+| `GroupGripColor` | `#FF383838` | `#FF9E9E9E` |
+| `GroupGripShadowColor` | `#0DFFFFFF` | `#4DFFFFFF` |
+| `IPETextFocusBackgroundBottomColor` | `#FF2B2B2B` | `#FFBFBFBF` |
+| `IPETextFocusBackgroundTopColor` | `#FF363636` | `#FFC9C9C9` |
+| `ListBoxClickBackgroundBottomColor` | `#FF3D3D3D` | `#FF6B6B6B` |
+| `ListBoxClickBackgroundTopColor` | `#FF5C5C5C` | `#FF8C8C8C` |
+| `ListBoxClickBorderColor` | `#FF0A0A0A` | `#FF303030` |
+| `ListBoxHoverBackgroundBottomColor` | `#FF6B6B6B` | `#FFB8B8B8` |
+| `ListBoxHoverBackgroundTopColor` | `#FF8C8C8C` | `#FFE6E6E6` |
+| `ListBoxHoverBorderColor` | `#FF3B3B3B` | `#FF9E9E9E` |
+| `ListBoxInnerShadowColor` | `#14FFFFFF` | `#2CFFFFFF` |
+| `ListBoxSelectBackgroundBottomColor` | `#FF3174E0` | `#FF32A5E3` |
+| `ListBoxSelectBackgroundTopColor` | `#FF40A1CF` | `#FF41CAD1` |
+| `ListBoxSelectBorderColor` | `#FF203D63` | `#FF215166` |
+| `ListBoxSelectHoverBackgroundBottomColor` | `#FF3682F5` | `#FF36B7F7` |
+| `ListBoxSelectHoverBackgroundTopColor` | `#FF07AAF5` | `#FF07EBF7` |
+| `ListBoxSelectHoverBorderColor` | `#FF0A0A0A` | `#FF757575` |
+| `ListBoxSelectTextColor` | `#FFFFFFFF` | `#FFFFFFFF` |
+| `OverallColor` | `#FF525252` | `#FFE6E6E6` |
+| `OverallTextColor` | `#FFFFFFFF` | `#FF000000` |
+| `PaletteActivityIndicatorOutlineColor` | `#595C5C5C` | `#59F0F0F0` |
+| `PaletteColumnHeaderBackgroundColor` | `#FF666666` | `#FFFAFAFA` |
+| `PaletteContainerBackgroundColor` | `#FF525252` | `#FFE6E6E6` |
+| `PaletteContainerBorderColor` | `#FF5C5C5C` | `#FFF0F0F0` |
+| `PaletteContainerCloseColor` | `#42FFFFFF` | `#33E6E6E6` |
+| `PaletteContainerHighlightColor` | `#42FFFFFF` | `#42FFFFFF` |
+| `PaletteHyperlinkTextColor` | `#FF96C9FF` | `#FF0000FF` |
+| `PaletteSearchActiveBottomColor` | `#FF2B2B2B` | `#FFBFBFBF` |
+| `PaletteSearchActiveTopColor` | `#FF363636` | `#FFC9C9C9` |
+| `PaletteSearchInactiveBottomColor` | `#FF525252` | `#FFE6E6E6` |
+| `PaletteSearchInactiveTopColor` | `#FF5C5C5C` | `#FFF0F0F0` |
+| `PaletteTabActiveBottomColor` | `#FF5C5C5C` | `#FFF0F0F0` |
+| `PaletteTabActiveTopColor` | `#FF8F8F8F` | `#FFFFFFFF` |
+| `PaletteTabBackgroundColor` | `#FF5C5C5C` | `#FFF0F0F0` |
+| `PaletteTabBorderColor` | `#FF333333` | `#FF9E9E9E` |
+| `PaletteTabHighlightColor` | `#33FFFFFF` | `#6EFFFFFF` |
+| `PaletteTabInactiveColor` | `#FF525252` | `#FFE6E6E6` |
+| `PaletteTabScrollColor` | `#99333333` | `#999E9E9E` |
+| `PaletteTextActiveColor` | `#FFFFFFFF` | `#FF000000` |
+| `PaletteTextInactiveColor` | `#8CFFFFFF` | `#99000000` |
+| `PaletteTextSearchAutocompleteColor` | `#80FFFFFF` | `#99000000` |
+| `PaletteTextSearchPlaceholderColor` | `#40FFFFFF` | `#CC000000` |
+| `PaletteTextSearchUserstringColor` | `#FFFFFFFF` | `#FF000000` |
+| `PaletteTreeOrListBackgroundColor` | `#FF5C5C5C` | `#FFF7F7F7` |
+| `PropertyInspectorCategoryBackgroundColor` | `#FF4A4A4A` | `#FFDEDEDE` |
+| `PropertyInspectorItemBorderColor` | `#FF525252` | `#FFE6E6E6` |
+| `PushButtonActiveBackgroundBottomColor` | `#FF5C5C5C` | `#FFFFFFFF` |
+| `PushButtonActiveBackgroundTopColor` | `#FF787878` | `#FFF7F7F7` |
+| `PushButtonActiveShadowColor` | `#80000000` | `#4D000000` |
+| `PushButtonActiveTextColor` | `#8CFFFFFF` | `#B3000000` |
+| `PushButtonBackgroundBottomColor` | `#FF5C5C5C` | `#FFF0F0F0` |
+| `PushButtonBackgroundTopColor` | `#FF787878` | `#FFFFFFFF` |
+| `SpinControlBackgroundBottomColor` | `#FF5C5C5C` | `#FFF0F0F0` |
+| `SpinControlBackgroundTopColor` | `#FF787878` | `#FFFFFFFF` |
+| `SpinControlBorderColor` | `#1A424242` | `#36FFFFFF` |
+| `SpinControlClickBackgroundBottomColor` | `#FF787878` | `#FFFFFFFF` |
+| `SpinControlClickBackgroundTopColor` | `#FF5C5C5C` | `#FFE8E8E8` |
+| `SpinControlHighlightColor` | `#33FFFFFF` | `#36FFFFFF` |
+| `SquareButtonClickBackgroundBottomColor` | `#FF4D4D4D` | `#FFE6E6E6` |
+| `SquareButtonClickBackgroundTopColor` | `#FF4D4D4D` | `#FFE6E6E6` |
+| `SquareButtonClickBorderColor` | `#FF333333` | `#FF9E9E9E` |
+| `SquareButtonClickHighlightColor` | `#33000000` | `#37000000` |
+| `SquareButtonHoverBackgroundBottomColor` | `#FF5C5C5C` | `#FFF0F0F0` |
+| `SquareButtonHoverBackgroundTopColor` | `#FF787878` | `#FFFFFFFF` |
+| `SquareButtonHoverBorderColor` | `#FF333333` | `#FF9E9E9E` |
+| `SquareButtonHoverHighlightColor` | `#1AFFFFFF` | `#87FFFFFF` |
+| `StatusBarTooltipBackgroundColor` | `#FF000000` | `#F2E6E6E6` |
+| `StatusBarTooltipStateTextColor` | `#FF0099F7` | `#D90099F7` |
+| `TextInputActiveBackgroundBottomColor` | `#FF2B2B2B` | `#FFC4C4C4` |
+| `TextInputActiveBackgroundTopColor` | `#FF363636` | `#FFCFCFCF` |
+| `TextInputActiveHighlightColor` | `#0DFFFFFF` | `#54FFFFFF` |
+| `TextInputActiveTextColor` | `#FFFFFFFF` | `#FF000000` |
+| `TextInputInnerShadowColor` | `#33424242` | `#33F0F0F0` |
+| `ToolbarBackgroundColor` | `#FF5F5F5F` | `#FFEBEBEB` |
+| `ToolbarBorderColor` | `#FF323232` | `#FF656565` |
+| `ToolbarCloseButtonColor` | `#FFB0B0B0` | `#FFEBEBEB` |
+| `ToolbarGripBackgroundColor` | `#FF525252` | `#FFA1A3AB` |
+| `ToolbarGripDarkDotColor` | `#FF000000` | `#FF1A1B1D` |
+| `ToolbarGripLightDotColor` | `#FF909090` | `#FFEEEEF2` |
+| `ToolbarRolloverBorderColor` | `#FF7CBDCF` | `#FF7CBDCF` |
+| `TreeControlLineColor` | `#FF333333` | `#FF9E9E9E` |
+
+---
+
+## 3. `AcLayer.dll` (`LayerGrid`, `BaseGrid`, `ThemedDataGridViewCellStyle`, `MultiTreeView`, `LayerManagerControl`) Disassembly
+
+Decompiled from `C:\Program Files\Autodesk\AutoCAD 2019\AcLayer.dll`:
+
+### 3.1 `ThemedDataGridViewCellStyle.Initialize`
+```csharp
+PaletteTheme currentTheme = ThemeManager.PaletteSettings.CurrentTheme;
+this.BackColor = FromMediaColor(currentTheme.PaletteTabBackgroundColor); // #FF5C5C5C (Dark) / #FFF0F0F0 (Light)
+this.SelectionBackgroundTopColor = FromMediaColor(currentTheme.ComboBoxSelectBackgroundTopColor);
+this.SelectionBackgroundBottomColor = FromMediaColor(currentTheme.ComboBoxSelectBackgroundBottomColor);
+this.SelectionBackColor = this.SelectionBackgroundTopColor;
+this.HoverBackgroundTopColor = FromMediaColor(currentTheme.ComboBoxHoverBackgroundTopColor);
+this.HoverBackgroundBottomColor = FromMediaColor(currentTheme.ComboBoxHoverBackgroundBottomColor);
+this.ForeColor = FromMediaColor(currentTheme.PaletteTextActiveColor); // #FFFFFFFF (Dark) / #FF000000 (Light)
+this.SelectionForeColor = FromMediaColor(currentTheme.ComboBoxSelectTextColor); // #FFFFFFFF
+this.DisabledTextColor = FromMediaColor(currentTheme.PaletteTextInactiveColor); // #8CFFFFFF (Dark) / #99000000 (Light)
+this.ColumnDividerBrush = new SolidBrush(FromMediaColor(currentTheme.PaletteContainerBackgroundColor)); // #FF525252 (Dark) / #FFE6E6E6 (Light)
+```
+
+### 3.2 `LayerGrid.UpdateCurrentTheme` & `BaseGrid.DrawColumnHeaderDivider`
+```csharp
+PaletteTheme currentTheme = ThemeManager.PaletteSettings.CurrentTheme;
+base.BackgroundColor = FromMediaColor(currentTheme.PaletteTabBackgroundColor); // #FF5C5C5C (Dark) / #FFF0F0F0 (Light)
+base.GridColor = FromMediaColor(currentTheme.PaletteContainerBackgroundColor); // #FF525252 (Dark) / #FFE6E6E6 (Light)
+base.ColumnHeadersDefaultCellStyle.BackColor = FromMediaColor(currentTheme.PaletteColumnHeaderBackgroundColor); // #FF666666 (Dark) / #FFFAFAFA (Light)
+base.ColumnHeadersDefaultCellStyle.ForeColor = base.ForeColor; // #FFFFFFFF (Dark) / #FF000000 (Light)
+base.EnableHeadersVisualStyles = false;
+// BaseGrid.DrawColumnHeaderDivider draws a 1px vertical line at HeaderCell.Right using ColumnDividerBrush
+```
+
+### 3.3 `MultiTreeView.UpdateCurrentTheme` & `LayerManagerControl.BorderPaint`
+```csharp
+PaletteTheme currentTheme = ThemeManager.PaletteSettings.CurrentTheme;
+this.BackColor = FromMediaColor(currentTheme.PaletteTabBackgroundColor); // #FF5C5C5C (Dark) / #FFF0F0F0 (Light)
+this.ForeColor = FromMediaColor(currentTheme.PaletteTextActiveColor);    // #FFFFFFFF (Dark) / #FF000000 (Light)
+this.LineColor = FromMediaColor(currentTheme.TreeControlLineColor);      // #FF333333 (Dark) / #FF9E9E9E (Light)
+// LayerManagerControl.BorderPaint draws a 1px rectangle around TreeView and LayerGrid using PaletteTabBorderColor (#FF333333 Dark / #FF9E9E9E Light)
+```
+
+---
+
+## 4. `acad.exe` `CAcToolBar` Gripper Drawing Disassembly (`0x1402b5c1d..0x1402b5da4`)
 
 In `acad.exe` (`0x1402b5c1d..0x1402b5da4`):
 1. Queries `CAcColorTheme::GetColor(0xA6)` (`r15d` = DarkDot), `0xA7` (`r12d` = LightDot), and `0xA8` (`eax` = GripBackground).
@@ -47,80 +202,23 @@ In `acad.exe` (`0x1402b5c1d..0x1402b5da4`):
 
 ---
 
-## 3. `UxTheme.dll` (`Toolbar` Class, `TP_BUTTON = 1`) Raw Pixel Dump
+## 5. `UxTheme.dll` (`Toolbar` Class, `TP_BUTTON = 1`) Raw Pixel Dump
 
 `CAcToolBar` (`ToolbarWindow32`, `TBSTYLE_FLAT`) uses Windows `UxTheme.dll` (`OpenThemeData(hwnd, L"Toolbar")`, `TP_BUTTON = 1`) for button hover (`TS_HOT = 2`), pressed (`TS_PRESSED = 3`), and checked (`TS_CHECKED = 5`, `TS_HOTCHECKED = 6`) states:
 
 - **Hover (`TS_HOT = 2`)**:
-  - Premultiplied ARGB on `#00000000`:
-    - Outer 1px border (`row 0`, `row 20`, `col 0`, `col 21`): `#33001C33` -> **Un-premultiplied `#33008CFF`** (`Alpha = 0x33 = 20.0%`, `RGB = #008CFF`)
-    - Inner `20×20` fill (`rows 1..19`, `cols 1..20`): `#1A000E1A` -> **Un-premultiplied `#1A008CFF`** (`Alpha = 0x1A = 10.2%`, `RGB = #008CFF`)
-  - Composited on Dark Toolbar (`#FF494949`):
-    - Border = **`#FF3A566D`**, Fill = **`#FF42505C`**
-  - Composited on Light Toolbar (`#FFD9D9D9`):
-    - Border = **`#FFAECAE1`**, Fill = **`#FFC3D1DD`**
+  - Outer 1px border: **`#33008CFF`** (`Alpha = 0x33 = 20.0%`, `RGB = #008CFF`)
+  - Inner `20×20` fill: **`#1A008CFF`** (`Alpha = 0x1A = 10.2%`, `RGB = #008CFF`)
 - **Pressed / Checked (`TS_PRESSED = 3`, `TS_CHECKED = 5`)**:
-  - Premultiplied ARGB on `#00000000`:
-    - Outer 1px border: `#66003866` -> **Un-premultiplied `#66008CFF`** (`Alpha = 0x66 = 40.0%`, `RGB = #008CFF`)
-    - Inner `20×20` fill: `#33001C33` -> **Un-premultiplied `#33008CFF`** (`Alpha = 0x33 = 20.0%`, `RGB = #008CFF`)
-  - Composited on Dark Toolbar (`#FF494949`):
-    - Border = **`#FF2C6492`**, Fill = **`#FF3A566D`**
-  - Composited on Light Toolbar (`#FFD9D9D9`):
-    - Border = **`#FF82BAE8`**, Fill = **`#FFAECAE1`**
+  - Outer 1px border: **`#66008CFF`** (`Alpha = 0x66 = 40.0%`, `RGB = #008CFF`)
+  - Inner `20×20` fill: **`#33008CFF`** (`Alpha = 0x33 = 20.0%`, `RGB = #008CFF`)
 
 ---
 
-## 4. `AdWindows.dll` (`/AdWindows;component/themes/tooltip.xaml`) Decompiled BAML
+## 6. `AdWindows.dll` (`/AdWindows;component/themes/tooltip.xaml`) Decompiled BAML
 
-Extracted from `AdWindows.g.resources` -> `themes/tooltip.baml` and `Autodesk.Internal.Windows.ToolTip`:
-
-### 4.1 `Autodesk.Internal.Windows.ToolTip` DependencyProperty Defaults
 - `BackgroundStartColorProperty`: **`#FFEFEFEF`**
 - `BackgroundEndColorProperty`: **`#FFECECEC`**
 - `BackgroundBorderColorProperty`: **`#FF818181`**
-- `HighlightBorderColorProperty`: **`#FF38ABDF`**
-
-### 4.2 `ToolTipTitleTextBlockStyle` & `ToolTipTextBlockStyle`
-```xml
-<Style x:Key="ToolTipTextBlockStyle" TargetType="{x:Type TextBlock}">
-  <Setter Property="FontFamily" Value="Microsoft YaHei UI" />
-  <Setter Property="FontSize" Value="12" />
-  <Setter Property="FontWeight" Value="Normal" />
-  <Setter Property="TextWrapping" Value="Wrap" />
-</Style>
-
-<Style x:Key="ToolTipTitleTextBlockStyle" TargetType="{x:Type TextBlock}">
-  <Setter Property="FontFamily" Value="Microsoft YaHei UI" />
-  <Setter Property="FontSize" Value="12" />
-  <Setter Property="FontWeight" Value="Bold" />
-  <Setter Property="TextWrapping" Value="Wrap" />
-</Style>
-```
-
-### 4.3 `RibbonToolTipBase` & `RibbonToolTipStyle` (`themes/tooltip.xaml`)
-```xml
-<Style x:Key="{x:Type aw:RibbonToolTipBase}" TargetType="{x:Type aw:RibbonToolTipBase}">
-  <Setter Property="TextElement.Foreground" Value="#FF4C4C4C" />
-</Style>
-
-<!-- Inside RibbonToolTipStyle ControlTemplate: -->
-<Border Name="mRibbonToolTipBorder" Margin="1,1,1,1">
-  <StackPanel>
-    <!-- Header Zone (on #FFEFEFEF outer background) -->
-    <TextBlock Name="mTitle"
-               Margin="9,10,9,6"
-               Style="{DynamicResource ToolTipTitleTextBlockStyle}" />
-    <!-- Inner Off-White Content Card -->
-    <Border Name="mContentBorder"
-            Background="#FFFBFBFB"
-            BorderBrush="#FFDFDFDF"
-            BorderThickness="1,1,1,1"
-            CornerRadius="3,3,3,3"
-            Padding="8,8,8,8"
-            Margin="4,3,4,4">
-      <ContentControl Name="mContent"
-                      Style="{DynamicResource ToolTipContentControlStyle}" />
-    </Border>
-  </StackPanel>
-</Border>
-```
+- `RibbonToolTipBase.Foreground`: **`#FF4C4C4C`**
+- `mContentBorder`: `Background="#FFFBFBFB"`, `BorderBrush="#FFDFDFDF"`, `BorderThickness="1"`, `CornerRadius="3"`, `Padding="8"`, `Margin="4,3,4,4"`

@@ -12,7 +12,7 @@
              xmlns:splitter="clr-namespace:process_pipeline.Controls.CompositeSplitter"
              mc:Ignorable="d" 
              d:DesignHeight="450" d:DesignWidth="800"
-             Background="{DynamicResource Brush.DataGrid.Panel.BackgroundColor}"
+             Background="{DynamicResource Brush.Palette.ContainerBackground}"
              Loaded="UserControl_Loaded">
 
   <UserControl.Resources>
@@ -22,20 +22,20 @@
         <ResourceDictionary Source="/process_pipeline;component/Controls/CompositeSplitter/Styles.xaml"/>
       </ResourceDictionary.MergedDictionaries>
 
-      <!-- 统一尺寸（对标 AutoCAD 2019 原生工具栏：紧凑高度 26px，按钮 22x22，图标保持 20x20） -->
+      <!-- 统一尺寸（对标 AutoCAD 2019 AcLayer.dll 图层特性管理器：工具栏 26px，分区标题栏与表头同高 24px，状态栏 24px） -->
       <sys:Double x:Key="ToolbarHeight">26</sys:Double>
-      <sys:Double x:Key="StatusBarHeight">26</sys:Double>
-      <sys:Double x:Key="SplitterWidth">2</sys:Double>
+      <sys:Double x:Key="StatusBarHeight">24</sys:Double>
+      <sys:Double x:Key="SplitterWidth">4</sys:Double>
       <sys:Double x:Key="CollapseButtonWidth">22</sys:Double>
-      <sys:Double x:Key="TitlePane.DockHeight">22</sys:Double>
-      <GridLength x:Key="TitlePane.HeaderHeight">28</GridLength>
+      <sys:Double x:Key="TitlePane.DockHeight">24</sys:Double>
+      <GridLength x:Key="TitlePane.HeaderHeight">24</GridLength>
 
       <layout:PaneLayoutState x:Key="LeftPaneState"
                               DisplayState="Normal"
                               PrimaryLength="320"
                               SplitterWidth="{StaticResource SplitterWidth}"
                               PrimaryCollapsedLength="{StaticResource CollapseButtonWidth}"
-                              SecondaryCollapsedLength="28"
+                              SecondaryCollapsedLength="24"
                               PrimaryMinExpandedLength="0"
                               SecondaryMinLength="0"/>
       
@@ -68,7 +68,7 @@
                   </Grid.ColumnDefinitions>
                   <!-- AutoCAD 2019 acad.exe (0x1402b5c1d..0x1402b5da4) 原生 7行x2列 蚀刻点阵把手：
                        底色条 0xA8 (#FF525252 Dark / #FFA1A3AB Light)，
-                       每行 Y ∈ {3,5,7,9,11,13,15} 依次绘制 X=1 暗点(0xA6)、X=2 亮점(0xA7)、X=3 暗点(0xA6)、X=4 亮点(0xA7) -->
+                       每行 Y ∈ {3,5,7,9,11,13,15} 依次绘制 X=1 暗点(0xA6)、X=2 亮点(0xA7)、X=3 暗点(0xA6)、X=4 亮点(0xA7) -->
                   <Canvas Grid.Column="0"
                           Width="7"
                           Height="19"
@@ -110,126 +110,142 @@
         </Setter>
       </Style>
 
-      <!-- StatusBar 样式 -->
+      <!-- StatusBar 样式 (对齐 AutoCAD 2019 AcLayer.dll 底部状态栏 24px + #FF4A4A4A / #FFDEDEDE + #FF333333 边框) -->
       <Style x:Key="StatusBarStyle" TargetType="StatusBar">
         <Setter Property="Height" Value="{StaticResource StatusBarHeight}" />
         <Setter Property="MinHeight" Value="{StaticResource StatusBarHeight}" />
         <Setter Property="MaxHeight" Value="{StaticResource StatusBarHeight}" />
-        <Setter Property="Background" Value="{DynamicResource Brush.DataGrid.Panel.BackgroundColor}" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Background" Value="{DynamicResource Brush.Palette.CategoryHeaderBackground}" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.DataGrid.Text.Foreground}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource Brush.DataGrid.GridLine}" />
-        <Setter Property="BorderThickness" Value="1,1,1,0" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Palette.ControlBorder}" />
+        <Setter Property="BorderThickness" Value="1,0,1,1" />
+        <Setter Property="Padding" Value="4,0" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+        <Setter Property="UseLayoutRounding" Value="True" />
       </Style>
 
-      <!-- TreeView 样式 -->
+      <!-- TreeView 样式 (反编译对齐 AutoCAD 2019 AcLayer.dll MultiTreeView & AdUiPalettes.dll TreeControl*) -->
       <Style x:Key="TreeViewStyle" TargetType="TreeView">
         <Setter Property="VirtualizingStackPanel.IsVirtualizing" Value="True" />
         <Setter Property="VirtualizingStackPanel.VirtualizationMode" Value="Recycling" />
         <Setter Property="ScrollViewer.CanContentScroll" Value="True" />
         <Setter Property="FontSize" Value="12"/>
-        <Setter Property="Background" Value="{DynamicResource Brush.DataGrid.Panel.BackgroundColor}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource Brush.DataGrid.GridLine}" />
+        <Setter Property="Padding" Value="2,2"/>
+        <Setter Property="Background" Value="{DynamicResource Brush.TreeView.Background}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.TreeView.Border}" />
         <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+        <Setter Property="UseLayoutRounding" Value="True" />
         <Setter Property="ItemContainerStyle">
           <Setter.Value>
             <Style TargetType="TreeViewItem">
               <Setter Property="Foreground" Value="{DynamicResource Brush.DataGrid.Text.Foreground}"/>
-              <Setter Property="Background" Value="{DynamicResource Brush.DataGrid.Panel.BackgroundColor}" />
+              <Setter Property="Background" Value="Transparent" />
+              <Setter Property="BorderBrush" Value="Transparent" />
+              <Setter Property="BorderThickness" Value="1" />
               <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
               <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}" />
+              <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+              <Setter Property="SnapsToDevicePixels" Value="True" />
+              <Setter Property="UseLayoutRounding" Value="True" />
               <Setter Property="Template">
                 <Setter.Value>
                   <ControlTemplate TargetType="TreeViewItem">
-                    <Grid>
+                    <Grid SnapsToDevicePixels="True">
                       <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="16"/>
                         <ColumnDefinition Width="*"/>
                       </Grid.ColumnDefinitions>
                       <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto" MinHeight="22"/>
                         <RowDefinition Height="*"/>
                       </Grid.RowDefinitions>
 
-                      <!-- 小三角按钮 -->
-                      <ToggleButton x:Name="Expander" 
-                              Grid.Column="0"
-                              Grid.Row="0"
-                              IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"
-                              ClickMode="Release"
-                              Width="12"
-                              Height="12"
-                              Background="Transparent"
-                              BorderThickness="0">
+                      <!-- 展开/收起三角按钮 (CategoryExpanderColor: #FFEBEBEB Dark / #FF616161 Light) -->
+                      <ToggleButton x:Name="Expander"
+                                    Grid.Column="0"
+                                    Grid.Row="0"
+                                    IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"
+                                    ClickMode="Press"
+                                    Width="14"
+                                    Height="14"
+                                    Focusable="False"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center">
                         <ToggleButton.Template>
                           <ControlTemplate TargetType="ToggleButton">
-                            <Border Background="Transparent" Width="12" Height="12">
-                              <!-- 未展开状态：向右的三角 -->
+                            <Border Background="Transparent" Width="14" Height="14">
                               <Path x:Name="ExpandPath"
-                              Data="M 0 0 L 5.196 3 L 0 6 Z"
-                              Fill="{DynamicResource Brush.DataGrid.Text.Foreground}"
-                              HorizontalAlignment="Center"
-                              VerticalAlignment="Center"
-                              Stretch="Uniform"
-                              Margin="2"/>
+                                    Data="M 0,0 L 5,3.5 L 0,7 Z"
+                                    Fill="{DynamicResource Brush.TreeView.Expander}"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    SnapsToDevicePixels="True"/>
                             </Border>
                             <ControlTemplate.Triggers>
-                              <!-- 展开状态：向下的三角 -->
                               <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="ExpandPath" Property="Data" Value="M 0 0 L 6 0 L 3 5.196 Z"/>
+                                <Setter TargetName="ExpandPath" Property="Data" Value="M 0,0 L 7,0 L 3.5,5 Z"/>
+                              </Trigger>
+                              <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ExpandPath" Property="Fill" Value="{DynamicResource Brush.Icon.Accent}"/>
                               </Trigger>
                             </ControlTemplate.Triggers>
                           </ControlTemplate>
                         </ToggleButton.Template>
                       </ToggleButton>
 
-                      <!-- 节点内容 - 用 Border 包装 ContentPresenter -->
+                      <!-- 节点行容器 (ListBoxSelectBackground + ListBoxSelectBorder / ListBoxHoverBackground) -->
                       <Border x:Name="HeaderBorder"
-                        Grid.Column="1"
-                        Grid.Row="0"
-                        Background="{TemplateBinding Background}"
-                        Padding="2,2"
-                        Margin="0">
+                              Grid.Column="1"
+                              Grid.Row="0"
+                              MinHeight="22"
+                              Background="{TemplateBinding Background}"
+                              BorderBrush="{TemplateBinding BorderBrush}"
+                              BorderThickness="{TemplateBinding BorderThickness}"
+                              Padding="5,1,6,1"
+                              Margin="0,0,1,0"
+                              SnapsToDevicePixels="True">
                         <ContentPresenter x:Name="PART_Header"
-                                    ContentSource="Header"
-                                    Margin="5,0,0,0"
-                                    VerticalAlignment="Center"/>
+                                          ContentSource="Header"
+                                          VerticalAlignment="Center"/>
                       </Border>
 
                       <!-- 子节点容器 -->
                       <ItemsPresenter x:Name="ItemsHost"
-                                Grid.Column="1"
-                                Grid.Row="1"
-                                Visibility="Collapsed"/>
+                                      Grid.Column="1"
+                                      Grid.Row="1"
+                                      Visibility="Collapsed"/>
                     </Grid>
 
                     <ControlTemplate.Triggers>
-                      <!-- 展开时显示子节点 -->
                       <Trigger Property="IsExpanded" Value="True">
                         <Setter TargetName="ItemsHost" Property="Visibility" Value="Visible"/>
                       </Trigger>
-
-                      <!-- 没有子节点时隐藏三角 -->
                       <Trigger Property="HasItems" Value="False">
                         <Setter TargetName="Expander" Property="Visibility" Value="Hidden"/>
+                      </Trigger>
+                      <Trigger SourceName="HeaderBorder" Property="IsMouseOver" Value="True">
+                        <Setter TargetName="HeaderBorder" Property="Background" Value="{DynamicResource Brush.TreeView.Item.HoverBackground}"/>
+                        <Setter TargetName="HeaderBorder" Property="BorderBrush" Value="{DynamicResource Brush.TreeView.Item.HoverBorder}"/>
+                      </Trigger>
+                      <Trigger Property="IsSelected" Value="True">
+                        <Setter TargetName="HeaderBorder" Property="Background" Value="{DynamicResource Brush.TreeView.Item.SelectedBackground}"/>
+                        <Setter TargetName="HeaderBorder" Property="BorderBrush" Value="{DynamicResource Brush.TreeView.Item.SelectedBorder}"/>
+                        <Setter Property="Foreground" Value="{DynamicResource Brush.DataGrid.SelectedText.Foreground}"/>
                       </Trigger>
                     </ControlTemplate.Triggers>
                   </ControlTemplate>
                 </Setter.Value>
               </Setter>
-
-              <Style.Triggers>
-                <!-- 选中时的触发器 -->
-                <Trigger Property="IsSelected" Value="True">
-                  <Setter Property="Background" Value="{DynamicResource Brush.DataGrid.SelectedRow.Background}"/>
-                  <Setter Property="Foreground" Value="{DynamicResource Brush.DataGrid.SelectedText.Foreground}"/>
-                </Trigger>
-              </Style.Triggers>
             </Style>
           </Setter.Value>
         </Setter>
       </Style>
 
-      <!-- 单元格文本对齐样式（吸收自 ucMatchArrowResult.xaml） -->
+      <!-- 单元格文本对齐样式 -->
       <Style x:Key="CenterText" TargetType="TextBlock">
         <Setter Property="HorizontalAlignment" Value="Center"/>
         <Setter Property="VerticalAlignment" Value="Center"/>
@@ -241,7 +257,7 @@
         <Setter Property="Margin" Value="6,0,0,0"/>
       </Style>
 
-      <!-- DataGrid 样式（融合深色主题网格线与行号列头，固定失去焦点时的选中高亮画刷） -->
+      <!-- DataGrid 样式（反编译对齐 AutoCAD 2019 AcLayer.dll BaseGrid + LayerGrid + ThemedDataGridViewCellStyle） -->
       <Style x:Key="DataGridStyle" TargetType="DataGrid">
         <Style.Resources>
           <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}"
@@ -262,78 +278,111 @@
         <Setter Property="CanUserAddRows" Value="False" />
         <Setter Property="IsReadOnly" Value="True" />
         <Setter Property="HeadersVisibility" Value="All" />
-        <Setter Property="RowHeaderWidth" Value="35" />
+        <Setter Property="RowHeaderWidth" Value="32" />
+        <Setter Property="FontSize" Value="12" />
         <Setter Property="GridLinesVisibility" Value="All" />
         <Setter Property="HorizontalGridLinesBrush" Value="{DynamicResource Brush.DataGrid.GridLine}" />
         <Setter Property="VerticalGridLinesBrush" Value="{DynamicResource Brush.DataGrid.GridLine}" />
-        <Setter Property="Background" Value="{DynamicResource Brush.DataGrid.Header.Background}" />
-        <Setter Property="AlternatingRowBackground" Value="{DynamicResource Brush.DataGrid.AltRow.Background}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource Brush.DataGrid.GridLine}" />
+        <Setter Property="Background" Value="{DynamicResource Brush.DataGrid.Row.Background}" />
         <Setter Property="RowBackground" Value="{DynamicResource Brush.DataGrid.Row.Background}" />
+        <Setter Property="AlternatingRowBackground" Value="{DynamicResource Brush.DataGrid.AltRow.Background}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Palette.ControlBorder}" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.DataGrid.Text.Foreground}" />
         <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+        <Setter Property="UseLayoutRounding" Value="True" />
       </Style>
 
-      <!-- DataGrid 左上角全选按钮样式（吸收自 ucMatchArrowResult.xaml） -->
+      <!-- DataGrid 左上角全选按钮样式 (24px 高，对齐 ColumnHeader 与 RowHeader) -->
       <Style x:Key="{ComponentResourceKey ResourceId=DataGridSelectAllButtonStyle, TypeInTargetAssembly={x:Type DataGrid}}"
              TargetType="{x:Type Button}">
         <Setter Property="Background" Value="{DynamicResource Brush.DataGrid.Header.Background}" />
         <Setter Property="Template">
           <Setter.Value>
             <ControlTemplate TargetType="{x:Type Button}">
-              <Border Background="{DynamicResource Brush.DataGrid.Header.Background}"
-                      BorderBrush="{DynamicResource Brush.DataGrid.GridLine}"
-                      BorderThickness="0,0,1,1">
-                <Polygon Points="3,10 10,10 10,3"
-                         Fill="{DynamicResource Brush.DataGrid.Text.Foreground}"
-                         Opacity="0.3"
-                         HorizontalAlignment="Right"
-                         VerticalAlignment="Bottom"/>
+              <Border x:Name="SelectAllBorder"
+                      Background="{DynamicResource Brush.DataGrid.Header.Background}"
+                      BorderBrush="{DynamicResource Brush.DataGrid.Header.BottomBorder}"
+                      BorderThickness="0,0,0,1"
+                      SnapsToDevicePixels="True">
+                <Grid>
+                  <Rectangle Width="1"
+                             HorizontalAlignment="Right"
+                             VerticalAlignment="Stretch"
+                             Fill="{DynamicResource Brush.DataGrid.Header.Divider}"/>
+                  <Polygon Points="2,9 9,9 9,2"
+                           Fill="{DynamicResource Brush.DataGrid.Header.SortArrow}"
+                           Opacity="0.45"
+                           Margin="0,0,4,4"
+                           HorizontalAlignment="Right"
+                           VerticalAlignment="Bottom"/>
+                </Grid>
               </Border>
+              <ControlTemplate.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                  <Setter TargetName="SelectAllBorder" Property="Background" Value="{DynamicResource Brush.DataGrid.Header.HoverBackground}"/>
+                </Trigger>
+              </ControlTemplate.Triggers>
             </ControlTemplate>
           </Setter.Value>
         </Setter>
       </Style>
 
-      <!-- DataGrid 表头样式（吸收自 ucMatchArrowResult.xaml：支持深色主题排序箭头 SortArrow 与列宽拖拽抓手） -->
+      <!-- DataGrid 表头样式（反编译自 AcLayer.dll BaseGrid.InitializeColumns + DrawColumnHeaderDivider & AdUiPalettes.dll ListBoxColumnHeader*：
+           紧凑高度 24px，12px Normal 字重，底部 1px #FF333333 边框，右侧 1px #FF525252 分隔线，7x4 排序三角箭头） -->
       <Style TargetType="DataGridColumnHeader">
         <Setter Property="Background" Value="{DynamicResource Brush.DataGrid.Header.Background}"/>
-        <Setter Property="Foreground" Value="{DynamicResource Brush.DataGrid.Text.Foreground}"/>
-        <Setter Property="FontWeight" Value="Bold"/>
-        <Setter Property="FontSize" Value="13"/>
-        <Setter Property="Height" Value="30"/>
-        <Setter Property="Padding" Value="5,0"/>
-        <Setter Property="BorderThickness" Value="0,0,1,1"/>
-        <Setter Property="BorderBrush" Value="{DynamicResource Brush.DataGrid.GridLine}"/>
+        <Setter Property="Foreground" Value="{DynamicResource Brush.DataGrid.Header.Foreground}"/>
+        <Setter Property="FontWeight" Value="Normal"/>
+        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="Height" Value="24"/>
+        <Setter Property="Padding" Value="6,0"/>
+        <Setter Property="BorderThickness" Value="0,0,0,1"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.DataGrid.Header.BottomBorder}"/>
         <Setter Property="HorizontalContentAlignment" Value="Center"/>
+        <Setter Property="SnapsToDevicePixels" Value="True"/>
+        <Setter Property="UseLayoutRounding" Value="True"/>
         <Setter Property="Template">
           <Setter.Value>
             <ControlTemplate TargetType="DataGridColumnHeader">
-              <Grid>
+              <Grid SnapsToDevicePixels="True" UseLayoutRounding="True">
+                <!-- 底部 1px 强边界 (#FF333333 Dark / #FF9E9E9E Light) -->
                 <Border x:Name="HeaderBorder"
                         Background="{TemplateBinding Background}"
                         BorderThickness="{TemplateBinding BorderThickness}"
-                        BorderBrush="{TemplateBinding BorderBrush}">
-                  <Grid Margin="{TemplateBinding Padding}">
-                    <Grid.ColumnDefinitions>
-                      <ColumnDefinition Width="*" />
-                      <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <ContentPresenter Grid.Column="0"
-                                      HorizontalAlignment="Center"
-                                      VerticalAlignment="Center"/>
-                    <Path x:Name="SortArrow"
-                          Grid.Column="1"
-                          Visibility="Collapsed"
-                          Data="M 0,4 L 4,0 L 8,4 Z"
-                          Fill="{TemplateBinding Foreground}"
-                          Margin="5,0,2,0"
-                          VerticalAlignment="Center" />
+                        BorderBrush="{TemplateBinding BorderBrush}"
+                        SnapsToDevicePixels="True">
+                  <Grid>
+                    <Grid Margin="{TemplateBinding Padding}">
+                      <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                      </Grid.ColumnDefinitions>
+                      <ContentPresenter Grid.Column="0"
+                                        HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                        VerticalAlignment="Center"
+                                        SnapsToDevicePixels="True"/>
+                      <!-- AutoCAD 2019 ListBoxColumnHeaderArrow (7x4 紧凑三角形) -->
+                      <Path x:Name="SortArrow"
+                            Grid.Column="1"
+                            Visibility="Collapsed"
+                            Data="M 0,4 L 3.5,0 L 7,4 Z"
+                            Fill="{DynamicResource Brush.DataGrid.Header.SortArrow}"
+                            Margin="5,0,2,0"
+                            VerticalAlignment="Center"
+                            SnapsToDevicePixels="True" />
+                    </Grid>
+                    <!-- 右侧 1px 列头竖向分隔线 (BaseGrid.DrawColumnHeaderDivider: #FF525252 Dark / #FFD4D4D4 Light) -->
+                    <Rectangle Width="1"
+                               HorizontalAlignment="Right"
+                               VerticalAlignment="Stretch"
+                               Fill="{DynamicResource Brush.DataGrid.Header.Divider}"
+                               SnapsToDevicePixels="True"/>
                   </Grid>
                 </Border>
                 <Thumb x:Name="PART_RightHeaderGripper"
                        HorizontalAlignment="Right"
-                       Width="8"
+                       Width="6"
                        Cursor="SizeWE"
                        Background="Transparent">
                   <Thumb.Template>
@@ -345,15 +394,17 @@
               </Grid>
               <ControlTemplate.Triggers>
                 <Trigger Property="SortDirection" Value="Ascending">
+                  <Setter TargetName="HeaderBorder" Property="Background" Value="{DynamicResource Brush.DataGrid.Header.SortedBackground}"/>
                   <Setter TargetName="SortArrow" Property="Visibility" Value="Visible"/>
-                  <Setter TargetName="SortArrow" Property="Data" Value="M 0,4 L 4,0 L 8,4 Z"/>
+                  <Setter TargetName="SortArrow" Property="Data" Value="M 0,4 L 3.5,0 L 7,4 Z"/>
                 </Trigger>
                 <Trigger Property="SortDirection" Value="Descending">
+                  <Setter TargetName="HeaderBorder" Property="Background" Value="{DynamicResource Brush.DataGrid.Header.SortedBackground}"/>
                   <Setter TargetName="SortArrow" Property="Visibility" Value="Visible"/>
-                  <Setter TargetName="SortArrow" Property="Data" Value="M 0,0 L 4,4 L 8,0 Z"/>
+                  <Setter TargetName="SortArrow" Property="Data" Value="M 0,0 L 3.5,4 L 7,0 Z"/>
                 </Trigger>
                 <Trigger Property="IsMouseOver" Value="True">
-                  <Setter TargetName="HeaderBorder" Property="Background" Value="#555555"/>
+                  <Setter TargetName="HeaderBorder" Property="Background" Value="{DynamicResource Brush.DataGrid.Header.HoverBackground}"/>
                 </Trigger>
               </ControlTemplate.Triggers>
             </ControlTemplate>
@@ -361,33 +412,36 @@
         </Setter>
       </Style>
 
-      <!-- DataGrid 左侧行号列头样式（吸收自 ucMatchArrowResult.xaml） -->
+      <!-- DataGrid 左侧行号列头样式 (32px 宽，对齐紧凑 22px 行高) -->
       <Style TargetType="DataGridRowHeader">
-        <Setter Property="Width" Value="35"/>
-        <Setter Property="MinWidth" Value="35"/>
-        <Setter Property="Background" Value="{DynamicResource Brush.DataGrid.Header.Background}"/>
+        <Setter Property="Width" Value="32"/>
+        <Setter Property="MinWidth" Value="32"/>
+        <Setter Property="FontSize" Value="11.5"/>
+        <Setter Property="Background" Value="{DynamicResource Brush.Palette.CategoryHeaderBackground}"/>
         <Setter Property="BorderBrush" Value="{DynamicResource Brush.DataGrid.GridLine}"/>
         <Setter Property="BorderThickness" Value="0,0,1,1"/>
         <Setter Property="HorizontalContentAlignment" Value="Center"/>
+        <Setter Property="SnapsToDevicePixels" Value="True"/>
         <Setter Property="Template">
           <Setter.Value>
             <ControlTemplate TargetType="DataGridRowHeader">
-              <Grid>
-                <Border x:Name="rowheaderborder"
-                        Background="{TemplateBinding Background}"
-                        BorderBrush="{TemplateBinding BorderBrush}"
-                        BorderThickness="{TemplateBinding BorderThickness}">
-                  <TextBlock x:Name="rowheadertext"
-                             Text="{Binding RelativeSource={RelativeSource AncestorType=DataGridRow}, Path=Header}"
-                             VerticalAlignment="Center"
-                             HorizontalAlignment="Center"
-                             Foreground="{DynamicResource Brush.DataGrid.Text.Foreground}"/>
-                </Border>
-              </Grid>
+              <Border x:Name="rowheaderborder"
+                      Background="{TemplateBinding Background}"
+                      BorderBrush="{TemplateBinding BorderBrush}"
+                      BorderThickness="{TemplateBinding BorderThickness}"
+                      SnapsToDevicePixels="True">
+                <TextBlock x:Name="rowheadertext"
+                           Text="{Binding RelativeSource={RelativeSource AncestorType=DataGridRow}, Path=Header}"
+                           VerticalAlignment="Center"
+                           HorizontalAlignment="Center"
+                           Foreground="{DynamicResource Brush.DataGrid.Text.Foreground}"
+                           Opacity="0.85"/>
+              </Border>
               <ControlTemplate.Triggers>
                 <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=DataGridRow}}" Value="True">
                   <Setter TargetName="rowheaderborder" Property="Background" Value="{DynamicResource Brush.DataGrid.SelectedRow.Background}"/>
                   <Setter TargetName="rowheadertext" Property="Foreground" Value="{DynamicResource Brush.DataGrid.SelectedText.Foreground}"/>
+                  <Setter TargetName="rowheadertext" Property="Opacity" Value="1.0"/>
                 </DataTrigger>
               </ControlTemplate.Triggers>
             </ControlTemplate>
@@ -395,12 +449,13 @@
         </Setter>
       </Style>
 
-      <!-- 单元格与整行选中颜色（自定义 ControlTemplate 彻底屏蔽 WPF 默认失去焦点变灰，保证切换左侧树节点时选中行始终高亮显著） -->
+      <!-- 单元格与整行选中/悬停样式（对齐 AutoCAD 2019 AcLayer.dll 22px 紧凑行高 + ListBoxSelectBackground / ListBoxHoverBackground） -->
       <Style TargetType="DataGridCell">
         <Setter Property="BorderThickness" Value="0"/>
         <Setter Property="Background" Value="Transparent"/>
         <Setter Property="Foreground" Value="{DynamicResource Brush.DataGrid.Text.Foreground}"/>
         <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        <Setter Property="SnapsToDevicePixels" Value="True"/>
         <Setter Property="Template">
           <Setter.Value>
             <ControlTemplate TargetType="DataGridCell">
@@ -417,43 +472,55 @@
         </Setter>
         <Style.Triggers>
           <Trigger Property="IsSelected" Value="True">
-            <Setter Property="Background" Value="{DynamicResource Brush.DataGrid.SelectedRow.Background}"/>
+            <Setter Property="Background" Value="Transparent"/>
             <Setter Property="Foreground" Value="{DynamicResource Brush.DataGrid.SelectedText.Foreground}"/>
           </Trigger>
           <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=DataGridRow}}" Value="True">
-            <Setter Property="Background" Value="{DynamicResource Brush.DataGrid.SelectedRow.Background}"/>
+            <Setter Property="Background" Value="Transparent"/>
             <Setter Property="Foreground" Value="{DynamicResource Brush.DataGrid.SelectedText.Foreground}"/>
           </DataTrigger>
         </Style.Triggers>
       </Style>
 
       <Style TargetType="DataGridRow">
-        <Setter Property="MinHeight" Value="26" />
+        <Setter Property="MinHeight" Value="22" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
         <Style.Triggers>
+          <Trigger Property="IsMouseOver" Value="True">
+            <Setter Property="Background" Value="{DynamicResource Brush.DataGrid.Row.HoverBackground}"/>
+          </Trigger>
           <Trigger Property="IsSelected" Value="True">
             <Setter Property="Background" Value="{DynamicResource Brush.DataGrid.SelectedRow.Background}"/>
             <Setter Property="Foreground" Value="{DynamicResource Brush.DataGrid.SelectedText.Foreground}"/>
           </Trigger>
+          <MultiTrigger>
+            <MultiTrigger.Conditions>
+              <Condition Property="IsSelected" Value="True"/>
+              <Condition Property="IsMouseOver" Value="True"/>
+            </MultiTrigger.Conditions>
+            <Setter Property="Background" Value="{DynamicResource Brush.DataGrid.SelectedRow.HoverBackground}"/>
+            <Setter Property="Foreground" Value="{DynamicResource Brush.DataGrid.SelectedText.Foreground}"/>
+          </MultiTrigger>
         </Style.Triggers>
       </Style>
 
-      <!-- GridSplitter 样式 -->
+      <!-- GridSplitter 样式 (PaletteContainerBackgroundColor: #FF525252 Dark / #FFE6E6E6 Light) -->
       <Style x:Key="CompositeSplitter.SplitterStyle" TargetType="GridSplitter">
-        <Setter Property="Background" Value="{DynamicResource Brush.DataGrid.Panel.BackgroundColor}" />
+        <Setter Property="Background" Value="{DynamicResource Brush.Palette.ContainerBackground}" />
         <Setter Property="BorderBrush" Value="Transparent"/>
         <Setter Property="HorizontalAlignment" Value="Stretch" />
         <Setter Property="VerticalAlignment" Value="Stretch" />
         <Setter Property="ShowsPreview" Value="False" />
       </Style>
 
-      <!-- SplitterToggleButton 样式 (AutoCAD 2019 导航面板折叠/展开图标按钮：半透明覆盖 + 黑色外框) -->
+      <!-- SplitterToggleButton 样式 (AutoCAD 2019 导航面板折叠/展开图标按钮：UxTheme 透蓝悬停膜 + 透蓝外框) -->
       <Style x:Key="TilePane.ButtonStyle" TargetType="Button">
-        <Setter Property="Width" Value="{StaticResource CollapseButtonWidth}" />
-        <Setter Property="Height" Value="{StaticResource CollapseButtonWidth}" />
+        <Setter Property="Width" Value="20" />
+        <Setter Property="Height" Value="20" />
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderBrush" Value="Transparent" />
         <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="Padding" Value="2" />
+        <Setter Property="Padding" Value="1" />
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.DataGrid.Text.Foreground}" />
         <Setter Property="ToolTipService.InitialShowDelay" Value="120" />
@@ -462,22 +529,29 @@
         <Setter Property="Template">
           <Setter.Value>
             <ControlTemplate TargetType="Button">
-              <Border x:Name="CollapseBtnBorder"
-                      Background="{TemplateBinding Background}"
-                      BorderBrush="{TemplateBinding BorderBrush}"
-                      BorderThickness="{TemplateBinding BorderThickness}"
-                      CornerRadius="0"
-                      Padding="{TemplateBinding Padding}"
-                      SnapsToDevicePixels="True">
-                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-              </Border>
+              <Grid SnapsToDevicePixels="True" UseLayoutRounding="True">
+                <Border x:Name="CollapseBtnFill"
+                        Margin="1"
+                        Background="{TemplateBinding Background}"
+                        CornerRadius="0"
+                        SnapsToDevicePixels="True"/>
+                <Border x:Name="CollapseBtnBorder"
+                        Background="Transparent"
+                        BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}"
+                        CornerRadius="0"
+                        Padding="{TemplateBinding Padding}"
+                        SnapsToDevicePixels="True">
+                  <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Border>
+              </Grid>
               <ControlTemplate.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
-                  <Setter TargetName="CollapseBtnBorder" Property="Background" Value="{DynamicResource Brush.ToolBar.Button.HoverBackground}"/>
+                  <Setter TargetName="CollapseBtnFill" Property="Background" Value="{DynamicResource Brush.ToolBar.Button.HoverBackground}"/>
                   <Setter TargetName="CollapseBtnBorder" Property="BorderBrush" Value="{DynamicResource Brush.ToolBar.Button.HoverBorder}"/>
                 </Trigger>
                 <Trigger Property="IsPressed" Value="True">
-                  <Setter TargetName="CollapseBtnBorder" Property="Background" Value="{DynamicResource Brush.ToolBar.Button.PressedBackground}"/>
+                  <Setter TargetName="CollapseBtnFill" Property="Background" Value="{DynamicResource Brush.ToolBar.Button.PressedBackground}"/>
                   <Setter TargetName="CollapseBtnBorder" Property="BorderBrush" Value="{DynamicResource Brush.ToolBar.Button.PressedBorder}"/>
                 </Trigger>
               </ControlTemplate.Triggers>
@@ -488,14 +562,14 @@
 
       <Style x:Key="TitlePane.HeaderDockStyle" TargetType="Grid">
         <Setter Property="Height" Value="{StaticResource TitlePane.DockHeight}"/>
-        <Setter Property="Background" Value="{DynamicResource Brush.DataGrid.Header.Background}"/>
+        <Setter Property="Background" Value="{DynamicResource Brush.Palette.CategoryHeaderBackground}"/>
       </Style>
 
-      <!-- 仿 ArcGIS 10.5 属性表底部“显示所有行 / 仅显示选中行”双模式切换矢量图标按钮样式（CAD 2019 半透明悬停 + 黑色外框） -->
+      <!-- 底部“显示所有行 / 仅显示选中行”双模式切换矢量图标按钮样式（CAD 2019 UxTheme 透蓝悬停膜 + 透蓝外框） -->
       <Style x:Key="ArcGisRecordModeToggleStyle" TargetType="ToggleButton">
-        <Setter Property="Width" Value="26"/>
-        <Setter Property="Height" Value="24"/>
-        <Setter Property="Padding" Value="2"/>
+        <Setter Property="Width" Value="22"/>
+        <Setter Property="Height" Value="20"/>
+        <Setter Property="Padding" Value="1"/>
         <Setter Property="Margin" Value="0,0,3,0"/>
         <Setter Property="Cursor" Value="Hand"/>
         <Setter Property="Background" Value="Transparent"/>
@@ -511,27 +585,34 @@
         <Setter Property="Template">
           <Setter.Value>
             <ControlTemplate TargetType="ToggleButton">
-              <Border x:Name="ModeBorder"
-                      Background="{TemplateBinding Background}"
-                      BorderBrush="{TemplateBinding BorderBrush}"
-                      BorderThickness="{TemplateBinding BorderThickness}"
-                      CornerRadius="0"
-                      Padding="{TemplateBinding Padding}"
-                      SnapsToDevicePixels="True">
-                <ContentPresenter HorizontalAlignment="Center"
-                                  VerticalAlignment="Center"/>
-              </Border>
+              <Grid SnapsToDevicePixels="True" UseLayoutRounding="True">
+                <Border x:Name="ModeFill"
+                        Margin="1"
+                        Background="{TemplateBinding Background}"
+                        CornerRadius="0"
+                        SnapsToDevicePixels="True"/>
+                <Border x:Name="ModeBorder"
+                        Background="Transparent"
+                        BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}"
+                        CornerRadius="0"
+                        Padding="{TemplateBinding Padding}"
+                        SnapsToDevicePixels="True">
+                  <ContentPresenter HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"/>
+                </Border>
+              </Grid>
               <ControlTemplate.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
-                  <Setter TargetName="ModeBorder" Property="Background" Value="{DynamicResource Brush.ToolBar.Button.HoverBackground}"/>
+                  <Setter TargetName="ModeFill" Property="Background" Value="{DynamicResource Brush.ToolBar.Button.HoverBackground}"/>
                   <Setter TargetName="ModeBorder" Property="BorderBrush" Value="{DynamicResource Brush.ToolBar.Button.HoverBorder}"/>
                 </Trigger>
                 <Trigger Property="IsChecked" Value="True">
-                  <Setter TargetName="ModeBorder" Property="Background" Value="{DynamicResource Brush.ToolBar.Button.PressedBackground}"/>
+                  <Setter TargetName="ModeFill" Property="Background" Value="{DynamicResource Brush.ToolBar.Button.PressedBackground}"/>
                   <Setter TargetName="ModeBorder" Property="BorderBrush" Value="{DynamicResource Brush.ToolBar.Button.PressedBorder}"/>
                 </Trigger>
                 <Trigger Property="IsPressed" Value="True">
-                  <Setter TargetName="ModeBorder" Property="Background" Value="{DynamicResource Brush.ToolBar.Button.PressedBackground}"/>
+                  <Setter TargetName="ModeFill" Property="Background" Value="{DynamicResource Brush.ToolBar.Button.PressedBackground}"/>
                   <Setter TargetName="ModeBorder" Property="BorderBrush" Value="{DynamicResource Brush.ToolBar.Button.PressedBorder}"/>
                 </Trigger>
               </ControlTemplate.Triggers>
@@ -547,7 +628,7 @@
     <core:CadSelectionSyncBehavior OnCadSelectionChanged="{Binding CadSelectionChangedCommand}" />
   </i:Interaction.Behaviors>
 
-  <Grid Background="{DynamicResource Brush.DataGrid.Panel.BackgroundColor}">
+  <Grid Background="{DynamicResource Brush.Palette.ContainerBackground}">
     <Grid.RowDefinitions>
       <RowDefinition Height="Auto"/>
       <RowDefinition Height="*"/>
@@ -571,7 +652,7 @@
       <ComboBox Width="162"
                 Height="20"
                 FontSize="11.5"
-                Padding="5,0,2,0"
+                Style="{StaticResource CadComboBoxStyle}"
                 ItemsSource="{Binding AvailableSingleRules}"
                 SelectedItem="{Binding SelectedSingleRule, Mode=TwoWay}"
                 DisplayMemberPath="DisplayName"
@@ -602,13 +683,15 @@
         <ContentControl Template="{StaticResource IconTemplate.ExportReport}" Width="20" Height="20" Focusable="False"/>
       </Button>
       <Border Style="{StaticResource CadToolbarSeparatorStyle}"/>
+      <!-- 工具栏内嵌搜索框 (对齐 AdUiPalettes.dll PaletteSearchActiveTopColor->BottomColor + ControlBorderColor) -->
       <Border Height="20"
-              Background="{DynamicResource Brush.DataGrid.Row.Background}"
-              BorderBrush="{DynamicResource Brush.ToolBar.OuterBorder}"
+              Background="{DynamicResource Brush.TextBox.Background}"
+              BorderBrush="{DynamicResource Brush.TextBox.Border}"
               BorderThickness="1"
               CornerRadius="0"
               Padding="5,0,2,0"
               VerticalAlignment="Center"
+              SnapsToDevicePixels="True"
               ToolTip="关键字筛选&#x0a;输入管线编号、核查类型、图层、状态、坐标或备注关键字，实时过滤当前列表。"
               ToolTipService.InitialShowDelay="120"
               ToolTipService.ShowDuration="15000">
@@ -711,7 +794,11 @@
       </splitter:CompositeSplitter.PrimaryContent>
 
       <splitter:CompositeSplitter.SecondaryContent>
-        <Border Background="{DynamicResource Brush.Border}">
+        <!-- 右侧表格区外框 (对齐 AcLayer.dll LayerManagerControl.BorderPaint 1px #FF333333 / #FF9E9E9E 边框) -->
+        <Border Background="{DynamicResource Brush.DataGrid.Row.Background}"
+                BorderBrush="{DynamicResource Brush.Palette.ControlBorder}"
+                BorderThickness="1,0,1,1"
+                SnapsToDevicePixels="True">
           <Grid>
             <Grid.RowDefinitions>
               <RowDefinition Height="*"/>
@@ -744,7 +831,7 @@
             </DataGrid.InputBindings>
 
             <DataGrid.ContextMenu>
-              <ContextMenu>
+              <ContextMenu Style="{StaticResource CadContextMenuStyle}">
                 <MenuItem Header="定位到CAD图纸" Command="{Binding ZoomToCommand}">
                   <MenuItem.Icon>
                     <ContentControl Template="{StaticResource IconTemplate.ZoomTarget}" Width="16" Height="16" Focusable="False"/>
@@ -863,29 +950,33 @@
             </DataGrid.Columns>
           </DataGrid>
 
-            <!-- 仿 ArcGIS 10.5 属性表底部双模式切换栏（Stage 7 Commit 7.5 & Commit 7.7 矢量图标按钮 + 悬停 ToolTip） -->
+            <!-- 底部“显示所有行 / 仅显示选中行”双模式切换栏（对齐 AutoCAD 2019 PropertyInspectorCategoryHeader 紧凑 24px 栏） -->
             <Border Grid.Row="1"
-                    Height="28"
-                    Background="{DynamicResource Brush.DataGrid.Header.Background}"
-                    BorderBrush="{DynamicResource Brush.DataGrid.GridLine}"
+                    Height="24"
+                    Background="{DynamicResource Brush.Palette.CategoryHeaderBackground}"
+                    BorderBrush="{DynamicResource Brush.Palette.ControlBorder}"
                     BorderThickness="0,1,0,0"
-                    Padding="6,1">
+                    Padding="4,0"
+                    SnapsToDevicePixels="True">
               <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                 <ToggleButton Style="{StaticResource ArcGisRecordModeToggleStyle}"
                               IsChecked="{Binding IsShowAllRows, Mode=TwoWay}"
                               ToolTip="显示所有行&#x0a;展示当前分类或筛选条件下的全部记录行，在图纸中点选管线时自动滚动定位。">
-                  <ContentControl Template="{StaticResource IconTemplate.TableShowAll}" Width="18" Height="18" Focusable="False"/>
+                  <ContentControl Template="{StaticResource IconTemplate.TableShowAll}" Width="16" Height="16" Focusable="False"/>
                 </ToggleButton>
                 <ToggleButton Style="{StaticResource ArcGisRecordModeToggleStyle}"
                               IsChecked="{Binding IsShowSelectedOnly, Mode=TwoWay}"
                               ToolTip="仅显示选中行&#x0a;仅过滤显示当前在 CAD 图纸或列表中处于选中状态的记录行。">
-                  <ContentControl Template="{StaticResource IconTemplate.TableShowSelected}" Width="18" Height="18" Focusable="False"/>
+                  <ContentControl Template="{StaticResource IconTemplate.TableShowSelected}" Width="16" Height="16" Focusable="False"/>
                 </ToggleButton>
-                <Rectangle Width="1"
-                           Height="14"
-                           Fill="{DynamicResource Brush.DataGrid.GridLine}"
-                           Margin="6,0,8,0"
-                           VerticalAlignment="Center"/>
+                <Border Width="2"
+                        Height="14"
+                        Margin="4,0,6,0"
+                        VerticalAlignment="Center"
+                        Background="{DynamicResource Brush.ToolBar.SeparatorDark}"
+                        BorderBrush="{DynamicResource Brush.ToolBar.SeparatorLight}"
+                        BorderThickness="0,0,1,0"
+                        SnapsToDevicePixels="True"/>
                 <TextBlock Text="{Binding SelectionRecordSummaryText}"
                            VerticalAlignment="Center"
                            Foreground="{DynamicResource Brush.DataGrid.Text.Foreground}"
@@ -901,10 +992,10 @@
     <!-- StatusBar -->
     <StatusBar Grid.Row="2" Style="{StaticResource StatusBarStyle}">
       <StatusBarItem Content="{Binding StatusText}"/>
-      <Separator/>
+      <Separator Background="{DynamicResource Brush.Palette.ControlBorder}" Width="1" Margin="4,3"/>
       <StatusBarItem Content="{Binding RowCountText}"/>
-      <Separator/>
-      <StatusBarItem Content="{Binding DataSourceSummaryText}" Opacity="0.85"/>
+      <Separator Background="{DynamicResource Brush.Palette.ControlBorder}" Width="1" Margin="4,3"/>
+      <StatusBarItem Content="{Binding DataSourceSummaryText}" Opacity="0.88"/>
     </StatusBar>
   </Grid>
 </UserControl>

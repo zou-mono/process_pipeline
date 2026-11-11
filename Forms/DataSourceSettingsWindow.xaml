@@ -108,6 +108,7 @@
                            Content="已打开的 CAD 文档标签页："
                            Margin="0,0,8,0"/>
               <ComboBox Grid.Column="1"
+                        Style="{StaticResource CadComboBoxStyle}"
                         ItemsSource="{Binding OpenMdiDocuments}"
                         SelectedItem="{Binding SelectedPreviousMdiDoc, Mode=TwoWay}"
                         DisplayMemberPath="DisplayName"
@@ -131,6 +132,7 @@
                            Content="外部 DWG 文件路径："
                            Margin="0,0,8,0"/>
               <TextBox Grid.Column="1"
+                       Style="{StaticResource CadTextBoxStyle}"
                        Text="{Binding PreviousExternalFilePath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                        Height="24"
                        VerticalContentAlignment="Center"
@@ -177,6 +179,7 @@
                            Content="已打开的 CAD 文档标签页："
                            Margin="0,0,8,0"/>
               <ComboBox Grid.Column="1"
+                        Style="{StaticResource CadComboBoxStyle}"
                         ItemsSource="{Binding OpenMdiDocuments}"
                         SelectedItem="{Binding SelectedSurveyMdiDoc, Mode=TwoWay}"
                         DisplayMemberPath="DisplayName"
@@ -200,6 +203,7 @@
                            Content="外部 DWG 文件路径："
                            Margin="0,0,8,0"/>
               <TextBox Grid.Column="1"
+                       Style="{StaticResource CadTextBoxStyle}"
                        Text="{Binding SurveyExternalFilePath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                        Height="24"
                        VerticalContentAlignment="Center"

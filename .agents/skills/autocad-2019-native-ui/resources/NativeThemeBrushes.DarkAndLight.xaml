@@ -1,9 +1,61 @@
+<!-- ============================================================================
+     AutoCAD 2019 Native Theme Brushes (Dark COLORTHEME=0 & Light COLORTHEME=1)
+     Decompiled from acad.exe (CAcColorTheme), AcLayer.dll (LayerGrid / MultiTreeView),
+     AdUiPalettes.dll (PaletteThemeDefaults), AdWindows.dll (RibbonToolTip),
+     and Windows 10 UxTheme.dll (Toolbar TP_BUTTON)
+     ============================================================================ -->
+
+<!-- ============================================================================
+     1. DARK THEME DICTIONARY (COLORTHEME = 0)
+     ============================================================================ -->
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
-  <!-- ========================================================================= -->
-  <!-- 1. AutoCAD 2019 Dark Theme Brushes (COLORTHEME = 0)                       -->
-  <!-- ========================================================================= -->
+  <!-- Palette & DataGrid Core Colors (AcLayer.dll + AdUiPalettes.dll Dark) -->
+  <Color x:Key="Color.DataGrid.Panel.BackgroundColor">#FF5C5C5C</Color>
+  <Color x:Key="Color.DataGrid.Header.Background">#FF666666</Color>
+  <Color x:Key="Color.DataGrid.Header.Foreground">#FFFFFFFF</Color>
+  <Color x:Key="Color.DataGrid.Row.Background">#FF5C5C5C</Color>
+  <Color x:Key="Color.DataGrid.AltRow.Background">#FF565656</Color>
+  <Color x:Key="Color.DataGrid.Text.Foreground">#FFFFFFFF</Color>
+  <Color x:Key="Color.DataGrid.GridLine">#FF4D4D4D</Color>
+  <Color x:Key="Color.DataGrid.SelectedRow.Background">#FF1E5E96</Color>
+  <Color x:Key="Color.DataGrid.SelectedText.Foreground">#FFFFFFFF</Color>
+  <Color x:Key="Color.Splitter.Background">#FF525252</Color>
+  <Color x:Key="Color.Border">#FF333333</Color>
+
+  <SolidColorBrush x:Key="Brush.Palette.ContainerBackground" Color="#FF525252"/>
+  <SolidColorBrush x:Key="Brush.Palette.ControlBorder" Color="#FF333333"/>
+  <SolidColorBrush x:Key="Brush.Palette.CategoryHeaderBackground" Color="#FF4A4A4A"/>
+  <SolidColorBrush x:Key="Brush.Palette.CategoryExpander" Color="#FFEBEBEB"/>
+  <SolidColorBrush x:Key="Brush.Palette.TextInactive" Color="#8CFFFFFF"/>
+
+  <SolidColorBrush x:Key="Brush.DataGrid.Header.Divider" Color="#FF525252"/>
+  <SolidColorBrush x:Key="Brush.DataGrid.Header.BottomBorder" Color="#FF333333"/>
+  <LinearGradientBrush x:Key="Brush.DataGrid.Header.HoverBackground" StartPoint="0.5,0" EndPoint="0.5,1">
+    <GradientStop Color="#FF787878" Offset="0"/>
+    <GradientStop Color="#FF5C5C5C" Offset="1"/>
+  </LinearGradientBrush>
+  <LinearGradientBrush x:Key="Brush.DataGrid.Header.SortedBackground" StartPoint="0.5,0" EndPoint="0.5,1">
+    <GradientStop Color="#FF5C5C5C" Offset="0"/>
+    <GradientStop Color="#FF525252" Offset="1"/>
+  </LinearGradientBrush>
+  <SolidColorBrush x:Key="Brush.DataGrid.Header.SortArrow" Color="#FFEBEBEB"/>
+  <SolidColorBrush x:Key="Brush.DataGrid.Row.HoverBackground" Color="#FF666666"/>
+  <SolidColorBrush x:Key="Brush.DataGrid.Row.HoverBorder" Color="#FF3B3B3B"/>
+  <SolidColorBrush x:Key="Brush.DataGrid.SelectedRow.Border" Color="#FF203D63"/>
+  <SolidColorBrush x:Key="Brush.DataGrid.SelectedRow.HoverBackground" Color="#FF2672B8"/>
+
+  <SolidColorBrush x:Key="Brush.TreeView.Background" Color="#FF5C5C5C"/>
+  <SolidColorBrush x:Key="Brush.TreeView.Border" Color="#FF333333"/>
+  <SolidColorBrush x:Key="Brush.TreeView.Line" Color="#FF333333"/>
+  <SolidColorBrush x:Key="Brush.TreeView.Expander" Color="#FFEBEBEB"/>
+  <SolidColorBrush x:Key="Brush.TreeView.Item.HoverBackground" Color="#FF666666"/>
+  <SolidColorBrush x:Key="Brush.TreeView.Item.HoverBorder" Color="#FF3B3B3B"/>
+  <SolidColorBrush x:Key="Brush.TreeView.Item.SelectedBackground" Color="#FF1E5E96"/>
+  <SolidColorBrush x:Key="Brush.TreeView.Item.SelectedBorder" Color="#FF203D63"/>
+
+  <!-- CAcToolBar & UxTheme TP_BUTTON (Dark) -->
   <SolidColorBrush x:Key="Brush.ToolBar.Background" Color="#FF494949"/>
   <SolidColorBrush x:Key="Brush.ToolBar.OuterBorder" Color="#FF222933"/>
   <SolidColorBrush x:Key="Brush.ToolBar.GripBackground" Color="#FF525252"/>
@@ -19,37 +71,15 @@
   <SolidColorBrush x:Key="Brush.ToolBar.Button.PressedBorder" Color="#66008CFF"/>
 
   <!-- Dual-Tone Vector Icon Semantic Brushes (Dark) -->
-  <SolidColorBrush x:Key="Brush.Icon.Primary" Color="#E4E8EC"/>
-  <SolidColorBrush x:Key="Brush.Icon.Accent" Color="#38ABFF"/>
-  <SolidColorBrush x:Key="Brush.Icon.Success" Color="#3CC978"/>
-  <SolidColorBrush x:Key="Brush.Icon.Warning" Color="#FFB900"/>
-  <SolidColorBrush x:Key="Brush.Icon.Danger" Color="#F14C4C"/>
-  <SolidColorBrush x:Key="Brush.Icon.Muted" Color="#9AA2AC"/>
+  <SolidColorBrush x:Key="Brush.Icon.Primary" Color="#FFE4E8EC"/>
+  <SolidColorBrush x:Key="Brush.Icon.Accent" Color="#FF38ABFF"/>
+  <SolidColorBrush x:Key="Brush.Icon.Success" Color="#FF3CC978"/>
+  <SolidColorBrush x:Key="Brush.Icon.Warning" Color="#FFFFB900"/>
+  <SolidColorBrush x:Key="Brush.Icon.Danger" Color="#FFF14C4C"/>
+  <SolidColorBrush x:Key="Brush.Icon.Muted" Color="#FF9AA2AC"/>
   <SolidColorBrush x:Key="Brush.Icon.Surface" Color="#2238ABFF"/>
 
-  <!-- ========================================================================= -->
-  <!-- 2. AutoCAD 2019 Light Theme Overrides (COLORTHEME = 1)                    -->
-  <!-- ========================================================================= -->
-  <!--
-  <SolidColorBrush x:Key="Brush.ToolBar.Background" Color="#FFD9D9D9"/>
-  <SolidColorBrush x:Key="Brush.ToolBar.OuterBorder" Color="#FF656565"/>
-  <SolidColorBrush x:Key="Brush.ToolBar.GripBackground" Color="#FFA1A3AB"/>
-  <SolidColorBrush x:Key="Brush.ToolBar.GripDarkDot" Color="#FF1A1B1D"/>
-  <SolidColorBrush x:Key="Brush.ToolBar.GripLightDot" Color="#FFEEEEF2"/>
-  <SolidColorBrush x:Key="Brush.ToolBar.SeparatorDark" Color="#FFA1A3AB"/>
-  <SolidColorBrush x:Key="Brush.ToolBar.SeparatorLight" Color="#FFFFFFFF"/>
-  <SolidColorBrush x:Key="Brush.Icon.Primary" Color="#2B3540"/>
-  <SolidColorBrush x:Key="Brush.Icon.Accent" Color="#0078D7"/>
-  <SolidColorBrush x:Key="Brush.Icon.Success" Color="#107C41"/>
-  <SolidColorBrush x:Key="Brush.Icon.Warning" Color="#C87000"/>
-  <SolidColorBrush x:Key="Brush.Icon.Danger" Color="#D12F2F"/>
-  <SolidColorBrush x:Key="Brush.Icon.Muted" Color="#6E7781"/>
-  <SolidColorBrush x:Key="Brush.Icon.Surface" Color="#1A0078D7"/>
-  -->
-
-  <!-- ========================================================================= -->
-  <!-- 3. AutoCAD 2019 Native RibbonToolTip Brushes (Shared Dark & Light)        -->
-  <!-- ========================================================================= -->
+  <!-- RibbonToolTip Dual-Card Brushes (Shared Dark & Light) -->
   <LinearGradientBrush x:Key="Brush.ToolTip.Background" StartPoint="0.5,0" EndPoint="0.5,1">
     <GradientStop Color="#FFEFEFEF" Offset="0"/>
     <GradientStop Color="#FFECECEC" Offset="1"/>
@@ -61,3 +91,58 @@
   <SolidColorBrush x:Key="Brush.ToolTip.ContentBorder" Color="#FFDFDFDF"/>
 
 </ResourceDictionary>
+
+<!-- ============================================================================
+     2. LIGHT THEME OVERRIDES (COLORTHEME = 1)
+     ============================================================================
+  <Color x:Key="Color.DataGrid.Panel.BackgroundColor">#FFF0F0F0</Color>
+  <Color x:Key="Color.DataGrid.Header.Background">#FFFAFAFA</Color>
+  <Color x:Key="Color.DataGrid.Header.Foreground">#FF000000</Color>
+  <Color x:Key="Color.DataGrid.Row.Background">#FFF7F7F7</Color>
+  <Color x:Key="Color.DataGrid.AltRow.Background">#FFF0F0F0</Color>
+  <Color x:Key="Color.DataGrid.Text.Foreground">#FF000000</Color>
+  <Color x:Key="Color.DataGrid.GridLine">#FFE0E0E0</Color>
+  <Color x:Key="Color.DataGrid.SelectedRow.Background">#FFCCE8FF</Color>
+  <Color x:Key="Color.DataGrid.SelectedText.Foreground">#FF000000</Color>
+  <Color x:Key="Color.Splitter.Background">#FFE6E6E6</Color>
+  <Color x:Key="Color.Border">#FF9E9E9E</Color>
+
+  <SolidColorBrush x:Key="Brush.Palette.ContainerBackground" Color="#FFE6E6E6"/>
+  <SolidColorBrush x:Key="Brush.Palette.ControlBorder" Color="#FF9E9E9E"/>
+  <SolidColorBrush x:Key="Brush.Palette.CategoryHeaderBackground" Color="#FFDEDEDE"/>
+  <SolidColorBrush x:Key="Brush.Palette.CategoryExpander" Color="#FF616161"/>
+  <SolidColorBrush x:Key="Brush.Palette.TextInactive" Color="#99000000"/>
+
+  <SolidColorBrush x:Key="Brush.DataGrid.Header.Divider" Color="#FFD4D4D4"/>
+  <SolidColorBrush x:Key="Brush.DataGrid.Header.BottomBorder" Color="#FF9E9E9E"/>
+  <SolidColorBrush x:Key="Brush.DataGrid.Header.SortArrow" Color="#FF616161"/>
+  <SolidColorBrush x:Key="Brush.DataGrid.Row.HoverBackground" Color="#FFE6E6E6"/>
+  <SolidColorBrush x:Key="Brush.DataGrid.Row.HoverBorder" Color="#FFB8B8B8"/>
+  <SolidColorBrush x:Key="Brush.DataGrid.SelectedRow.Border" Color="#FF70B4F0"/>
+  <SolidColorBrush x:Key="Brush.DataGrid.SelectedRow.HoverBackground" Color="#FFB8E0FF"/>
+
+  <SolidColorBrush x:Key="Brush.TreeView.Background" Color="#FFF7F7F7"/>
+  <SolidColorBrush x:Key="Brush.TreeView.Border" Color="#FF9E9E9E"/>
+  <SolidColorBrush x:Key="Brush.TreeView.Line" Color="#FF9E9E9E"/>
+  <SolidColorBrush x:Key="Brush.TreeView.Expander" Color="#FF616161"/>
+  <SolidColorBrush x:Key="Brush.TreeView.Item.HoverBackground" Color="#FFE6E6E6"/>
+  <SolidColorBrush x:Key="Brush.TreeView.Item.HoverBorder" Color="#FFB8B8B8"/>
+  <SolidColorBrush x:Key="Brush.TreeView.Item.SelectedBackground" Color="#FFCCE8FF"/>
+  <SolidColorBrush x:Key="Brush.TreeView.Item.SelectedBorder" Color="#FF70B4F0"/>
+
+  <SolidColorBrush x:Key="Brush.ToolBar.Background" Color="#FFD9D9D9"/>
+  <SolidColorBrush x:Key="Brush.ToolBar.OuterBorder" Color="#FF656565"/>
+  <SolidColorBrush x:Key="Brush.ToolBar.GripBackground" Color="#FFA1A3AB"/>
+  <SolidColorBrush x:Key="Brush.ToolBar.GripDarkDot" Color="#FF1A1B1D"/>
+  <SolidColorBrush x:Key="Brush.ToolBar.GripLightDot" Color="#FFEEEEF2"/>
+  <SolidColorBrush x:Key="Brush.ToolBar.SeparatorDark" Color="#FFA1A3AB"/>
+  <SolidColorBrush x:Key="Brush.ToolBar.SeparatorLight" Color="#FFFFFFFF"/>
+
+  <SolidColorBrush x:Key="Brush.Icon.Primary" Color="#FF2B3540"/>
+  <SolidColorBrush x:Key="Brush.Icon.Accent" Color="#FF0078D7"/>
+  <SolidColorBrush x:Key="Brush.Icon.Success" Color="#FF107C41"/>
+  <SolidColorBrush x:Key="Brush.Icon.Warning" Color="#FFC87000"/>
+  <SolidColorBrush x:Key="Brush.Icon.Danger" Color="#FFD12F2F"/>
+  <SolidColorBrush x:Key="Brush.Icon.Muted" Color="#FF6E7781"/>
+  <SolidColorBrush x:Key="Brush.Icon.Surface" Color="#1A0078D7"/>
+============================================================================ -->

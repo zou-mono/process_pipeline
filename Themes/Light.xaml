@@ -2,21 +2,26 @@
                     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
-  <Color x:Key="Color.DataGrid.Panel.BackgroundColor">#F0F0F0</Color>
-  <Color x:Key="Color.DataGrid.Header.Background">#E0E0E0</Color>
-  <Color x:Key="Color.DataGrid.Header.Foreground">#111111</Color>
-  <Color x:Key="Color.DataGrid.Row.Background">#FFFFFF</Color>
-  <Color x:Key="Color.DataGrid.AltRow.Background">#F8F8F8</Color>
-  <Color x:Key="Color.DataGrid.Text.Foreground">#111111</Color>
-  <Color x:Key="Color.DataGrid.GridLine">#CCCCCC</Color>
-  <Color x:Key="Color.DataGrid.SelectedRow.Background">#CCE8FF</Color>
-  <Color x:Key="Color.DataGrid.SelectedText.Foreground">#111111</Color>
-  <Color x:Key="Color.Splitter.Background">#525252</Color>
-  <Color x:Key="Color.Border">#666</Color>
+  <!-- ============================================================ -->
+  <!-- AutoCAD 2019 浅色主题 (COLORTHEME = 1) -->
+  <!-- 反编译自 AcLayer.dll (LayerGrid / MultiTreeView) & AdUiPalettes.dll (PaletteThemeDefaults.LightColors) -->
+  <!-- ============================================================ -->
+  <Color x:Key="Color.DataGrid.Panel.BackgroundColor">#FFF0F0F0</Color>
+  <Color x:Key="Color.DataGrid.Header.Background">#FFFAFAFA</Color>
+  <Color x:Key="Color.DataGrid.Header.Foreground">#FF000000</Color>
+  <Color x:Key="Color.DataGrid.Row.Background">#FFF7F7F7</Color>
+  <Color x:Key="Color.DataGrid.AltRow.Background">#FFF0F0F0</Color>
+  <Color x:Key="Color.DataGrid.Text.Foreground">#FF000000</Color>
+  <Color x:Key="Color.DataGrid.GridLine">#FFE0E0E0</Color>
+  <Color x:Key="Color.DataGrid.SelectedRow.Background">#FFCCE8FF</Color>
+  <Color x:Key="Color.DataGrid.SelectedText.Foreground">#FF000000</Color>
+  <Color x:Key="Color.Splitter.Background">#FFE6E6E6</Color>
+  <Color x:Key="Color.Border">#FF9E9E9E</Color>
 
-  <!-- DataGrid类(浅色) -->
+  <!-- DataGrid 与面板核心画刷 (Light) -->
   <SolidColorBrush x:Key="Brush.DataGrid.Panel.BackgroundColor" Color="{StaticResource Color.DataGrid.Panel.BackgroundColor}"/>
   <SolidColorBrush x:Key="Brush.DataGrid.Header.Background" Color="{StaticResource Color.DataGrid.Header.Background}"/>
+  <SolidColorBrush x:Key="Brush.DataGrid.Header.Foreground" Color="{StaticResource Color.DataGrid.Header.Foreground}"/>
   <SolidColorBrush x:Key="Brush.DataGrid.Row.Background" Color="{StaticResource Color.DataGrid.Row.Background}"/>
   <SolidColorBrush x:Key="Brush.DataGrid.AltRow.Background" Color="{StaticResource Color.DataGrid.AltRow.Background}"/>
   <SolidColorBrush x:Key="Brush.DataGrid.Text.Foreground" Color="{StaticResource Color.DataGrid.Text.Foreground}"/>
@@ -25,16 +30,91 @@
   <SolidColorBrush x:Key="Brush.DataGrid.SelectedText.Foreground" Color="{StaticResource Color.DataGrid.SelectedText.Foreground}"/>
   <SolidColorBrush x:Key="Brush.Splitter.Background" Color="{StaticResource Color.Splitter.Background}"/>
   <SolidColorBrush x:Key="Brush.Border" Color="{StaticResource Color.Border}"/>
-  <SolidColorBrush x:Key="Brush.DataGrid.Header.Foreground" Color="{StaticResource Color.DataGrid.Header.Foreground}"/>
+
+  <!-- PaletteTheme 细粒度原生控件画刷 (Light) -->
+  <SolidColorBrush x:Key="Brush.Palette.ContainerBackground" Color="#FFE6E6E6"/>
+  <SolidColorBrush x:Key="Brush.Palette.ControlBorder" Color="#FF9E9E9E"/>
+  <SolidColorBrush x:Key="Brush.Palette.CategoryHeaderBackground" Color="#FFDEDEDE"/>
+  <SolidColorBrush x:Key="Brush.Palette.CategoryExpander" Color="#FF616161"/>
+  <SolidColorBrush x:Key="Brush.Palette.TextInactive" Color="#99000000"/>
+  <SolidColorBrush x:Key="Brush.Palette.ScrollThumb" Color="#999E9E9E"/>
+
+  <!-- DataGrid 表头、分隔线、排序箭头与行悬停/选中边框 (Light) -->
+  <SolidColorBrush x:Key="Brush.DataGrid.Header.Divider" Color="#FFD4D4D4"/>
+  <SolidColorBrush x:Key="Brush.DataGrid.Header.BottomBorder" Color="#FF9E9E9E"/>
+  <LinearGradientBrush x:Key="Brush.DataGrid.Header.HoverBackground" StartPoint="0.5,0" EndPoint="0.5,1">
+    <GradientStop Color="#FFEBEBEB" Offset="0"/>
+    <GradientStop Color="#FFD4D4D4" Offset="1"/>
+  </LinearGradientBrush>
+  <LinearGradientBrush x:Key="Brush.DataGrid.Header.SortedBackground" StartPoint="0.5,0" EndPoint="0.5,1">
+    <GradientStop Color="#FFF0F0F0" Offset="0"/>
+    <GradientStop Color="#FFE6E6E6" Offset="1"/>
+  </LinearGradientBrush>
+  <SolidColorBrush x:Key="Brush.DataGrid.Header.SortArrow" Color="#FF616161"/>
+  <SolidColorBrush x:Key="Brush.DataGrid.Row.HoverBackground" Color="#FFE6E6E6"/>
+  <SolidColorBrush x:Key="Brush.DataGrid.Row.HoverBorder" Color="#FFB8B8B8"/>
+  <SolidColorBrush x:Key="Brush.DataGrid.SelectedRow.Border" Color="#FF70B4F0"/>
+  <SolidColorBrush x:Key="Brush.DataGrid.SelectedRow.HoverBackground" Color="#FFB8E0FF"/>
+
+  <!-- TreeView 原生画刷 (Light) -->
+  <SolidColorBrush x:Key="Brush.TreeView.Background" Color="#FFF7F7F7"/>
+  <SolidColorBrush x:Key="Brush.TreeView.Border" Color="#FF9E9E9E"/>
+  <SolidColorBrush x:Key="Brush.TreeView.Line" Color="#FF9E9E9E"/>
+  <SolidColorBrush x:Key="Brush.TreeView.Expander" Color="#FF616161"/>
+  <SolidColorBrush x:Key="Brush.TreeView.Item.HoverBackground" Color="#FFE6E6E6"/>
+  <SolidColorBrush x:Key="Brush.TreeView.Item.HoverBorder" Color="#FFB8B8B8"/>
+  <SolidColorBrush x:Key="Brush.TreeView.Item.SelectedBackground" Color="#FFCCE8FF"/>
+  <SolidColorBrush x:Key="Brush.TreeView.Item.SelectedBorder" Color="#FF70B4F0"/>
+
+  <!-- ComboBox & TextBox 原生画刷 (Light) -->
+  <LinearGradientBrush x:Key="Brush.ComboBox.Background" StartPoint="0.5,0" EndPoint="0.5,1">
+    <GradientStop Color="#FFFFFFFF" Offset="0"/>
+    <GradientStop Color="#FFF0F0F0" Offset="1"/>
+  </LinearGradientBrush>
+  <SolidColorBrush x:Key="Brush.ComboBox.Border" Color="#FF9E9E9E"/>
+  <LinearGradientBrush x:Key="Brush.ComboBox.HoverBackground" StartPoint="0.5,0" EndPoint="0.5,1">
+    <GradientStop Color="#FFEBEBEB" Offset="0"/>
+    <GradientStop Color="#FFD4D4D4" Offset="1"/>
+  </LinearGradientBrush>
+  <SolidColorBrush x:Key="Brush.ComboBox.HoverBorder" Color="#FF757575"/>
+  <LinearGradientBrush x:Key="Brush.ComboBox.ActiveBackground" StartPoint="0.5,0" EndPoint="0.5,1">
+    <GradientStop Color="#FFF0F0F0" Offset="0"/>
+    <GradientStop Color="#FFFCFCFC" Offset="1"/>
+  </LinearGradientBrush>
+  <SolidColorBrush x:Key="Brush.ComboBox.Arrow" Color="#FF616161"/>
+  <SolidColorBrush x:Key="Brush.ComboBox.PopupBackground" Color="#FFFFFFFF"/>
+  <SolidColorBrush x:Key="Brush.ComboBox.PopupBorder" Color="#FF9E9E9E"/>
+
+  <SolidColorBrush x:Key="Brush.TextBox.Background" Color="#FFFFFFFF"/>
+  <SolidColorBrush x:Key="Brush.TextBox.Border" Color="#FF9E9E9E"/>
+  <SolidColorBrush x:Key="Brush.TextBox.FocusBorder" Color="#FF0099F7"/>
+
+  <!-- SquareButton / PushButton 面板内按钮画刷 (Light) -->
+  <LinearGradientBrush x:Key="Brush.SquareButton.Background" StartPoint="0.5,0" EndPoint="0.5,1">
+    <GradientStop Color="#FFFFFFFF" Offset="0"/>
+    <GradientStop Color="#FFF0F0F0" Offset="1"/>
+  </LinearGradientBrush>
+  <SolidColorBrush x:Key="Brush.SquareButton.Border" Color="#FF9E9E9E"/>
+  <LinearGradientBrush x:Key="Brush.SquareButton.HoverBackground" StartPoint="0.5,0" EndPoint="0.5,1">
+    <GradientStop Color="#FFEBEBEB" Offset="0"/>
+    <GradientStop Color="#FFD4D4D4" Offset="1"/>
+  </LinearGradientBrush>
+  <SolidColorBrush x:Key="Brush.SquareButton.ClickBackground" Color="#FFE6E6E6"/>
+
+  <!-- ContextMenu 原生右键菜单画刷 (Light) -->
+  <SolidColorBrush x:Key="Brush.ContextMenu.Background" Color="#FFF5F5F5"/>
+  <SolidColorBrush x:Key="Brush.ContextMenu.Border" Color="#FF9E9E9E"/>
+  <SolidColorBrush x:Key="Brush.ContextMenu.IconColumnBackground" Color="#FFEBEBEB"/>
+  <SolidColorBrush x:Key="Brush.ContextMenu.Separator" Color="#FFD4D4D4"/>
 
   <!-- 通用窗口/面板类 (CAD 2019 Light, COLORTHEME = 1) -->
-  <SolidColorBrush x:Key="Cad_WindowBackground" Color="#F0F0F0"/>
-  <SolidColorBrush x:Key="Cad_PanelBackground" Color="#FFFFFF"/>
-  <SolidColorBrush x:Key="Cad_HeaderBackground" Color="#E1E1E1"/>
-  <SolidColorBrush x:Key="Cad_TextForeground" Color="#1E1E1E"/>
-  <SolidColorBrush x:Key="Cad_TextDisabled" Color="#8C8C8C"/>
-  <SolidColorBrush x:Key="Cad_GridLine" Color="#CCCCCC"/>
-  <SolidColorBrush x:Key="Cad_SelectedRow" Color="#CCE8FF"/>
+  <SolidColorBrush x:Key="Cad_WindowBackground" Color="#FFE6E6E6"/>
+  <SolidColorBrush x:Key="Cad_PanelBackground" Color="#FFF7F7F7"/>
+  <SolidColorBrush x:Key="Cad_HeaderBackground" Color="#FFDEDEDE"/>
+  <SolidColorBrush x:Key="Cad_TextForeground" Color="#FF000000"/>
+  <SolidColorBrush x:Key="Cad_TextDisabled" Color="#99000000"/>
+  <SolidColorBrush x:Key="Cad_GridLine" Color="#FF9E9E9E"/>
+  <SolidColorBrush x:Key="Cad_SelectedRow" Color="#FFCCE8FF"/>
 
   <!-- 对话框状态强调色 (CAD 2019 Light) -->
   <SolidColorBrush x:Key="Brush.DialogError" Color="#D12F2F"/>
@@ -43,25 +123,28 @@
   <SolidColorBrush x:Key="Brush.DialogHint" Color="#006CBE"/>
 
   <!-- CAD 2019 对话框专用画刷 (Light 主题) -->
-  <SolidColorBrush x:Key="Brush.Dialog.WindowBackground" Color="#F0F0F0"/>
-  <SolidColorBrush x:Key="Brush.Dialog.WindowBorder" Color="#8C8C8C"/>
-  <SolidColorBrush x:Key="Brush.Dialog.HeaderBackground" Color="#E1E1E1"/>
-  <SolidColorBrush x:Key="Brush.Dialog.HeaderBorder" Color="#CCCCCC"/>
-  <SolidColorBrush x:Key="Brush.Dialog.HeaderForeground" Color="#1E1E1E"/>
-  <SolidColorBrush x:Key="Brush.Dialog.TextPrimary" Color="#1E1E1E"/>
-  <SolidColorBrush x:Key="Brush.Dialog.TextSecondary" Color="#595959"/>
-  <SolidColorBrush x:Key="Brush.Dialog.HintCardBackground" Color="#FFFFFF"/>
-  <SolidColorBrush x:Key="Brush.Dialog.HintCardBorder" Color="#D4D4D4"/>
-  <SolidColorBrush x:Key="Brush.Dialog.FooterBackground" Color="#E5E5E5"/>
-  <SolidColorBrush x:Key="Brush.Dialog.FooterBorder" Color="#CCCCCC"/>
-  <SolidColorBrush x:Key="Brush.Dialog.Button.Background" Color="#E1E1E1"/>
-  <SolidColorBrush x:Key="Brush.Dialog.Button.Border" Color="#9E9E9E"/>
-  <SolidColorBrush x:Key="Brush.Dialog.Button.DefaultBorder" Color="#0261BF"/>
-  <SolidColorBrush x:Key="Brush.Dialog.Button.Foreground" Color="#1E1E1E"/>
-  <SolidColorBrush x:Key="Brush.Dialog.Button.HoverBackground" Color="#D1EBFA"/>
-  <SolidColorBrush x:Key="Brush.Dialog.Button.HoverBorder" Color="#0261BF"/>
-  <SolidColorBrush x:Key="Brush.Dialog.Button.PressedBackground" Color="#C3DCF4"/>
-  <SolidColorBrush x:Key="Brush.Dialog.Button.PressedForeground" Color="#1E1E1E"/>
+  <SolidColorBrush x:Key="Brush.Dialog.WindowBackground" Color="#FFE6E6E6"/>
+  <SolidColorBrush x:Key="Brush.Dialog.WindowBorder" Color="#FF9E9E9E"/>
+  <SolidColorBrush x:Key="Brush.Dialog.HeaderBackground" Color="#FFDEDEDE"/>
+  <SolidColorBrush x:Key="Brush.Dialog.HeaderBorder" Color="#FF9E9E9E"/>
+  <SolidColorBrush x:Key="Brush.Dialog.HeaderForeground" Color="#FF000000"/>
+  <SolidColorBrush x:Key="Brush.Dialog.TextPrimary" Color="#FF000000"/>
+  <SolidColorBrush x:Key="Brush.Dialog.TextSecondary" Color="#FF595959"/>
+  <SolidColorBrush x:Key="Brush.Dialog.HintCardBackground" Color="#FFF7F7F7"/>
+  <SolidColorBrush x:Key="Brush.Dialog.HintCardBorder" Color="#FF9E9E9E"/>
+  <SolidColorBrush x:Key="Brush.Dialog.FooterBackground" Color="#FFDEDEDE"/>
+  <SolidColorBrush x:Key="Brush.Dialog.FooterBorder" Color="#FF9E9E9E"/>
+  <LinearGradientBrush x:Key="Brush.Dialog.Button.Background" StartPoint="0.5,0" EndPoint="0.5,1">
+    <GradientStop Color="#FFFFFFFF" Offset="0"/>
+    <GradientStop Color="#FFF0F0F0" Offset="1"/>
+  </LinearGradientBrush>
+  <SolidColorBrush x:Key="Brush.Dialog.Button.Border" Color="#FF9E9E9E"/>
+  <SolidColorBrush x:Key="Brush.Dialog.Button.DefaultBorder" Color="#FF0099F7"/>
+  <SolidColorBrush x:Key="Brush.Dialog.Button.Foreground" Color="#FF000000"/>
+  <SolidColorBrush x:Key="Brush.Dialog.Button.HoverBackground" Color="#1A008CFF"/>
+  <SolidColorBrush x:Key="Brush.Dialog.Button.HoverBorder" Color="#33008CFF"/>
+  <SolidColorBrush x:Key="Brush.Dialog.Button.PressedBackground" Color="#33008CFF"/>
+  <SolidColorBrush x:Key="Brush.Dialog.Button.PressedForeground" Color="#FF000000"/>
 
   <!-- CAD 2019 矢量图标双色调语义画刷 (Light 主题, COLORTHEME = 1) -->
   <SolidColorBrush x:Key="Brush.Icon.Primary" Color="#2B3540"/>
@@ -72,7 +155,7 @@
   <SolidColorBrush x:Key="Brush.Icon.Muted" Color="#6E7781"/>
   <SolidColorBrush x:Key="Brush.Icon.Surface" Color="#1A0078D7"/>
 
-  <!-- CAD 2019 原生工具栏外框、拖动把手、分隔线与按钮悬停画刷 (反编译提取自 acad.exe CAcToolBar 0x1402b5b8c + AdUiPalettes.dll PaletteTheme + UxTheme.dll Toolbar TP_BUTTON) -->
+  <!-- CAD 2019 原生工具栏外框、拖动把手、分隔线与按钮悬停画刷 (Light) -->
   <SolidColorBrush x:Key="Brush.ToolBar.Background" Color="#FFD9D9D9"/>
   <SolidColorBrush x:Key="Brush.ToolBar.OuterBorder" Color="#FF656565"/>
   <SolidColorBrush x:Key="Brush.ToolBar.GripBackground" Color="#FFA1A3AB"/>
@@ -87,7 +170,7 @@
   <SolidColorBrush x:Key="Brush.ToolBar.Button.PressedBackground" Color="#33008CFF"/>
   <SolidColorBrush x:Key="Brush.ToolBar.Button.PressedBorder" Color="#66008CFF"/>
 
-  <!-- CAD 2019 原生 RibbonToolTip 双层卡片画刷 (反编译提取自 AdWindows.dll themes/tooltip.xaml + Autodesk.Internal.Windows.ToolTip) -->
+  <!-- CAD 2019 原生 RibbonToolTip 双层卡片画刷 -->
   <LinearGradientBrush x:Key="Brush.ToolTip.Background" StartPoint="0.5,0" EndPoint="0.5,1">
     <GradientStop Color="#FFEFEFEF" Offset="0"/>
     <GradientStop Color="#FFECECEC" Offset="1"/>
