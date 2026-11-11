@@ -35,23 +35,31 @@
         <Setter Property="Template">
           <Setter.Value>
             <ControlTemplate TargetType="Button">
-              <Border x:Name="BtnBorder"
-                      Background="{TemplateBinding Background}"
-                      BorderBrush="{TemplateBinding BorderBrush}"
-                      BorderThickness="{TemplateBinding BorderThickness}"
-                      CornerRadius="1"
-                      SnapsToDevicePixels="True">
+              <Grid SnapsToDevicePixels="True" UseLayoutRounding="True">
+                <Border x:Name="BtnBorder"
+                        Background="{TemplateBinding Background}"
+                        BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}"
+                        CornerRadius="0"
+                        SnapsToDevicePixels="True"/>
+                <Border x:Name="BtnHoverFilm"
+                        Margin="1"
+                        Background="Transparent"
+                        CornerRadius="0"
+                        SnapsToDevicePixels="True"/>
                 <ContentPresenter HorizontalAlignment="Center"
                                   VerticalAlignment="Center"
                                   Margin="{TemplateBinding Padding}"/>
-              </Border>
+              </Grid>
               <ControlTemplate.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
                   <Setter TargetName="BtnBorder" Property="Background" Value="{DynamicResource Brush.Dialog.Button.HoverBackground}"/>
+                  <Setter TargetName="BtnHoverFilm" Property="Background" Value="{DynamicResource Brush.ToolBar.Button.HoverBackground}"/>
                   <Setter TargetName="BtnBorder" Property="BorderBrush" Value="{DynamicResource Brush.Dialog.Button.HoverBorder}"/>
                 </Trigger>
                 <Trigger Property="IsPressed" Value="True">
                   <Setter TargetName="BtnBorder" Property="Background" Value="{DynamicResource Brush.Dialog.Button.PressedBackground}"/>
+                  <Setter TargetName="BtnHoverFilm" Property="Background" Value="{DynamicResource Brush.ToolBar.Button.PressedBackground}"/>
                   <Setter TargetName="BtnBorder" Property="BorderBrush" Value="{DynamicResource Brush.Dialog.Button.HoverBorder}"/>
                   <Setter Property="Foreground" Value="{DynamicResource Brush.Dialog.Button.PressedForeground}"/>
                 </Trigger>
@@ -212,7 +220,7 @@
         </StackPanel>
       </Grid>
 
-      <!-- 3. 底部操作栏 (AutoCAD 2019 矢量图标按钮 + 悬停 ToolTip) -->
+      <!-- 3. 底部操作栏 -->
       <Border x:Name="FooterBar"
               Grid.Row="2"
               Background="{DynamicResource Brush.Dialog.FooterBackground}"
@@ -220,15 +228,15 @@
               BorderThickness="0,1,0,0"
               Padding="16,0">
         <Button x:Name="btnOk"
+                Content="确定"
                 IsDefault="True"
                 IsCancel="True"
+                Width="86"
+                Height="26"
                 HorizontalAlignment="Right"
                 VerticalAlignment="Center"
                 Click="Ok_Click"
-                ToolTip="确定&#x0a;确认消息内容并关闭当前提示窗口。"
-                Style="{StaticResource CadDialogPrimaryIconButtonStyle}">
-          <ContentControl Template="{StaticResource IconTemplate.ConfirmSave}" Width="18" Height="18" Focusable="False"/>
-        </Button>
+                Style="{StaticResource CadDialogPrimaryButtonStyle}"/>
       </Border>
     </Grid>
   </Border>
