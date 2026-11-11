@@ -53,10 +53,15 @@ namespace process_pipeline.Forms
 
             CadThemes.ApplyCadTheme(this);
             _vm.AttachGrid(dgIssues);
-            if (dgIssues?.ContextMenu != null)
+            if (dgIssues != null)
             {
-                dgIssues.ContextMenu.DataContext = _vm;
-                CadThemes.SyncContextMenuTheme(dgIssues.ContextMenu);
+                dgIssues.DataContext = _vm;
+                dgIssues.ItemsSource = _vm.Rows;
+                if (dgIssues.ContextMenu != null)
+                {
+                    dgIssues.ContextMenu.DataContext = _vm;
+                    CadThemes.SyncContextMenuTheme(dgIssues.ContextMenu);
+                }
             }
             this.DataContext = _vm;
         }
@@ -113,6 +118,28 @@ namespace process_pipeline.Forms
         private void DataGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             _vm?.OnGridSelectionChanged(e);
+        }
+
+        private void DataGrid_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            UpdateRemarkColumnMinWidth();
+        }
+
+        private void UpdateRemarkColumnMinWidth()
+        {
+            if (dgIssues == null || colRemark == null || dgIssues.ActualWidth <= 0) return;
+
+            double otherColsWidth = dgIssues.RowHeaderWidth;
+            foreach (DataGridColumn col in dgIssues.Columns)
+            {
+                if (!ReferenceEquals(col, colRemark) && col.Visibility == System.Windows.Visibility.Visible)
+                {
+                    otherColsWidth += col.ActualWidth > 0 ? col.ActualWidth : col.MinWidth;
+                }
+            }
+
+            double remaining = dgIssues.ActualWidth - otherColsWidth - SystemParameters.VerticalScrollBarWidth - 4.0;
+            colRemark.MinWidth = Math.Max(280.0, remaining);
         }
 
         private void DataGrid_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
@@ -3137,7 +3164,15 @@ namespace process_pipeline.Forms
         public string Id
         {
             get => _id;
-            set => SetField(ref _id, value);
+            set
+            {
+                if (SetField(ref _id, value))
+                {
+                    OnPropertyChanged(nameof(LayerToolTipText));
+                    OnPropertyChanged(nameof(LocationToolTipText));
+                    OnPropertyChanged(nameof(RemarkToolTipText));
+                }
+            }
         }
 
         /// <summary>
@@ -3148,9 +3183,10 @@ namespace process_pipeline.Forms
             get => _ruleName;
             set
             {
-                if (SetField(ref _ruleName, value) && SourceIssue != null)
+                if (SetField(ref _ruleName, value))
                 {
-                    SourceIssue.RuleName = value;
+                    if (SourceIssue != null) SourceIssue.RuleName = value;
+                    OnPropertyChanged(nameof(RemarkToolTipText));
                 }
             }
         }
@@ -3163,9 +3199,10 @@ namespace process_pipeline.Forms
             get => _type;
             set
             {
-                if (SetField(ref _type, value) && SourceIssue != null)
+                if (SetField(ref _type, value))
                 {
-                    SourceIssue.LayerName = value;
+                    if (SourceIssue != null) SourceIssue.LayerName = value;
+                    OnPropertyChanged(nameof(LayerToolTipText));
                 }
             }
         }
@@ -3178,6 +3215,7 @@ namespace process_pipeline.Forms
                 if (SetField(ref _status, value))
                 {
                     OnPropertyChanged(nameof(StatusBrush));
+                    OnPropertyChanged(nameof(RemarkToolTipText));
                 }
             }
         }
@@ -3194,7 +3232,13 @@ namespace process_pipeline.Forms
         public string LocationText
         {
             get => _locationText;
-            set => SetField(ref _locationText, value);
+            set
+            {
+                if (SetField(ref _locationText, value))
+                {
+                    OnPropertyChanged(nameof(LocationToolTipText));
+                }
+            }
         }
 
         public double Diameter
@@ -3224,12 +3268,31 @@ namespace process_pipeline.Forms
             get => _remark;
             set
             {
-                if (SetField(ref _remark, value) && SourceIssue != null)
+                if (SetField(ref _remark, value))
                 {
-                    SourceIssue.Remark = value;
+                    if (SourceIssue != null) SourceIssue.Remark = value;
+                    OnPropertyChanged(nameof(RemarkToolTipText));
                 }
             }
         }
+
+        /// <summary>
+        /// 图层单元格双层卡片悬停提示文本。
+        /// </summary>
+        public string LayerToolTipText =>
+            string.IsNullOrWhiteSpace(_type) ? null : $"所属图层 [{_id}]\n{_type}";
+
+        /// <summary>
+        /// 位置坐标单元格双层卡片悬停提示文本。
+        /// </summary>
+        public string LocationToolTipText =>
+            string.IsNullOrWhiteSpace(_locationText) ? null : $"位置坐标 [{_id}]\n{_locationText}";
+
+        /// <summary>
+        /// 问题描述/备注单元格双层卡片悬停提示文本。
+        /// </summary>
+        public string RemarkToolTipText =>
+            string.IsNullOrWhiteSpace(_remark) ? null : $"[{_id}] {_ruleName} · {_status}\n{_remark}";
 
         public PipeRowVm(CheckIssueItem issue)
         {

@@ -136,7 +136,11 @@
                        Color="{DynamicResource Color.DataGrid.SelectedText.Foreground}" />
     </Style.Resources>
     <Setter Property="EnableRowVirtualization" Value="True" />
-    <Setter Property="EnableColumnVirtualization" Value="True" />
+    <Setter Property="EnableColumnVirtualization" Value="False" />
+    <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Auto" />
+    <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto" />
+    <Setter Property="HorizontalScrollBarVisibility" Value="Auto" />
+    <Setter Property="VerticalScrollBarVisibility" Value="Auto" />
     <Setter Property="AutoGenerateColumns" Value="False" />
     <Setter Property="CanUserAddRows" Value="False" />
     <Setter Property="IsReadOnly" Value="True" />

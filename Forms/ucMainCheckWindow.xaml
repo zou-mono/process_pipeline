@@ -245,16 +245,51 @@
         </Setter>
       </Style>
 
-      <!-- 单元格文本对齐样式 -->
+      <!-- 单元格文本对齐与省略号/悬停提示/选中行自动折行样式 -->
       <Style x:Key="CenterText" TargetType="TextBlock">
         <Setter Property="HorizontalAlignment" Value="Center"/>
         <Setter Property="VerticalAlignment" Value="Center"/>
+        <Setter Property="Margin" Value="4,0,4,0"/>
+        <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
       </Style>
 
       <Style x:Key="LeftText" TargetType="TextBlock">
         <Setter Property="HorizontalAlignment" Value="Left"/>
         <Setter Property="VerticalAlignment" Value="Center"/>
-        <Setter Property="Margin" Value="6,0,0,0"/>
+        <Setter Property="Margin" Value="6,0,6,0"/>
+        <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+      </Style>
+
+      <Style x:Key="LayerCellText" TargetType="TextBlock" BasedOn="{StaticResource CenterText}">
+        <Setter Property="ToolTip" Value="{Binding LayerToolTipText}"/>
+        <Setter Property="ToolTipService.InitialShowDelay" Value="180"/>
+        <Setter Property="ToolTipService.BetweenShowDelay" Value="60"/>
+        <Setter Property="ToolTipService.ShowDuration" Value="20000"/>
+      </Style>
+
+      <Style x:Key="LocationCellText" TargetType="TextBlock" BasedOn="{StaticResource CenterText}">
+        <Setter Property="ToolTip" Value="{Binding LocationToolTipText}"/>
+        <Setter Property="ToolTipService.InitialShowDelay" Value="180"/>
+        <Setter Property="ToolTipService.BetweenShowDelay" Value="60"/>
+        <Setter Property="ToolTipService.ShowDuration" Value="20000"/>
+      </Style>
+
+      <Style x:Key="RemarkCellText" TargetType="TextBlock" BasedOn="{StaticResource LeftText}">
+        <Setter Property="TextWrapping" Value="NoWrap"/>
+        <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+        <Setter Property="ToolTip" Value="{Binding RemarkToolTipText}"/>
+        <Setter Property="ToolTipService.InitialShowDelay" Value="150"/>
+        <Setter Property="ToolTipService.BetweenShowDelay" Value="50"/>
+        <Setter Property="ToolTipService.ShowDuration" Value="25000"/>
+        <Style.Triggers>
+          <!-- 选中行自动多行换行展开，未选中行保持 22px 单行紧凑高密度显示 -->
+          <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=DataGridRow}}" Value="True">
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="TextTrimming" Value="None"/>
+            <Setter Property="Margin" Value="6,3,6,3"/>
+            <Setter Property="MaxWidth" Value="520"/>
+          </DataTrigger>
+        </Style.Triggers>
       </Style>
 
       <!-- DataGrid 样式（反编译对齐 AutoCAD 2019 AcLayer.dll BaseGrid + LayerGrid + ThemedDataGridViewCellStyle） -->
@@ -270,10 +305,14 @@
                            Color="{DynamicResource Color.DataGrid.SelectedText.Foreground}" />
         </Style.Resources>
         <Setter Property="EnableRowVirtualization" Value="True" />
-        <Setter Property="EnableColumnVirtualization" Value="True" />
+        <Setter Property="EnableColumnVirtualization" Value="False" />
         <Setter Property="VirtualizingPanel.IsVirtualizing" Value="True" />
         <Setter Property="VirtualizingPanel.VirtualizationMode" Value="Standard" />
         <Setter Property="ScrollViewer.CanContentScroll" Value="True" />
+        <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Auto" />
+        <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto" />
+        <Setter Property="HorizontalScrollBarVisibility" Value="Auto" />
+        <Setter Property="VerticalScrollBarVisibility" Value="Auto" />
         <Setter Property="AutoGenerateColumns" Value="False" />
         <Setter Property="CanUserAddRows" Value="False" />
         <Setter Property="IsReadOnly" Value="True" />
@@ -718,6 +757,8 @@
     <splitter:CompositeSplitter
             Grid.Row="1"
             Orientation="Horizontal"
+            PrimaryLength="235"
+            SecondaryMinLength="180"
             SplitterStyle="{StaticResource CompositeSplitter.SplitterStyle}"
             SplitterWidth="{StaticResource SplitterWidth}"
             PrimaryCollapsedLength="{StaticResource CollapseButtonWidth}"
@@ -807,20 +848,21 @@
             <DataGrid x:Name="dgIssues"
                       Grid.Row="0"
                       ItemsSource="{Binding Rows}"
-                    SelectedItem="{Binding SelectedRow, Mode=OneWayToSource}"
-                    SelectionMode="Extended"
-                    SelectionUnit="FullRow"
-                    SelectionChanged="DataGrid_SelectionChanged"
-                    PreviewMouseLeftButtonDown="DataGrid_PreviewUserInput"
-                    PreviewKeyDown="DataGrid_PreviewUserInput"
-                    PreviewMouseRightButtonDown="DataGrid_PreviewMouseRightButtonDown"
-                    MouseDoubleClick="DataGrid_MouseDoubleClick"
-                    LoadingRow="DataGrid_LoadingRow"
-                    ClipboardCopyMode="None"
-                    Style="{StaticResource DataGridStyle}" 
-                    AutoGenerateColumns="False"
-                    IsReadOnly="True"
-                    BorderThickness="0">
+                      SelectedItem="{Binding SelectedRow, Mode=OneWayToSource}"
+                      SelectionMode="Extended"
+                      SelectionUnit="FullRow"
+                      SelectionChanged="DataGrid_SelectionChanged"
+                      SizeChanged="DataGrid_SizeChanged"
+                      PreviewMouseLeftButtonDown="DataGrid_PreviewUserInput"
+                      PreviewKeyDown="DataGrid_PreviewUserInput"
+                      PreviewMouseRightButtonDown="DataGrid_PreviewMouseRightButtonDown"
+                      MouseDoubleClick="DataGrid_MouseDoubleClick"
+                      LoadingRow="DataGrid_LoadingRow"
+                      ClipboardCopyMode="None"
+                      Style="{StaticResource DataGridStyle}" 
+                      AutoGenerateColumns="False"
+                      IsReadOnly="True"
+                      BorderThickness="0">
             <DataGrid.CommandBindings>
               <CommandBinding Command="Copy" Executed="DataGrid_ExecuteCopy" />
             </DataGrid.CommandBindings>
@@ -916,27 +958,31 @@
             <DataGrid.Columns>
               <DataGridTextColumn Header="编号"
                                   Binding="{Binding Id}"
-                                  Width="80"
+                                  Width="64"
+                                  MinWidth="50"
                                   ElementStyle="{StaticResource CenterText}"/>
               <DataGridTextColumn Header="核查类型"
                                   Binding="{Binding RuleName}"
-                                  Width="110"
+                                  Width="96"
+                                  MinWidth="76"
                                   ElementStyle="{StaticResource CenterText}"/>
               <!-- 状态列：渲染与左侧树一致的红/黄/蓝/灰白/翠绿彩色矢量圆点 -->
               <DataGridTemplateColumn Header="状态"
-                                      Width="95"
+                                      Width="84"
+                                      MinWidth="72"
                                       SortMemberPath="Status"
                                       ClipboardContentBinding="{Binding Status}">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate>
                     <StackPanel Orientation="Horizontal"
                                 HorizontalAlignment="Center"
-                                VerticalAlignment="Center">
+                                VerticalAlignment="Center"
+                                Margin="4,0,4,0">
                       <Ellipse Width="8"
                                Height="8"
                                Fill="{Binding StatusBrush}"
                                VerticalAlignment="Center"
-                               Margin="0,0,6,0"/>
+                               Margin="0,0,5,0"/>
                       <TextBlock Text="{Binding Status}" VerticalAlignment="Center"/>
                     </StackPanel>
                   </DataTemplate>
@@ -944,16 +990,20 @@
               </DataGridTemplateColumn>
               <DataGridTextColumn Header="图层"
                                   Binding="{Binding Type}"
-                                  Width="140"
-                                  ElementStyle="{StaticResource CenterText}"/>
+                                  Width="120"
+                                  MinWidth="80"
+                                  ElementStyle="{StaticResource LayerCellText}"/>
               <DataGridTextColumn Header="位置坐标"
                                   Binding="{Binding LocationText}"
-                                  Width="145"
-                                  ElementStyle="{StaticResource CenterText}"/>
-              <DataGridTextColumn Header="问题描述 / 备注"
+                                  Width="130"
+                                  MinWidth="90"
+                                  ElementStyle="{StaticResource LocationCellText}"/>
+              <DataGridTextColumn x:Name="colRemark"
+                                  Header="问题描述 / 备注"
                                   Binding="{Binding Remark}"
-                                  Width="*"
-                                  ElementStyle="{StaticResource LeftText}"/>
+                                  Width="Auto"
+                                  MinWidth="280"
+                                  ElementStyle="{StaticResource RemarkCellText}"/>
             </DataGrid.Columns>
           </DataGrid>
 

@@ -684,6 +684,13 @@ namespace Cad.Plugin
                             !string.IsNullOrWhiteSpace(vm.SingleRuleToolTipText),
                             $"Commit 7.7 全窗体矢量图标模板与 Dark/Light 双主题动态配色验证通过 (DarkPrimary={darkPrimary?.Color}, LightPrimary={lightPrimary?.Color})");
 
+                        var colRemark = realWin.FindName("colRemark") as System.Windows.Controls.DataGridColumn;
+                        var realVm = realWin.DataContext as MainCheckWindowViewModel;
+                        realWin.UpdateIssueItems(vm.Rows.Take(5).Select(r => r.SourceIssue), isIncremental: false);
+                        realVm?.SetSelectedRows(realVm.Rows.Take(1), syncCadSelection: false);
+                        var copyMatrix = DataGridCopyHelper.BuildMatrix(realGrid);
+                        string copiedTsv = DataGridCopyHelper.ToTsv(copyMatrix, includeHeader: true);
+
                         AssertTrue(
                             svgFiles.Length == 25 && lightSvgFiles.Length == 25 &&
                             darkNativeUndo != null && Math.Abs(darkNativeUndo.Width - 16.0) < 0.01 && Math.Abs(darkNativeUndo.Height - 16.0) < 0.01 &&
@@ -692,8 +699,13 @@ namespace Cad.Plugin
                             lightNativeUndo != null && lightNativeSave != null &&
                             !ReferenceEquals(darkNativeUndo, lightNativeUndo) &&
                             darkMenuBg != null && lightMenuBg != null && darkMenuBg.Color != lightMenuBg.Color &&
-                            darkMenuUndo != null && lightMenuUndo != null && !ReferenceEquals(darkMenuUndo, lightMenuUndo),
-                            $"AutoCAD 2019 原生图标库静态化 (Themes/Svg 25 Dark + 25 Light SVG & NativeIcons.*.xaml) 与右键菜单 ContextMenu 双主题同步验证通过 (DarkMenuBg={darkMenuBg?.Color}, LightMenuBg={lightMenuBg?.Color}, UndoIcon={darkNativeUndo?.Width}x{darkNativeUndo?.Height})");
+                            darkMenuUndo != null && lightMenuUndo != null && !ReferenceEquals(darkMenuUndo, lightMenuUndo) &&
+                            realGrid != null && !realGrid.EnableColumnVirtualization &&
+                            colRemark != null && colRemark.Width.IsAuto && colRemark.MinWidth >= 280.0 &&
+                            !copyMatrix.IsEmpty && copyMatrix.Columns.Count == 6 &&
+                            !copiedTsv.Contains("PipeRowVm") &&
+                            !string.IsNullOrWhiteSpace(vm.Rows[0].RemarkToolTipText),
+                            $"AutoCAD 2019 原生图标库、ContextMenu 双主题、DataGrid 横向滚动列宽自适应及精简版剪贴板复制矩阵验证通过 (Columns={copyMatrix.Columns.Count}, CopiedStatus='{copyMatrix.Rows.FirstOrDefault()?[2]}')");
                     }
                 }
                 finally
