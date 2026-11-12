@@ -720,7 +720,7 @@ namespace process_pipeline.Commands
                             ? $", 平行角差={unique.AngleDifferenceDegrees.Value:F1}°"
                             : string.Empty;
                         desc = $"待人工复核：已通过[{channelText}]配对文字标注 [{unique.MatchedAttachment.Handle}]{labelPreview}" +
-                               $"（距曲线={unique.DistanceToCurve:F2}m{angText}），点击可查看配对连线，右键可一键绑定 Group 与 XData";
+                               $"（距曲线={unique.DistanceToCurve:F2}m{angText}）";
                     }
                     else
                     {
@@ -728,7 +728,7 @@ namespace process_pipeline.Commands
                             ? $"XData({PipeSpatialMatcher.XDataRegAppName})句柄匹配"
                             : (unique.Channel == SpatialMatchChannel.ExtentsCenterMatch ? "外包框中心+管长匹配" : "曲线邻近匹配");
                         desc = $"未建 Group：已通过[{blockChannelText}]唯一配对属性块 [{unique.MatchedAttachment.Handle}]" +
-                               $"（距曲线={unique.DistanceToCurve:F2}m, 距外包框中心={unique.DistanceToExtentsCenter:F2}m），右键可一键绑定 Group 与 XData";
+                               $"（距曲线={unique.DistanceToCurve:F2}m, 距外包框中心={unique.DistanceToExtentsCenter:F2}m）";
                     }
 
                     var possibleMatches = unique.PossibleMatches != null && unique.PossibleMatches.Count > 0
@@ -762,6 +762,7 @@ namespace process_pipeline.Commands
                         Height = height,
                         Description = desc,
                         Remark = desc,
+                        Solution = "点击行可查看配对连线，右键可一键绑定 Group 与 XData",
                         PossibleMatches = possibleMatches,
                         RulePayload = unique
                     };

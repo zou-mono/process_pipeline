@@ -1375,7 +1375,7 @@ namespace process_pipeline.Geometry
                     }
                     else if (hasIrregularLabel)
                     {
-                        description = $"不规范文字标注待核查：管线 [{pipe.Handle}] 配对标注 [{best.Attachment.Handle}] '{best.Attachment.BlockNameOrText}' 含{irregularReason}（距曲线={best.DistanceToCurve:F2}m），请人工核实管径与根数";
+                        description = $"不规范文字标注待核查：管线 [{pipe.Handle}] 配对标注 [{best.Attachment.Handle}] '{best.Attachment.BlockNameOrText}' 含{irregularReason}（距曲线={best.DistanceToCurve:F2}m）";
                     }
                     else if (hasOnePipeMultiLabel)
                     {
@@ -1458,7 +1458,7 @@ namespace process_pipeline.Geometry
                                     nearestShared.AngleDiff ?? 0.0,
                                     true)
                             },
-                            Description = $"多段共标待核查：管线 [{pipe.Handle}] (图层: {pipe.LayerName}, L={pipe.Length:F1}m) 邻近标注 [{nearestShared.Attachment.Handle}] '{nearestShared.Attachment.BlockNameOrText}'（距曲线={nearestShared.DistanceToCurve:F2}m）已被相邻管线 [{ownerPipeHandle}] 占用，请人工确认是否共用该规格"
+                            Description = $"多段共标待核查：管线 [{pipe.Handle}] (图层: {pipe.LayerName}, L={pipe.Length:F1}m) 邻近标注 [{nearestShared.Attachment.Handle}] '{nearestShared.Attachment.BlockNameOrText}'（距曲线={nearestShared.DistanceToCurve:F2}m）已被相邻管线 [{ownerPipeHandle}] 占用"
                         };
                         summary.UnmatchedPipes.Add(sharedMatchItem);
                         if (!pipe.PipeId.IsNull)
@@ -1524,7 +1524,7 @@ namespace process_pipeline.Geometry
                                     nearestPipeCand.AngleDiff ?? 0.0,
                                     true)
                             },
-                            Description = $"一管多标多余标注待核查{irregTag}：标注 [{att.Handle}] '{att.BlockNameOrText}' 紧邻管线 [{nearestPipeCand.Pipe.Handle}]（距曲线={nearestPipeCand.DistanceToCurve:F2}m），该管线已配对 {ownerLabelInfo}，请人工核查是否需打断管线或清理重复标注"
+                            Description = $"一管多标多余标注待核查{irregTag}：标注 [{att.Handle}] '{att.BlockNameOrText}' 紧邻管线 [{nearestPipeCand.Pipe.Handle}]（距曲线={nearestPipeCand.DistanceToCurve:F2}m），该管线已配对 {ownerLabelInfo}"
                         });
                     }
                     else

@@ -147,6 +147,11 @@ namespace process_pipeline.Models
         /// </summary>
         public string Remark { get; set; }
 
+        /// <summary>
+        /// 针对该问题的推荐解决方案或修复操作说明（与客观问题描述分离，供悬停提示卡片展示）。
+        /// </summary>
+        public string Solution { get; set; }
+
         // ============================================================
         // 4. 人机交互状态与扩展载荷
         // ============================================================
@@ -241,6 +246,84 @@ namespace process_pipeline.Models
         }
 
         /// <summary>
+        /// 获取当前问题的推荐解决方案/操作指南（若未显式指定 Solution，则按规则与问题状态自动推导）。
+        /// 统一遵循软件帮助式描述规范：说明查看/定位方式、核查要点与可执行工具；无自动修复工具时明确提示“需人工核查和编辑”。
+        /// </summary>
+        public string GetEffectiveSolution()
+        {
+            if (Status == IssueReviewStatus.Resolved)
+                return "该问题已完成修复归档，无需额外处理（可按 Ctrl+Z 撤销操作）";
+
+            if (Status == IssueReviewStatus.Ignored)
+                return "该问题已标记为忽略（可通过右键菜单恢复为待核查）";
+
+            if (!string.IsNullOrWhiteSpace(Solution))
+                return Solution.Trim();
+
+            string desc = !string.IsNullOrWhiteSpace(Remark) ? Remark : (Description ?? string.Empty);
+
+            if (string.Equals(RuleId, "MatchGroup", StringComparison.OrdinalIgnoreCase))
+            {
+                if (Status == IssueReviewStatus.ToRecheck)
+                    return "点击行可查看配对连线，右键可一键绑定 Group 与 XData";
+
+                if (desc.Contains("一管多标多余") || desc.Contains("一管多标"))
+                    return "点击行可查看关联标注连线，需人工核查和编辑（核实沿线标注规格，按需打断管线或清理重复标注）";
+
+                if (desc.Contains("多段共标"))
+                    return "点击行可查看邻近共用标注连线，需人工核查和编辑（确认相邻管段是否共用该规格，按需补充标注或合并管段）";
+
+                if (desc.Contains("不规范"))
+                    return "点击行可查看配对连线，需人工核查和编辑标注中的管径与根数，确认无误后右键可一键绑定 Group 与 XData";
+
+                if (desc.Contains("无配对"))
+                    return "双击行可定位到该管段，需人工核查和编辑（在管线旁补充对应的属性块或管径文字标注）";
+
+                if (desc.Contains("Group") && (desc.Contains("结构异常") || desc.Contains("重复引用")))
+                    return "双击行可定位到异常编组图元，需人工核查和编辑（解组异常 Group 后再重新执行 1:1 绑定）";
+
+                return "点击行可查看候选连线，需人工核查和编辑（调整属性要素位置消除歧义，或确认后右键一键绑定 Group 与 XData）";
+            }
+
+            if (string.Equals(RuleId, "FlowArrow", StringComparison.OrdinalIgnoreCase))
+            {
+                if (Type == ProblemType.DirectionConflict || Type == ProblemType.OneToMany)
+                    return "点击行可查看关联流向箭头，右键可一键翻转管线流向";
+
+                if (Type == ProblemType.NoAdjacentItems)
+                    return "双击行可定位到该管段，需人工核查和编辑（在管线邻近位置补充绘制流向箭头）";
+
+                return "点击行可查看管线与流向箭头，需人工核查和编辑箭头角度，或右键一键翻转管线流向";
+            }
+
+            if (string.Equals(RuleId, "CheckPlan", StringComparison.OrdinalIgnoreCase))
+            {
+                if (desc.Contains("退化") || desc.Contains("零长度"))
+                    return "双击行可定位到该退化图元，需人工核查和编辑（确认后在图面直接删除清理）";
+
+                if (desc.Contains("颜色与图层不一致"))
+                    return "双击行可定位到该管段，需人工核查和编辑（将管线移至匹配图层或将颜色改为随层 ByLayer）";
+
+                if (desc.Contains("残留旧版图层"))
+                    return "双击行可定位到该图元，需人工核查和编辑（确认是否迁移至标准规划图层或直接清理）";
+
+                return "双击行可定位到该图元，需人工核查和编辑（按规划图层与颜色规范修正属性）";
+            }
+
+            if (string.Equals(RuleId, "MatchPipe", StringComparison.OrdinalIgnoreCase))
+            {
+                return "双击行可定位到对应管段，需人工核查和编辑（核对勘测管径与规划管径文字标注并修正）";
+            }
+
+            if (string.Equals(RuleId, "CompareSegment", StringComparison.OrdinalIgnoreCase))
+            {
+                return "双击行可定位到偏移或缺失位置，需人工核查和编辑（按需调整规划管线走向，或右键标记忽略）";
+            }
+
+            return "双击行可定位到目标图元，需人工核查和编辑图面数据，或通过右键菜单更新状态";
+        }
+
+        /// <summary>
         /// 创建当前问题项的浅表状态快照。
         /// 用于后续 Undo/Redo 管理器在人工修改属性或状态前保存历史版本。
         /// </summary>
@@ -264,6 +347,7 @@ namespace process_pipeline.Models
                 Height = this.Height,
                 Description = this.Description,
                 Remark = this.Remark,
+                Solution = this.Solution,
                 Status = this.Status,
                 PossibleMatches = this.PossibleMatches != null
                     ? new List<MatchItem>(this.PossibleMatches)

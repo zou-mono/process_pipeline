@@ -3168,6 +3168,9 @@ namespace process_pipeline.Forms
             {
                 if (SetField(ref _id, value))
                 {
+                    OnPropertyChanged(nameof(IdToolTipText));
+                    OnPropertyChanged(nameof(RuleNameToolTipText));
+                    OnPropertyChanged(nameof(StatusToolTipText));
                     OnPropertyChanged(nameof(LayerToolTipText));
                     OnPropertyChanged(nameof(LocationToolTipText));
                     OnPropertyChanged(nameof(RemarkToolTipText));
@@ -3186,6 +3189,7 @@ namespace process_pipeline.Forms
                 if (SetField(ref _ruleName, value))
                 {
                     if (SourceIssue != null) SourceIssue.RuleName = value;
+                    OnPropertyChanged(nameof(RuleNameToolTipText));
                     OnPropertyChanged(nameof(RemarkToolTipText));
                 }
             }
@@ -3215,6 +3219,8 @@ namespace process_pipeline.Forms
                 if (SetField(ref _status, value))
                 {
                     OnPropertyChanged(nameof(StatusBrush));
+                    OnPropertyChanged(nameof(StatusToolTipText));
+                    OnPropertyChanged(nameof(SolutionText));
                     OnPropertyChanged(nameof(RemarkToolTipText));
                 }
             }
@@ -3271,10 +3277,34 @@ namespace process_pipeline.Forms
                 if (SetField(ref _remark, value))
                 {
                     if (SourceIssue != null) SourceIssue.Remark = value;
+                    OnPropertyChanged(nameof(SolutionText));
                     OnPropertyChanged(nameof(RemarkToolTipText));
                 }
             }
         }
+
+        /// <summary>
+        /// 当前问题对应的推荐解决方案 / 操作指南文本（与客观问题描述分离）。
+        /// </summary>
+        public string SolutionText => SourceIssue?.GetEffectiveSolution();
+
+        /// <summary>
+        /// 编号单元格双层卡片悬停提示文本。
+        /// </summary>
+        public string IdToolTipText =>
+            string.IsNullOrWhiteSpace(_id) ? null : $"图元编号\n{_id}";
+
+        /// <summary>
+        /// 核查类型单元格双层卡片悬停提示文本。
+        /// </summary>
+        public string RuleNameToolTipText =>
+            string.IsNullOrWhiteSpace(_ruleName) ? null : $"核查类型 [{_id}]\n{_ruleName}";
+
+        /// <summary>
+        /// 状态单元格双层卡片悬停提示文本。
+        /// </summary>
+        public string StatusToolTipText =>
+            string.IsNullOrWhiteSpace(_status) ? null : $"核查状态 [{_id}]\n{_status}";
 
         /// <summary>
         /// 图层单元格双层卡片悬停提示文本。
@@ -3289,10 +3319,21 @@ namespace process_pipeline.Forms
             string.IsNullOrWhiteSpace(_locationText) ? null : $"位置坐标 [{_id}]\n{_locationText}";
 
         /// <summary>
-        /// 问题描述/备注单元格双层卡片悬停提示文本。
+        /// 问题描述/备注单元格双层卡片悬停提示文本（第一段展示完整问题描述，第二段展示推荐解决方案）。
         /// </summary>
-        public string RemarkToolTipText =>
-            string.IsNullOrWhiteSpace(_remark) ? null : $"[{_id}] {_ruleName} · {_status}\n{_remark}";
+        public string RemarkToolTipText
+        {
+            get
+            {
+                if (string.IsNullOrWhiteSpace(_remark))
+                    return null;
+
+                string sol = SolutionText;
+                return string.IsNullOrWhiteSpace(sol)
+                    ? $"[{_id}] {_ruleName} · {_status}\n{_remark}"
+                    : $"[{_id}] {_ruleName} · {_status}\n【问题描述】{_remark}\n【解决方案】{sol}";
+            }
+        }
 
         public PipeRowVm(CheckIssueItem issue)
         {

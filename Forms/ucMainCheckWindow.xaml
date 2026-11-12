@@ -260,6 +260,20 @@
         <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
       </Style>
 
+      <Style x:Key="IdCellText" TargetType="TextBlock" BasedOn="{StaticResource CenterText}">
+        <Setter Property="ToolTip" Value="{Binding IdToolTipText}"/>
+        <Setter Property="ToolTipService.InitialShowDelay" Value="180"/>
+        <Setter Property="ToolTipService.BetweenShowDelay" Value="60"/>
+        <Setter Property="ToolTipService.ShowDuration" Value="20000"/>
+      </Style>
+
+      <Style x:Key="RuleNameCellText" TargetType="TextBlock" BasedOn="{StaticResource CenterText}">
+        <Setter Property="ToolTip" Value="{Binding RuleNameToolTipText}"/>
+        <Setter Property="ToolTipService.InitialShowDelay" Value="180"/>
+        <Setter Property="ToolTipService.BetweenShowDelay" Value="60"/>
+        <Setter Property="ToolTipService.ShowDuration" Value="20000"/>
+      </Style>
+
       <Style x:Key="LayerCellText" TargetType="TextBlock" BasedOn="{StaticResource CenterText}">
         <Setter Property="ToolTip" Value="{Binding LayerToolTipText}"/>
         <Setter Property="ToolTipService.InitialShowDelay" Value="180"/>
@@ -960,12 +974,12 @@
                                   Binding="{Binding Id}"
                                   Width="64"
                                   MinWidth="50"
-                                  ElementStyle="{StaticResource CenterText}"/>
+                                  ElementStyle="{StaticResource IdCellText}"/>
               <DataGridTextColumn Header="核查类型"
                                   Binding="{Binding RuleName}"
                                   Width="96"
                                   MinWidth="76"
-                                  ElementStyle="{StaticResource CenterText}"/>
+                                  ElementStyle="{StaticResource RuleNameCellText}"/>
               <!-- 状态列：渲染与左侧树一致的红/黄/蓝/灰白/翠绿彩色矢量圆点 -->
               <DataGridTemplateColumn Header="状态"
                                       Width="84"
@@ -977,13 +991,17 @@
                     <StackPanel Orientation="Horizontal"
                                 HorizontalAlignment="Center"
                                 VerticalAlignment="Center"
-                                Margin="4,0,4,0">
+                                Margin="4,0,4,0"
+                                ToolTip="{Binding StatusToolTipText}"
+                                ToolTipService.InitialShowDelay="180"
+                                ToolTipService.BetweenShowDelay="60"
+                                ToolTipService.ShowDuration="20000">
                       <Ellipse Width="8"
                                Height="8"
                                Fill="{Binding StatusBrush}"
                                VerticalAlignment="Center"
                                Margin="0,0,5,0"/>
-                      <TextBlock Text="{Binding Status}" VerticalAlignment="Center"/>
+                      <TextBlock Text="{Binding Status}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
                     </StackPanel>
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>

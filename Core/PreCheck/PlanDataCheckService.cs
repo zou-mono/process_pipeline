@@ -314,7 +314,7 @@ namespace process_pipeline.Core.PreCheck
                                         Severity = PreCheckSeverity.Reviewable,
                                         PlanIssueKind = PlanIssueKind.DegenerateGeometry,
                                         Title = "退化零长度管线",
-                                        Description = $"规划图层 [{layerName}] 存在退化零长度图元 (Handle={handle}, 顶点数={vCount}, 闭合={isClosed}, 长度={curveLength:F4}m)，请人工核查并清理。",
+                                        Description = $"规划图层 [{layerName}] 存在退化零长度图元 (Handle={handle}, 顶点数={vCount}, 闭合={isClosed}, 长度={curveLength:F4}m)。",
                                         TargetObjectId = objId,
                                         TargetHandle = handle,
                                         LayerName = layerName,
@@ -356,7 +356,7 @@ namespace process_pipeline.Core.PreCheck
                                     string expectedDesc = FormatAciColorDescription(layerRule.ColorAci, layerRule);
                                     string issueDesc = colorRule == null
                                         ? $"管线颜色与图层不一致：图元实际颜色为 [{colorDesc}]，不属于标准三类管线颜色，且与所在图层 [{layerName}] 要求的 [{expectedDesc}] 冲突。"
-                                        : $"管线颜色与图层不一致：图元颜色为 [{colorDesc}]，但位于图层 [{layerName}]（要求 [{expectedDesc}]），已按颜色优先归为 [{colorRule.CategoryName}]，请人工复核。";
+                                        : $"管线颜色与图层不一致：图元颜色为 [{colorDesc}]，但位于图层 [{layerName}]（要求 [{expectedDesc}]），已按颜色优先归为 [{colorRule.CategoryName}]。";
 
                                     var mismatchItem = new PreCheckItem
                                     {
@@ -430,7 +430,7 @@ namespace process_pipeline.Core.PreCheck
                         Severity = PreCheckSeverity.Reviewable,
                         PlanIssueKind = PlanIssueKind.LegacyResidualEntity,
                         Title = "残留旧图层图元",
-                        Description = $"规划图纸中残留旧版图层 [{legacy.Layer}] 的{entityKindText} (Handle={legacy.Handle}, ACI={legacy.EffectiveAci})，请人工确认是否迁移或清理。",
+                        Description = $"规划图纸中残留旧版图层 [{legacy.Layer}] 的{entityKindText} (Handle={legacy.Handle}, ACI={legacy.EffectiveAci})。",
                         TargetObjectId = legacy.Id,
                         TargetHandle = legacy.Handle,
                         LayerName = legacy.Layer,

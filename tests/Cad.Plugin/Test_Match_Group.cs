@@ -704,8 +704,12 @@ namespace Cad.Plugin
                             colRemark != null && colRemark.Width.IsAuto && colRemark.MinWidth >= 280.0 &&
                             !copyMatrix.IsEmpty && copyMatrix.Columns.Count == 6 &&
                             !copiedTsv.Contains("PipeRowVm") &&
-                            !string.IsNullOrWhiteSpace(vm.Rows[0].RemarkToolTipText),
-                            $"AutoCAD 2019 原生图标库、ContextMenu 双主题、DataGrid 横向滚动列宽自适应及精简版剪贴板复制矩阵验证通过 (Columns={copyMatrix.Columns.Count}, CopiedStatus='{copyMatrix.Rows.FirstOrDefault()?[2]}')");
+                            !vm.Rows[0].Remark.Contains("右键可一键") &&
+                            !vm.Rows[0].Remark.Contains("点击可查看") &&
+                            vm.Rows[0].RemarkToolTipText.Contains("【问题描述】") &&
+                            vm.Rows[0].RemarkToolTipText.Contains("【解决方案】") &&
+                            vm.Rows[0].LocationToolTipText.StartsWith("位置坐标"),
+                            $"AutoCAD 2019 原生图标库、ContextMenu 双主题、DataGrid 横向滚动列宽自适应、问题描述与解决方案分离及精简版剪贴板复制矩阵验证通过 (Columns={copyMatrix.Columns.Count}, CopiedStatus='{copyMatrix.Rows.FirstOrDefault()?[2]}')");
                     }
                 }
                 finally
