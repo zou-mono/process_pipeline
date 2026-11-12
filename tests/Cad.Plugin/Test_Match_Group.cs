@@ -787,6 +787,18 @@ namespace Cad.Plugin
                             string.Equals(realVm.SelectedTreeNode?.RuleNameFilter, MatchGroupService.DefaultRuleName, StringComparison.OrdinalIgnoreCase),
                             $"上版数据.dwg 从下拉项 MatchArrow 切换至 MatchGroup 后成功检出并展示 317 条记录，且左侧树自动聚焦 [{realVm.SelectedTreeNode?.Name}] (Rows={realVm.Rows.Count}, Visible={realVm.GetVisibleRows().Count})");
 
+                        // 验证案例 1：在 上版数据.dwg 已跑出 317 条 MatchGroup 后，误选跨图规则 MatchPipe / CompareSegment 执行单项核查时，不清空既有会话与表格
+                        var matchPipeOpt = realVm.AvailableSingleRules.FirstOrDefault(r =>
+                            string.Equals(r.RuleId, MatchPipeService.DefaultRuleId, StringComparison.OrdinalIgnoreCase));
+                        realVm.SelectedSingleRule = matchPipeOpt;
+                        var afterBlockedMatchPipe = realVm.ExecuteRunSingleCheck(Doc.Database, Doc.Editor, showPalette: false);
+                        AssertTrue(
+                            afterBlockedMatchPipe != null && afterBlockedMatchPipe.Count == 317 &&
+                            realVm.Rows.Count == 317 &&
+                            docSession.IssuesById.Count == 317 &&
+                            !docSession.ActiveRules.ContainsKey(MatchPipeService.DefaultRuleId),
+                            $"上版数据.dwg 在已有 317 条 MatchGroup 结果后执行不满足前置条件的跨图规则 MatchPipe，既有 317 条核查结果完整保留且未污染 ActiveRules (Rows={realVm.Rows.Count})");
+
                         // 验证多行批量“一键修复：翻转”及 Undo/Redo（消除 ads_regen AccessViolationException）
                         ObjectId curveId0 = realVm.Rows[0].TargetObjectId;
                         ObjectId curveId1 = realVm.Rows[1].TargetObjectId;

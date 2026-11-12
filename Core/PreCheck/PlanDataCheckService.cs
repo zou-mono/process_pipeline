@@ -143,6 +143,7 @@ namespace process_pipeline.Core.PreCheck
                 return null;
             }
 
+            session?.RegisterActiveRule(this);
             session?.MergeRuleIssues(RuleId, report.IssueMap, isIncremental: false);
             return report.IssueMap;
         }
@@ -156,19 +157,27 @@ namespace process_pipeline.Core.PreCheck
                 var merged = session != null
                     ? session.MergeRuleIssues(RuleId, result ?? new Dictionary<ObjectId, CheckIssueItem>(), isIncremental: true)
                     : (result ?? new Dictionary<ObjectId, CheckIssueItem>());
-                palCheckPipe.Instance.UpdateIncrementalData(merged);
+                if (session != null && session.IssuesById.Count > 0)
+                {
+                    palCheckPipe.Instance.UpdateIssueItems(session.GetAllIssueItems(), isIncremental: true);
+                }
+                else
+                {
+                    palCheckPipe.Instance.UpdateIncrementalData(merged);
+                }
                 return;
             }
 
+            session?.RegisterActiveRule(this);
             if (result == null || result.Count == 0)
             {
                 Ed?.WriteMessage($"\n[{RuleName}] 检查通过：当前文档共 {LastReport?.NormalCompliantPipeCount ?? 0} 条规划管线全部符合颜色与图层标准规范，无退化或残留旧图层异常。\n");
                 if (session != null)
                 {
-                    var mergedEmpty = session.MergeRuleIssues(RuleId, new Dictionary<ObjectId, CheckIssueItem>(), isIncremental: false);
+                    session.MergeRuleIssues(RuleId, new Dictionary<ObjectId, CheckIssueItem>(), isIncremental: false);
                     if (palCheckPipe.Instance.IsVisible)
                     {
-                        palCheckPipe.Instance.UpdateData(mergedEmpty);
+                        palCheckPipe.Instance.UpdateIssueItems(session.GetAllIssueItems(), isIncremental: false, activeRuleId: RuleId);
                     }
                 }
                 return;
@@ -183,7 +192,14 @@ namespace process_pipeline.Core.PreCheck
             var mergedAll = session != null
                 ? session.MergeRuleIssues(RuleId, result, isIncremental: false)
                 : result;
-            palCheckPipe.Instance.Show(mergedAll);
+            if (session != null && session.IssuesById.Count > 0)
+            {
+                palCheckPipe.Instance.ShowIssueItems(session.GetAllIssueItems(), RuleId);
+            }
+            else
+            {
+                palCheckPipe.Instance.Show(mergedAll);
+            }
         }
 
         /// <summary>

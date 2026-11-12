@@ -1827,7 +1827,9 @@ namespace process_pipeline.Forms
             TreeNodeVm ruleNode = TreeNodes.FirstOrDefault(n =>
                 n.FilterKind == TreeFilterKind.RuleCategory &&
                 (string.Equals(n.RuleNameFilter, targetRuleName, StringComparison.OrdinalIgnoreCase) ||
-                 string.Equals(n.RuleNameFilter, ruleIdOrName, StringComparison.OrdinalIgnoreCase)));
+                 string.Equals(n.RuleNameFilter, ruleIdOrName, StringComparison.OrdinalIgnoreCase) ||
+                 (string.Equals(ruleIdOrName, PlanDataCheckService.DefaultRuleId, StringComparison.OrdinalIgnoreCase) &&
+                  string.Equals(n.RuleNameFilter, PlanDataCheckService.DefaultRuleName, StringComparison.OrdinalIgnoreCase))));
 
             if (ruleNode != null)
             {
@@ -1840,8 +1842,9 @@ namespace process_pipeline.Forms
             if (string.IsNullOrWhiteSpace(ruleIdOrName))
                 return string.Empty;
 
-            if (string.Equals(ruleIdOrName, PlanDataCheckService.DefaultRuleId, StringComparison.OrdinalIgnoreCase))
-                return PlanDataCheckService.DefaultRuleName;
+            if (string.Equals(ruleIdOrName, PlanDataCheckService.DefaultRuleId, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(ruleIdOrName, PlanDataCheckService.DefaultRuleName, StringComparison.OrdinalIgnoreCase))
+                return "规划数据自检";
             if (string.Equals(ruleIdOrName, MatchGroupService.DefaultRuleId, StringComparison.OrdinalIgnoreCase))
                 return MatchGroupService.DefaultRuleName;
             if (string.Equals(ruleIdOrName, CheckPipelineCoordinator.FlowArrowRuleId, StringComparison.OrdinalIgnoreCase))
@@ -3027,23 +3030,21 @@ namespace process_pipeline.Forms
                 return Array.Empty<CheckIssueItem>();
             }
 
-            var session = DocumentSessionManager.GetOrCreateSession(db);
             IReadOnlyList<CheckIssueItem> mergedIssues = CheckPipelineCoordinator.ExecuteSingleRule(
                 db,
                 ed,
                 ruleOption.RuleId,
                 out _,
+                out bool ruleExecuted,
                 allowInteractiveDialog: true,
                 showPalette: showPalette,
                 customDialogLauncher: CustomDataSourceDialogLauncher);
 
-            UpdateFromIssueItems(mergedIssues ?? Array.Empty<CheckIssueItem>(), isIncremental: false);
             RefreshDataSourceSummaryText(db);
 
-            bool ruleExecuted = session?.ActiveRule != null &&
-                                string.Equals(session.ActiveRule.RuleId, ruleOption.RuleId, StringComparison.OrdinalIgnoreCase);
             if (ruleExecuted)
             {
+                UpdateFromIssueItems(mergedIssues ?? Array.Empty<CheckIssueItem>(), isIncremental: false);
                 ActivateRuleInView(ruleOption.RuleId);
                 int ruleIssueCount = Rows.Count(r =>
                     r?.SourceIssue != null &&
@@ -3052,6 +3053,10 @@ namespace process_pipeline.Forms
             }
             else
             {
+                if (Rows.Count == 0 && mergedIssues != null && mergedIssues.Count > 0)
+                {
+                    UpdateFromIssueItems(mergedIssues, isIncremental: false);
+                }
                 StatusText = $"当前图纸未满足 [{ruleOption.DisplayName}] 的前置数据条件，已中止执行";
             }
             return mergedIssues;

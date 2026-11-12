@@ -472,10 +472,10 @@ namespace process_pipeline.Commands
                 Ed?.WriteMessage($"\n[{RuleName}] 检查通过：当前文档共 {LastSummary?.ValidGroupPairCount ?? 0} 组管线与属性要素均已 1:1 合法绑定 Group，无异常或未绑定项。\n");
                 if (session != null)
                 {
-                    var mergedEmpty = session.MergeRuleIssues(RuleId, new Dictionary<ObjectId, CheckIssueItem>(), isIncremental: false);
+                    session.MergeRuleIssues(RuleId, new Dictionary<ObjectId, CheckIssueItem>(), isIncremental: false);
                     if (palCheckPipe.Instance.IsVisible)
                     {
-                        palCheckPipe.Instance.UpdateData(mergedEmpty);
+                        palCheckPipe.Instance.UpdateIssueItems(session.GetAllIssueItems(), isIncremental: false, activeRuleId: RuleId);
                     }
                 }
                 return;

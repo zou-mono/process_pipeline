@@ -431,6 +431,17 @@ namespace Cad.Plugin
                             mainVm.Rows.Count > 1000,
                             $"[ucMainCheckWindow 工具栏] 执行 [一键全量核查] 成功串联全部 5 项核查规则并汇聚 {mainVm.Rows.Count} 条记录至主核查面板");
 
+                        int fullRowCountBeforeCheckPlan = mainVm.Rows.Count;
+                        var planCheckCmdSvc = new PlanDataCheckService(planDb, null) { SuppressBlockingDialog = true };
+                        var planCheckCmdResult = planCheckCmdSvc.CheckAll();
+                        session.MergeRuleIssues(planCheckCmdSvc.RuleId, planCheckCmdResult, isIncremental: false);
+                        mainVm.UpdateFromIssueItems(session.GetAllIssueItems(), isIncremental: false);
+                        mainVm.ActivateRuleInView(planCheckCmdSvc.RuleId);
+                        AssertTrue(
+                            mainVm.Rows.Count == fullRowCountBeforeCheckPlan &&
+                            string.Equals(mainVm.SelectedTreeNode?.RuleNameFilter, "规划数据自检", StringComparison.OrdinalIgnoreCase),
+                            $"[多规则并存保护] 全量核查后再单独执行 CHECKPLAN，全表 {mainVm.Rows.Count} 条多折线段与缺失段记录 100% 完整保留，且导航树自动聚焦 [{mainVm.SelectedTreeNode?.Name}]");
+
                         // ──────────────────────────────────────────────────
                         // 10. Commit 6.4：空图纸顶层统一预核查拦截（Fail-Fast）与多弹窗合并验证
                         // ──────────────────────────────────────────────────
@@ -473,18 +484,18 @@ namespace Cad.Plugin
                             var darkCardBg = msgDialog.TryFindResource("Brush.Dialog.HintCardBackground") as System.Windows.Media.SolidColorBrush;
                             AssertTrue(
                                 msgDialog.ActiveThemeName == "Dark" &&
-                                darkWinBg != null && darkWinBg.Color.ToString().Equals("#FF2D2D30", StringComparison.OrdinalIgnoreCase) &&
-                                darkCardBg != null && darkCardBg.Color.ToString().Equals("#FF252526", StringComparison.OrdinalIgnoreCase),
-                                $"[CadMessageDialog 深色主题] COLORTHEME=0(Dark) 下窗口背景={darkWinBg?.Color} (#FF2D2D30)，内嵌卡片背景={darkCardBg?.Color} (#FF252526)");
+                                darkWinBg != null && darkWinBg.Color.ToString().Equals("#FF4A4A4A", StringComparison.OrdinalIgnoreCase) &&
+                                darkCardBg != null && darkCardBg.Color.ToString().Equals("#FF525252", StringComparison.OrdinalIgnoreCase),
+                                $"[CadMessageDialog 深色主题] COLORTHEME=0(Dark) 下窗口背景={darkWinBg?.Color} (#FF4A4A4A)，内嵌卡片背景={darkCardBg?.Color} (#FF525252)");
 
                             msgDialog.ApplyTheme("Light");
                             var lightWinBg = msgDialog.TryFindResource("Brush.Dialog.WindowBackground") as System.Windows.Media.SolidColorBrush;
                             var lightCardBg = msgDialog.TryFindResource("Brush.Dialog.HintCardBackground") as System.Windows.Media.SolidColorBrush;
                             AssertTrue(
                                 msgDialog.ActiveThemeName == "Light" &&
-                                lightWinBg != null && lightWinBg.Color.ToString().Equals("#FFF0F0F0", StringComparison.OrdinalIgnoreCase) &&
-                                lightCardBg != null && lightCardBg.Color.ToString().Equals("#FFFFFFFF", StringComparison.OrdinalIgnoreCase),
-                                $"[CadMessageDialog 浅色主题] COLORTHEME=1(Light) 下窗口背景={lightWinBg?.Color} (#FFF0F0F0)，内嵌卡片背景={lightCardBg?.Color} (#FFFFFFFF)");
+                                lightWinBg != null && lightWinBg.Color.ToString().Equals("#FFE6E6E6", StringComparison.OrdinalIgnoreCase) &&
+                                lightCardBg != null && lightCardBg.Color.ToString().Equals("#FFF7F7F7", StringComparison.OrdinalIgnoreCase),
+                                $"[CadMessageDialog 浅色主题] COLORTHEME=1(Light) 下窗口背景={lightWinBg?.Color} (#FFE6E6E6)，内嵌卡片背景={lightCardBg?.Color} (#FFF7F7F7)");
 
                             msgDialog.Close();
 

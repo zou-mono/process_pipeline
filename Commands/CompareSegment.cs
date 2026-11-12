@@ -31,6 +31,15 @@ namespace process_pipeline.Commands
         {
             if (Doc == null) return;
 
+            PreCheckSummary planPreCheck = PreCheckService.ValidateFullPipelinePreConditions(
+                Doc.Database,
+                showDialogOnBlocking: !ConfigManager.IsHeadlessOrSuppressedUi);
+            if (planPreCheck.HasBlockingIssues)
+            {
+                Doc.Editor?.WriteMessage("\n[线段覆盖核查] 当前图纸未检测到有效规划管线数据，已中止核查。\n");
+                return;
+            }
+
             var session = DocumentSessionManager.GetOrCreateSession(Doc.Database);
             if (!CheckPipelineCoordinator.EnsureDataSourcesReady(
                     Doc.Database,
@@ -46,8 +55,6 @@ namespace process_pipeline.Commands
 
             var geometryFactory = NetTopologySuite.NtsGeometryServices.Instance.CreateGeometryFactory();
             var service = new CompareSegmentService(Doc.Database, Doc.Editor, geometryFactory);
-            session?.RegisterActiveRule(service);
-
             service.Run("线段覆盖核查", bOnlyUpdate: false);
         }
     }
@@ -642,13 +649,10 @@ namespace process_pipeline.Commands
 
             if (LastReport == null || LastReport.TotalPlanPolylines <= 0)
             {
-                if (palCheckPipe.Instance.IsVisible)
-                {
-                    palCheckPipe.Instance.UpdateIssueItems(Array.Empty<CheckIssueItem>(), isIncremental: false);
-                }
                 return;
             }
 
+            session?.RegisterActiveRule(this);
             Ed?.WriteMessage(
                 $"\n[{RuleName}] 核查完成：规划管线 {LastReport.TotalPlanPolylines} 条（{LastReport.TotalPlanSegments} 折线段） vs " +
                 $"上版管线 {LastReport.TotalPreviousPolylines} 条（{LastReport.TotalPreviousSegments} 折线段）；" +
@@ -657,7 +661,7 @@ namespace process_pipeline.Commands
 
             if (session != null && session.IssuesById.Count > 0)
             {
-                palCheckPipe.Instance.ShowIssueItems(session.GetAllIssueItems());
+                palCheckPipe.Instance.ShowIssueItems(session.GetAllIssueItems(), RuleId);
             }
             else if (result != null)
             {

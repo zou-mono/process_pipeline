@@ -32,6 +32,15 @@ namespace process_pipeline.Commands
         {
             if (Doc == null) return;
 
+            PreCheckSummary planPreCheck = PreCheckService.ValidateFullPipelinePreConditions(
+                Doc.Database,
+                showDialogOnBlocking: !ConfigManager.IsHeadlessOrSuppressedUi);
+            if (planPreCheck.HasBlockingIssues)
+            {
+                Doc.Editor?.WriteMessage("\n[管段匹配核查] 当前图纸未检测到有效规划管线数据，已中止核查。\n");
+                return;
+            }
+
             var session = DocumentSessionManager.GetOrCreateSession(Doc.Database);
             if (!CheckPipelineCoordinator.EnsureDataSourcesReady(
                     Doc.Database,
@@ -46,8 +55,6 @@ namespace process_pipeline.Commands
             }
 
             var service = new MatchPipeService(Doc.Database, Doc.Editor);
-            session?.RegisterActiveRule(service);
-
             service.Run("管段匹配核查", bOnlyUpdate: false);
         }
     }
@@ -425,13 +432,10 @@ namespace process_pipeline.Commands
 
             if (LastReport == null || LastReport.TotalPlanPipeCount <= 0)
             {
-                if (palCheckPipe.Instance.IsVisible)
-                {
-                    palCheckPipe.Instance.UpdateIssueItems(Array.Empty<CheckIssueItem>(), isIncremental: false);
-                }
                 return;
             }
 
+            session?.RegisterActiveRule(this);
             Ed?.WriteMessage(
                 $"\n[{RuleName}] 核查完成：共扫描三类规划管线 {LastReport.TotalPlanPipeCount} 条，" +
                 $"勘测管 {LastReport.SurveyRawPolylineCount} 条（按管径合并后 {LastReport.SurveyMergedPolylineCount} 条）；" +
@@ -440,7 +444,7 @@ namespace process_pipeline.Commands
 
             if (session != null && session.IssuesById.Count > 0)
             {
-                palCheckPipe.Instance.ShowIssueItems(session.GetAllIssueItems());
+                palCheckPipe.Instance.ShowIssueItems(session.GetAllIssueItems(), RuleId);
             }
             else if (result != null)
             {

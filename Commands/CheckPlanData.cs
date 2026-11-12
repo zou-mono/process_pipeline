@@ -22,12 +22,6 @@ namespace process_pipeline.Commands
             if (Doc == null) return;
 
             var service = new PlanDataCheckService(Doc.Database, Doc.Editor);
-            var session = DocumentSessionManager.GetOrCreateSession(Doc.Database);
-            if (session != null)
-            {
-                session.RegisterActiveRule(service);
-            }
-
             service.Run(CadConfig.TaskNames.CheckPlan, bOnlyUpdate: false);
         }
     }

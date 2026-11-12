@@ -288,7 +288,31 @@ namespace process_pipeline.Core
             Func<DataSourceSettingsViewModel, bool> customDialogLauncher = null,
             ProgressContext progress = null)
         {
+            return ExecuteSingleRule(
+                db,
+                ed,
+                ruleId,
+                out dialogShown,
+                out _,
+                allowInteractiveDialog,
+                showPalette,
+                customDialogLauncher,
+                progress);
+        }
+
+        public static IReadOnlyList<CheckIssueItem> ExecuteSingleRule(
+            AcadDb.Database db,
+            Editor ed,
+            string ruleId,
+            out bool dialogShown,
+            out bool ruleExecuted,
+            bool allowInteractiveDialog = true,
+            bool showPalette = true,
+            Func<DataSourceSettingsViewModel, bool> customDialogLauncher = null,
+            ProgressContext progress = null)
+        {
             dialogShown = false;
+            ruleExecuted = false;
             if (db == null || string.IsNullOrWhiteSpace(ruleId))
                 return Array.Empty<CheckIssueItem>();
 
@@ -305,20 +329,15 @@ namespace process_pipeline.Core
 
             if (needPrev || needSurvey)
             {
-                // 跨图规则前置拦截：先确认当前主图存在有效规划管线数据，无数据时只弹 1 个预检提示框并直接终止
+                // 跨图规则前置拦截：先确认当前主图存在有效规划管线数据，无数据时只弹 1 个预检提示框并直接终止本项规则（保留当前文档已有其他规则会话数据）
                 PreCheckSummary planPreCheck = PreCheckService.ValidateFullPipelinePreConditions(
                     db,
                     showDialogOnBlocking: allowInteractiveDialog && !ConfigManager.IsHeadlessOrSuppressedUi);
 
                 if (planPreCheck.HasBlockingIssues)
                 {
-                    session?.ClearAll();
-                    if (!ConfigManager.IsHeadlessOrSuppressedUi && palCheckPipe.Instance.IsVisible)
-                    {
-                        palCheckPipe.Instance.UpdateIssueItems(Array.Empty<CheckIssueItem>(), isIncremental: false);
-                    }
                     ed?.WriteMessage($"\n[{ruleId}] 当前图纸未检测到有效规划管线数据，已中止核查。\n");
-                    return Array.Empty<CheckIssueItem>();
+                    return session?.GetAllIssueItems() ?? Array.Empty<CheckIssueItem>();
                 }
 
                 bool ready = EnsureDataSourcesReady(
@@ -344,15 +363,11 @@ namespace process_pipeline.Core
             var ruleResult = rule.CheckAll(progress);
             if (ruleResult == null)
             {
-                // 子规则因前置数据缺失返回 null 时直接终止（严禁弹出主核查面板；若面板已停靠打开则同步刷新会话状态，不注册无效规则）
-                var existingIssues = session?.GetAllIssueItems() ?? Array.Empty<CheckIssueItem>();
-                if (!ConfigManager.IsHeadlessOrSuppressedUi && palCheckPipe.Instance.IsVisible)
-                {
-                    palCheckPipe.Instance.UpdateIssueItems(existingIssues, isIncremental: false);
-                }
-                return existingIssues;
+                // 子规则因前置数据缺失返回 null 时直接终止（严禁弹出主核查面板或清空当前文档已有的其他规则核查结果）
+                return session?.GetAllIssueItems() ?? Array.Empty<CheckIssueItem>();
             }
 
+            ruleExecuted = true;
             session?.RegisterActiveRule(rule);
 
             // 单实体单问题字典规则（FlowArrow / MatchGroup / PlanDataCheck）统一合并至 session.IssuesById
