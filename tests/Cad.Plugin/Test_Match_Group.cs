@@ -761,6 +761,111 @@ namespace Cad.Plugin
                             vm.Rows[0].RemarkToolTipText.Contains("【解决方案】") &&
                             vm.Rows[0].LocationToolTipText.StartsWith("位置坐标"),
                             $"AutoCAD 2019 原生图标库、ContextMenu 双主题、DataGrid 横向滚动列宽自适应、问题描述与解决方案分离及精简版剪贴板复制矩阵验证通过 (Columns={copyMatrix.Columns.Count}, CopiedStatus='{copyMatrix.Rows.FirstOrDefault()?[2]}')");
+
+                        // 5.8 验证下拉菜单规则切换（MatchArrow 阻断后切换 MatchGroup）与多行批量“一键修复：翻转”无 AccessViolationException
+                        var docSession = DocumentSessionManager.GetOrCreateSession(Doc.Database);
+                        docSession.ClearAll();
+
+                        var flowArrowOpt = realVm.AvailableSingleRules.FirstOrDefault(r =>
+                            string.Equals(r.RuleId, CheckPipelineCoordinator.FlowArrowRuleId, StringComparison.OrdinalIgnoreCase));
+                        var matchGroupOpt = realVm.AvailableSingleRules.FirstOrDefault(r =>
+                            string.Equals(r.RuleId, MatchGroupService.DefaultRuleId, StringComparison.OrdinalIgnoreCase));
+
+                        realVm.SelectedSingleRule = flowArrowOpt;
+                        var arrowBlockedIssues = realVm.ExecuteRunSingleCheck(Doc.Database, Doc.Editor, showPalette: false);
+                        AssertTrue(
+                            (arrowBlockedIssues == null || arrowBlockedIssues.Count == 0) &&
+                            !docSession.ActiveRules.ContainsKey(CheckPipelineCoordinator.FlowArrowRuleId),
+                            $"上版数据.dwg 执行下拉项 MatchArrow 被前置拦截且未污染会话 ActiveRules (Count={arrowBlockedIssues?.Count ?? 0})");
+
+                        realVm.SelectedSingleRule = matchGroupOpt;
+                        var matchGroupAfterSwitch = realVm.ExecuteRunSingleCheck(Doc.Database, Doc.Editor, showPalette: false);
+                        AssertTrue(
+                            matchGroupAfterSwitch != null && matchGroupAfterSwitch.Count == 317 &&
+                            realVm.Rows.Count == 317 &&
+                            realVm.GetVisibleRows().Count == 317 &&
+                            string.Equals(realVm.SelectedTreeNode?.RuleNameFilter, MatchGroupService.DefaultRuleName, StringComparison.OrdinalIgnoreCase),
+                            $"上版数据.dwg 从下拉项 MatchArrow 切换至 MatchGroup 后成功检出并展示 317 条记录，且左侧树自动聚焦 [{realVm.SelectedTreeNode?.Name}] (Rows={realVm.Rows.Count}, Visible={realVm.GetVisibleRows().Count})");
+
+                        // 验证多行批量“一键修复：翻转”及 Undo/Redo（消除 ads_regen AccessViolationException）
+                        ObjectId curveId0 = realVm.Rows[0].TargetObjectId;
+                        ObjectId curveId1 = realVm.Rows[1].TargetObjectId;
+                        Point3d origStart0, origEnd0, origStart1, origEnd1;
+                        using (OpenCloseTransaction trOrig = Doc.Database.TransactionManager.StartOpenCloseTransaction())
+                        {
+                            var c0 = (Curve)trOrig.GetObject(curveId0, OpenMode.ForRead);
+                            var c1 = (Curve)trOrig.GetObject(curveId1, OpenMode.ForRead);
+                            origStart0 = c0.StartPoint;
+                            origEnd0 = c0.EndPoint;
+                            origStart1 = c1.StartPoint;
+                            origEnd1 = c1.EndPoint;
+                        }
+
+                        var flowIssue0 = new CheckIssueItem
+                        {
+                            IssueId = $"FlowArrow:{curveId0.Handle}:0",
+                            RuleId = CheckPipelineCoordinator.FlowArrowRuleId,
+                            RuleName = "流向箭头核查",
+                            TargetObjectId = curveId0,
+                            TargetHandle = curveId0.Handle.ToString(),
+                            LayerName = realVm.Rows[0].Type,
+                            Status = IssueReviewStatus.Pending,
+                            Remark = "流向与箭头相反",
+                            Description = "流向与箭头相反"
+                        };
+                        var flowIssue1 = new CheckIssueItem
+                        {
+                            IssueId = $"FlowArrow:{curveId1.Handle}:0",
+                            RuleId = CheckPipelineCoordinator.FlowArrowRuleId,
+                            RuleName = "流向箭头核查",
+                            TargetObjectId = curveId1,
+                            TargetHandle = curveId1.Handle.ToString(),
+                            LayerName = realVm.Rows[1].Type,
+                            Status = IssueReviewStatus.Pending,
+                            Remark = "流向与箭头相反",
+                            Description = "流向与箭头相反"
+                        };
+
+                        realWin.UpdateIssueItems(new[] { flowIssue0, flowIssue1 }, isIncremental: false);
+                        realVm.ActivateRuleInView(CheckPipelineCoordinator.FlowArrowRuleId);
+                        realVm.SetSelectedRows(realVm.Rows.ToList(), syncCadSelection: false);
+                        AssertTrue(realVm.CanReverseSelectedPipe() && realVm.SelectedRows.Count == 2,
+                            $"选中 2 条流向异常管线时右键菜单【一键修复：翻转】可用 (CanReverse={realVm.CanReverseSelectedPipe()})");
+
+                        realVm.ReverseSelectedPipe();
+
+                        Point3d revStart0, revEnd0, revStart1, revEnd1;
+                        using (OpenCloseTransaction trRev = Doc.Database.TransactionManager.StartOpenCloseTransaction())
+                        {
+                            var c0 = (Curve)trRev.GetObject(curveId0, OpenMode.ForRead);
+                            var c1 = (Curve)trRev.GetObject(curveId1, OpenMode.ForRead);
+                            revStart0 = c0.StartPoint;
+                            revEnd0 = c0.EndPoint;
+                            revStart1 = c1.StartPoint;
+                            revEnd1 = c1.EndPoint;
+                        }
+
+                        AssertTrue(
+                            origStart0.DistanceTo(revEnd0) < 1e-4 &&
+                            origEnd0.DistanceTo(revStart0) < 1e-4 &&
+                            origStart1.DistanceTo(revEnd1) < 1e-4 &&
+                            origEnd1.DistanceTo(revStart1) < 1e-4 &&
+                            realVm.Rows.All(r => r.SourceIssue.Status == IssueReviewStatus.Resolved),
+                            $"批量【一键修复：翻转】成功翻转 2 条管线起终点并更新状态为已修复，无 AccessViolationException");
+
+                        realVm.ExecuteUndo();
+                        Point3d undoStart0, undoEnd0;
+                        using (OpenCloseTransaction trUndo = Doc.Database.TransactionManager.StartOpenCloseTransaction())
+                        {
+                            var c0 = (Curve)trUndo.GetObject(curveId0, OpenMode.ForRead);
+                            undoStart0 = c0.StartPoint;
+                            undoEnd0 = c0.EndPoint;
+                        }
+                        AssertTrue(
+                            origStart0.DistanceTo(undoStart0) < 1e-4 &&
+                            origEnd0.DistanceTo(undoEnd0) < 1e-4 &&
+                            realVm.Rows.All(r => r.SourceIssue.Status == IssueReviewStatus.Pending),
+                            $"批量翻转后执行 Undo 成功恢复管线起终点与待核查状态");
                     }
                 }
                 finally

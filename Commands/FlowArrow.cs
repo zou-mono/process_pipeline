@@ -45,12 +45,6 @@ namespace process_pipeline.Commands
             };
 
             // 2. 启动引擎！
-            // Commit 5.4：将当前流向箭头核查规则注册到当前文档会话，并统一通过主核查面板展示结果
-            var session = DocumentSessionManager.GetOrCreateSession(Doc.Database);
-            if (session != null)
-            {
-                session.ActiveRule = service;
-            }
             service.Run(CadConfig.TaskNames.FlowArrow, false);
         }
     }
@@ -674,6 +668,8 @@ namespace process_pipeline.Commands
         public Dictionary<ObjectId, CheckIssueItem> CheckAll(ProgressContext context = null)
         {
             var rawProblems = Execute(context);
+            if (rawProblems == null)
+                return null;
             return ConvertProblemsToIssues(rawProblems, null);
         }
 
@@ -879,11 +875,19 @@ namespace process_pipeline.Commands
                 // 弹窗展示
                 // Commit 5.4：将 MATCHARROW 全量核查结果统一归并到当前文档会话并在主核查面板 palCheckPipe 展示
                 var session = DocumentSessionManager.GetOrCreateSession(_db);
+                session?.RegisterActiveRule(this);
                 var convertedIssues = ConvertProblemsToIssues(result, new Dictionary<ObjectId, CheckIssueItem>());
                 var merged = session != null
                     ? session.MergeRuleIssues(RuleId, convertedIssues, isIncremental: false)
                     : convertedIssues;
-                palCheckPipe.Instance.Show(merged);
+                if (session != null && session.IssuesById.Count > 0)
+                {
+                    palCheckPipe.Instance.ShowIssueItems(session.GetAllIssueItems(), RuleId);
+                }
+                else
+                {
+                    palCheckPipe.Instance.Show(merged);
+                }
             }
         }
     }

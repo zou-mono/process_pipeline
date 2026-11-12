@@ -143,6 +143,7 @@ namespace process_pipeline.Core.PreCheck
                 return null;
             }
 
+            session?.MergeRuleIssues(RuleId, report.IssueMap, isIncremental: false);
             return report.IssueMap;
         }
 

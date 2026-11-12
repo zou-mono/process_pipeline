@@ -102,6 +102,17 @@ namespace process_pipeline.Forms
             }
         }
 
+        /// <summary>
+        /// 当多文档（MDI）切换活动图纸时，清理跨文档的选择快照并同步目标文档的核查状态。
+        /// </summary>
+        public void OnActiveDocumentSwitched(Autodesk.AutoCAD.ApplicationServices.Document newDoc)
+        {
+            if (this.DataContext is MainCheckWindowViewModel viewModel)
+            {
+                viewModel.OnActiveDocumentSwitched(newDoc);
+            }
+        }
+
         private void TreeView_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
         {
             if (e.NewValue is TreeNodeVm node)
@@ -1613,6 +1624,10 @@ namespace process_pipeline.Forms
             {
                 // 当会话中已通过 MergeRuleIssueItems 累积了多规则或同管线多子问题时，展示全部会话问题
                 UpdateFromIssueItems(activeSession.GetAllIssueItems(), isIncremental: false);
+                if (activeSession.ActiveRule != null)
+                {
+                    ActivateRuleInView(activeSession.ActiveRule.RuleId);
+                }
                 return;
             }
 
@@ -1630,6 +1645,10 @@ namespace process_pipeline.Forms
             }
 
             UpdateFromIssueItems(itemList, isIncremental);
+            if (!isIncremental && activeSession?.ActiveRule != null)
+            {
+                ActivateRuleInView(activeSession.ActiveRule.RuleId);
+            }
         }
 
         /// <summary>
@@ -1643,6 +1662,16 @@ namespace process_pipeline.Forms
 
             if (!isIncremental)
             {
+                var prevSelectedIssueIds = new HashSet<string>(
+                    _selectedFilterSnapshot
+                        .Select(r => r?.SourceIssue?.IssueId)
+                        .Where(id => !string.IsNullOrWhiteSpace(id)),
+                    StringComparer.OrdinalIgnoreCase);
+
+                _selectedFilterSnapshot.Clear();
+                _selectedRows.Clear();
+                _selectedRow = null;
+                ContextTargetRow = null;
                 _currentIssues.Clear();
                 Rows.Clear();
                 _objectIdToRowMap.Clear();
@@ -1661,6 +1690,10 @@ namespace process_pipeline.Forms
                         UnindexRowObjectIds(duplicateRow);
                         duplicateRow.ApplyFromIssue(issue);
                         IndexRowObjectIds(duplicateRow);
+                        if (prevSelectedIssueIds.Contains(issueId))
+                        {
+                            _selectedFilterSnapshot.Add(duplicateRow);
+                        }
                         continue;
                     }
 
@@ -1673,6 +1706,11 @@ namespace process_pipeline.Forms
                         _currentIssues[issue.TargetObjectId] = issue;
                     }
                     IndexRowObjectIds(rowVm);
+
+                    if (prevSelectedIssueIds.Contains(issueId))
+                    {
+                        _selectedFilterSnapshot.Add(rowVm);
+                    }
                 }
 
                 RebuildNavigationTreeNodes();
@@ -1757,9 +1795,101 @@ namespace process_pipeline.Forms
                 }
             }
 
+            EnsureUndoRedoManagerSubscribed(ActiveUndoRedoManager);
             RefreshFilter();
             RefreshDataSourceSummaryText();
+            NotifyUndoRedoStateChanged();
             StatusText = $"已更新 {Rows.Count} 条核查记录";
+        }
+
+        /// <summary>
+        /// 将顶部工具栏单项核查下拉框及左侧导航树选中节点同步切换至指定规则（支持按 RuleId、CommandName 或中文规则名匹配）。
+        /// </summary>
+        public void ActivateRuleInView(string ruleIdOrName)
+        {
+            if (string.IsNullOrWhiteSpace(ruleIdOrName))
+                return;
+
+            var matchedOption = AvailableSingleRules.FirstOrDefault(opt =>
+                string.Equals(opt.RuleId, ruleIdOrName, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(opt.CommandName, ruleIdOrName, StringComparison.OrdinalIgnoreCase) ||
+                (!string.IsNullOrWhiteSpace(opt.DisplayName) &&
+                 opt.DisplayName.IndexOf(ruleIdOrName, StringComparison.OrdinalIgnoreCase) >= 0));
+
+            if (matchedOption != null && !ReferenceEquals(_selectedSingleRule, matchedOption))
+            {
+                _selectedSingleRule = matchedOption;
+                OnPropertyChanged(nameof(SelectedSingleRule));
+                OnPropertyChanged(nameof(SingleRuleToolTipText));
+            }
+
+            string targetRuleName = ResolveRuleDisplayName(ruleIdOrName);
+            TreeNodeVm ruleNode = TreeNodes.FirstOrDefault(n =>
+                n.FilterKind == TreeFilterKind.RuleCategory &&
+                (string.Equals(n.RuleNameFilter, targetRuleName, StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(n.RuleNameFilter, ruleIdOrName, StringComparison.OrdinalIgnoreCase)));
+
+            if (ruleNode != null)
+            {
+                SetSelectedTreeNodeInternal(ruleNode, isUserInitiated: false);
+            }
+        }
+
+        private static string ResolveRuleDisplayName(string ruleIdOrName)
+        {
+            if (string.IsNullOrWhiteSpace(ruleIdOrName))
+                return string.Empty;
+
+            if (string.Equals(ruleIdOrName, PlanDataCheckService.DefaultRuleId, StringComparison.OrdinalIgnoreCase))
+                return PlanDataCheckService.DefaultRuleName;
+            if (string.Equals(ruleIdOrName, MatchGroupService.DefaultRuleId, StringComparison.OrdinalIgnoreCase))
+                return MatchGroupService.DefaultRuleName;
+            if (string.Equals(ruleIdOrName, CheckPipelineCoordinator.FlowArrowRuleId, StringComparison.OrdinalIgnoreCase))
+                return "流向箭头核查";
+            if (string.Equals(ruleIdOrName, MatchPipeService.DefaultRuleId, StringComparison.OrdinalIgnoreCase))
+                return MatchPipeService.DefaultRuleName;
+            if (string.Equals(ruleIdOrName, CompareSegmentService.DefaultRuleId, StringComparison.OrdinalIgnoreCase))
+                return CompareSegmentService.DefaultRuleName;
+
+            return ruleIdOrName;
+        }
+
+        /// <summary>
+        /// 当多文档（MDI）切换活动文档时，清空上一文档残留的选择快照并恢复当前文档的核查列表、活动规则与 Undo/Redo 状态。
+        /// </summary>
+        public void OnActiveDocumentSwitched(Autodesk.AutoCAD.ApplicationServices.Document newDoc)
+        {
+            _selectedFilterSnapshot.Clear();
+            _selectedRows.Clear();
+            _selectedRow = null;
+            ContextTargetRow = null;
+
+            if (newDoc?.Database == null)
+                return;
+
+            var session = DocumentSessionManager.GetOrCreateSession(newDoc.Database);
+            EnsureUndoRedoManagerSubscribed(session?.UndoRedoManager ?? _fallbackUndoRedoManager);
+
+            if (session != null && session.IssuesById.Count > 0)
+            {
+                UpdateFromIssueItems(session.GetAllIssueItems(), isIncremental: false);
+            }
+            else if (session != null && session.CurrentIssues.Count > 0)
+            {
+                UpdateFromIssues(session.CurrentIssues, isIncremental: false);
+            }
+            else
+            {
+                UpdateFromIssueItems(Array.Empty<CheckIssueItem>(), isIncremental: false);
+            }
+
+            if (session?.ActiveRule != null)
+            {
+                ActivateRuleInView(session.ActiveRule.RuleId);
+            }
+
+            RefreshDataSourceSummaryText(newDoc.Database);
+            NotifyUndoRedoStateChanged();
         }
 
         private void RemoveRowInternal(PipeRowVm row, string issueId, ObjectId targetId)
@@ -2435,13 +2565,34 @@ namespace process_pipeline.Forms
                 return;
             }
 
-            var rowById = new Dictionary<ObjectId, PipeRowVm>(validRows.Count);
+            var rowsByCurveId = new Dictionary<ObjectId, List<(PipeRowVm Row, CheckIssueItem BeforeSnapshot)>>(validRows.Count);
             var batchItems = new List<(ObjectId CurveId, CheckIssueItem BeforeSnapshot)>(validRows.Count);
+            var seenCurves = new HashSet<ObjectId>();
+
             foreach (PipeRowVm row in validRows)
             {
-                rowById[row.TargetObjectId] = row;
-                batchItems.Add((row.TargetObjectId, row.SourceIssue.CloneSnapshot()));
+                ObjectId curveId = row.TargetObjectId;
+                CheckIssueItem snapshot = row.SourceIssue.CloneSnapshot();
+
+                if (!rowsByCurveId.TryGetValue(curveId, out var rowList))
+                {
+                    rowList = new List<(PipeRowVm Row, CheckIssueItem BeforeSnapshot)>();
+                    rowsByCurveId[curveId] = rowList;
+                }
+                rowList.Add((row, snapshot));
+
+                // 确保每根管线在单次事务中仅翻转一次，防止同一管线重复翻转相互抵消
+                if (seenCurves.Add(curveId))
+                {
+                    batchItems.Add((curveId, snapshot));
+                }
             }
+
+            if (batchItems.Count == 0)
+                return;
+
+            // 执行批量翻转前先清空 CAD Pickfirst 预选集与瞬态辅助线，防止 AcEdGripManager / TransientManager 在事务提交时冲突
+            ClearCadSelection();
 
             var op = new ReverseCurveOperation(
                 batchItems,
@@ -2451,28 +2602,40 @@ namespace process_pipeline.Forms
                     {
                         foreach (var item in restoredList)
                         {
-                            if (item.Snapshot != null && rowById.TryGetValue(item.CurveId, out PipeRowVm targetRow))
+                            if (rowsByCurveId.TryGetValue(item.CurveId, out var targetRowEntries))
                             {
-                                ApplyIssueSnapshotToRow(targetRow, item.Snapshot, refreshTreeAndFilter: false);
+                                foreach (var entry in targetRowEntries)
+                                {
+                                    CheckIssueItem snapshotToApply = isUndo
+                                        ? entry.BeforeSnapshot?.CloneSnapshot()
+                                        : item.Snapshot?.CloneSnapshot();
+                                    if (snapshotToApply != null)
+                                    {
+                                        ApplyIssueSnapshotToRow(entry.Row, snapshotToApply, refreshTreeAndFilter: false);
+                                    }
+                                }
                             }
                         }
                         // 抑制由本操作自身事务引发的后台 Idle 二次重算，防止覆盖 Undo/Redo 恢复的精确快照
                         PaletteRefreshManager.SuppressIds(restoredList.Select(x => x.CurveId));
+                        GraphicManager.ClearAuxiliaryGraphics();
                         UpdateTreeCounts();
                         RefreshFilter();
+                        NotifyUndoRedoStateChanged();
                     }
                 });
 
+            _lastUndoRedoTimestampUtc = DateTime.UtcNow;
             ActiveUndoRedoManager.ExecuteOperation(op);
             NotifyUndoRedoStateChanged();
 
-            if (validRows.Count == 1)
+            if (batchItems.Count == 1)
             {
                 StatusText = $"已翻转管线 [{validRows[0].Id}] 流向，并归档至【已修复】";
             }
             else
             {
-                StatusText = $"已批量翻转 {validRows.Count} 条管线流向，并归档至【已修复】";
+                StatusText = $"已批量翻转 {batchItems.Count} 条管线流向，并归档至【已修复】";
             }
         }
 
@@ -2864,6 +3027,7 @@ namespace process_pipeline.Forms
                 return Array.Empty<CheckIssueItem>();
             }
 
+            var session = DocumentSessionManager.GetOrCreateSession(db);
             IReadOnlyList<CheckIssueItem> mergedIssues = CheckPipelineCoordinator.ExecuteSingleRule(
                 db,
                 ed,
@@ -2876,14 +3040,19 @@ namespace process_pipeline.Forms
             UpdateFromIssueItems(mergedIssues ?? Array.Empty<CheckIssueItem>(), isIncremental: false);
             RefreshDataSourceSummaryText(db);
 
-            if ((mergedIssues == null || mergedIssues.Count == 0) &&
-                process_pipeline.Core.PreCheck.PreCheckService.ValidateFullPipelinePreConditions(db, showDialogOnBlocking: false).HasBlockingIssues)
+            bool ruleExecuted = session?.ActiveRule != null &&
+                                string.Equals(session.ActiveRule.RuleId, ruleOption.RuleId, StringComparison.OrdinalIgnoreCase);
+            if (ruleExecuted)
             {
-                StatusText = $"当前图纸未检测到合规的规划管线数据，已中止 [{ruleOption.DisplayName}]";
+                ActivateRuleInView(ruleOption.RuleId);
+                int ruleIssueCount = Rows.Count(r =>
+                    r?.SourceIssue != null &&
+                    string.Equals(r.SourceIssue.RuleId, ruleOption.RuleId, StringComparison.OrdinalIgnoreCase));
+                StatusText = $"单项核查 [{ruleOption.DisplayName}] 完成：共 {ruleIssueCount} 条记录（当前文档总计 {Rows.Count} 条）";
             }
             else
             {
-                StatusText = $"单项核查 [{ruleOption.DisplayName}] 完成：当前共 {Rows.Count} 条记录";
+                StatusText = $"当前图纸未满足 [{ruleOption.DisplayName}] 的前置数据条件，已中止执行";
             }
             return mergedIssues;
         }
@@ -3674,11 +3843,24 @@ namespace process_pipeline.Forms
         protected override Dictionary<ObjectId, CheckIssueItem> GetInitialData() => new Dictionary<ObjectId, CheckIssueItem>();
 
         /// <summary>
-        /// 当用户在多个 DWG 文档标签页之间切换时，自动从目标文档的 DocumentCheckSession 恢复核查列表。
+        /// 当用户在多个 DWG 文档标签页之间切换时，自动从目标文档的 DocumentCheckSession 恢复核查列表与文档专属上下文。
         /// </summary>
         protected override void OnActiveDocumentChanged(Autodesk.AutoCAD.ApplicationServices.Document newDoc)
         {
             if (newDoc?.Database == null) return;
+            if (_currentControl != null)
+            {
+                if (!_currentControl.Dispatcher.CheckAccess())
+                {
+                    _currentControl.Dispatcher.Invoke(() => _currentControl.OnActiveDocumentSwitched(newDoc));
+                }
+                else
+                {
+                    _currentControl.OnActiveDocumentSwitched(newDoc);
+                }
+                return;
+            }
+
             var session = DocumentSessionManager.GetOrCreateSession(newDoc.Database);
             if (session != null && session.IssuesById.Count > 0)
             {
@@ -3714,7 +3896,7 @@ namespace process_pipeline.Forms
         /// <summary>
         /// 按唯一 IssueId 列表更新面板数据（支持单管线多规则/多折线段并存及 ObjectId.Null 缺失问题，Stage 2 Commit 2.3）。
         /// </summary>
-        public void UpdateIssueItems(IEnumerable<CheckIssueItem> items, bool isIncremental = false)
+        public void UpdateIssueItems(IEnumerable<CheckIssueItem> items, bool isIncremental = false, string activeRuleId = null)
         {
             if (items == null) return;
             if (_currentControl == null)
@@ -3723,23 +3905,32 @@ namespace process_pipeline.Forms
             }
             if (_currentControl == null) return;
 
+            Action updateAction = () =>
+            {
+                _currentControl.UpdateIssueItems(items, isIncremental);
+                if (!isIncremental && !string.IsNullOrWhiteSpace(activeRuleId))
+                {
+                    (_currentControl.DataContext as MainCheckWindowViewModel)?.ActivateRuleInView(activeRuleId);
+                }
+            };
+
             if (!_currentControl.Dispatcher.CheckAccess())
             {
-                _currentControl.Dispatcher.Invoke(() => _currentControl.UpdateIssueItems(items, isIncremental));
+                _currentControl.Dispatcher.Invoke(updateAction);
             }
             else
             {
-                _currentControl.UpdateIssueItems(items, isIncremental);
+                updateAction();
             }
         }
 
         /// <summary>
         /// 打开核查主面板并按唯一 IssueId 列表展示核查结果（Stage 2 Commit 2.3）。
         /// </summary>
-        public void ShowIssueItems(IEnumerable<CheckIssueItem> items)
+        public void ShowIssueItems(IEnumerable<CheckIssueItem> items, string activeRuleId = null)
         {
             Show(new Dictionary<ObjectId, CheckIssueItem>());
-            UpdateIssueItems(items, isIncremental: false);
+            UpdateIssueItems(items, isIncremental: false, activeRuleId: activeRuleId);
         }
 
         /// <summary>
@@ -3771,7 +3962,7 @@ namespace process_pipeline.Forms
                     if (activeRule == null) continue;
                     var ruleIssues = activeRule.CheckAll();
                     if (ruleIssues != null &&
-                        string.Equals(activeRule.RuleId, CheckPipelineCoordinator.FlowArrowRuleId, StringComparison.OrdinalIgnoreCase))
+                        CheckPipelineCoordinator.IsDictionaryBasedRule(activeRule.RuleId))
                     {
                         session.MergeRuleIssues(activeRule.RuleId, ruleIssues, isIncremental: false);
                     }
@@ -3786,7 +3977,7 @@ namespace process_pipeline.Forms
             if (newProblems != null)
             {
                 if (session != null &&
-                    string.Equals(rule.RuleId, CheckPipelineCoordinator.FlowArrowRuleId, StringComparison.OrdinalIgnoreCase))
+                    CheckPipelineCoordinator.IsDictionaryBasedRule(rule.RuleId))
                 {
                     session.MergeRuleIssues(rule.RuleId, newProblems, isIncremental: false);
                 }

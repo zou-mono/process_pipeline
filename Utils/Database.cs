@@ -71,6 +71,7 @@ namespace process_pipeline.Utils
         // 用来存储发生变化的特定受影响目标管线 ID（HashSet 自动去重）
         private static HashSet<ObjectId> _changedObjectIds = new HashSet<ObjectId>();
         private static int _suppressEventDepth = 0;
+        private Document _currentDoc;
         private AcadDb.Database _currentDb;
         private ICheckRule _activeRule;
 
@@ -108,22 +109,22 @@ namespace process_pipeline.Utils
         {
             if (doc == null) return;
 
-            StopListening(doc);
+            StopListening(_currentDoc ?? doc);
 
+            _currentDoc = doc;
             _currentDb = doc.Database;
             var session = DocumentSessionManager.GetOrCreateSession(_currentDb);
-            _activeRule = session?.ActiveRule ?? new FlowArrowService(_currentDb, doc.Editor, false);
-            if (session != null && session.ActiveRule == null)
-            {
-                session.ActiveRule = _activeRule;
-            }
+            _activeRule = session?.ActiveRule;
 
             _changedObjectIds = new HashSet<ObjectId>();
         
             // 1. 监听底层数据库的增、删、改
-            _currentDb.ObjectAppended += Db_ObjectChanged;
-            _currentDb.ObjectModified += Db_ObjectChanged;
-            _currentDb.ObjectErased += Db_ObjectErased;
+            if (_currentDb != null)
+            {
+                _currentDb.ObjectAppended += Db_ObjectChanged;
+                _currentDb.ObjectModified += Db_ObjectChanged;
+                _currentDb.ObjectErased += Db_ObjectErased;
+            }
 
             // 2. 监听命令结束（用于统一结算）
             doc.CommandEnded += Doc_CommandEnded;
@@ -134,14 +135,39 @@ namespace process_pipeline.Utils
         {
             if (_currentDb != null)
             {
-                _currentDb.ObjectAppended -= Db_ObjectChanged;
-                _currentDb.ObjectModified -= Db_ObjectChanged;
-                _currentDb.ObjectErased -= Db_ObjectErased;
+                try
+                {
+                    _currentDb.ObjectAppended -= Db_ObjectChanged;
+                    _currentDb.ObjectModified -= Db_ObjectChanged;
+                    _currentDb.ObjectErased -= Db_ObjectErased;
+                }
+                catch
+                {
+                }
+                _currentDb = null;
             }
-            if (doc != null)
+            var targetDoc = _currentDoc ?? doc;
+            if (targetDoc != null)
             {
-                doc.CommandEnded -= Doc_CommandEnded;
+                try
+                {
+                    targetDoc.CommandEnded -= Doc_CommandEnded;
+                }
+                catch
+                {
+                }
             }
+            if (doc != null && !ReferenceEquals(doc, targetDoc))
+            {
+                try
+                {
+                    doc.CommandEnded -= Doc_CommandEnded;
+                }
+                catch
+                {
+                }
+            }
+            _currentDoc = null;
             _changedObjectIds?.Clear();
         }
 

@@ -31,12 +31,6 @@ namespace process_pipeline.Commands
             if (Doc == null) return;
 
             var service = new MatchGroupService(Doc.Database, Doc.Editor);
-            var session = DocumentSessionManager.GetOrCreateSession(Doc.Database);
-            if (session != null)
-            {
-                session.RegisterActiveRule(service);
-            }
-
             service.Run(CadConfig.TaskNames.MatchGroup, bOnlyUpdate: false);
         }
     }
@@ -184,7 +178,10 @@ namespace process_pipeline.Commands
                 }
             }
 
-            return BuildIssuesFromSummary(summary, existingSameRuleIssues, context);
+            var builtIssues = BuildIssuesFromSummary(summary, existingSameRuleIssues, context);
+            session?.RegisterActiveRule(this);
+            session?.MergeRuleIssues(RuleId, builtIssues, isIncremental: false);
+            return builtIssues;
         }
 
         /// <summary>
@@ -259,6 +256,7 @@ namespace process_pipeline.Commands
                 mergedIssues[kvp.Key] = kvp.Value;
             }
 
+            session?.MergeRuleIssues(RuleId, mergedIssues, isIncremental: true);
             return mergedIssues;
         }
 
@@ -488,10 +486,18 @@ namespace process_pipeline.Commands
             Ed?.WriteMessage(
                 $"\n[{RuleName}] 核查完成：共检出 {result.Count} 项（待核查冲突/不规范/多段共标/多余标注：{pendingCount} 项，待复核确认连线与绑定 Group：{toRecheckCount} 项）。\n");
 
+            session?.RegisterActiveRule(this);
             var mergedAll = session != null
                 ? session.MergeRuleIssues(RuleId, result, isIncremental: false)
                 : result;
-            palCheckPipe.Instance.Show(mergedAll);
+            if (session != null && session.IssuesById.Count > 0)
+            {
+                palCheckPipe.Instance.ShowIssueItems(session.GetAllIssueItems(), RuleId);
+            }
+            else
+            {
+                palCheckPipe.Instance.Show(mergedAll);
+            }
         }
 
         private Dictionary<ObjectId, CheckIssueItem> BuildIssuesFromSummary(

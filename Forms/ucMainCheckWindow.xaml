@@ -708,7 +708,8 @@
         <ContentControl Template="{StaticResource IconTemplate.FullCheck}" Width="20" Height="20" Focusable="False"/>
       </Button>
       <Border Style="{StaticResource CadToolbarSeparatorStyle}"/>
-      <ComboBox Width="162"
+      <ComboBox x:Name="cmbSingleRule"
+                Width="162"
                 Height="20"
                 FontSize="11.5"
                 Style="{StaticResource CadComboBoxStyle}"
@@ -716,7 +717,7 @@
                 SelectedItem="{Binding SelectedSingleRule, Mode=TwoWay}"
                 DisplayMemberPath="DisplayName"
                 VerticalContentAlignment="Center"
-                ToolTip="核查规则选择&#x0a;从下拉列表中选择需要单独执行的管线核查规则。"
+                ToolTip="核查规则选择&#x0a;从下拉列表中选择要执行的单项核查规则，点击右侧【单项核查】按钮开始核查。"
                 ToolTipService.InitialShowDelay="120"
                 ToolTipService.ShowDuration="15000"
                 Margin="0,0,3,0"/>

@@ -364,7 +364,13 @@ namespace process_pipeline.Core
         }
 
         /// <summary>
-        /// 在单次文档锁与单个事务保护下，批量反转多条目标 Curve（Line / Polyline 等）的起点与终点方向并一次性刷新显示。
+        /// 在单次文档锁与单个事务保护下，批量反转多条目标 Curve（Line / Polyline 等）的起点与终点方向并刷新显示。
+        /// 
+        /// 安全性说明：
+        /// 严禁在 WPF 非模态面板（ApplicationExecutionContext）或跨 MDI 文档切换后的右键菜单回调中调用
+        /// doc.Editor.Regen()（底层 P/Invoke ads_regen()），否则当视口焦点位于非模态面板或存在瞬态图形/夹点时
+        /// 极易触发 System.AccessViolationException。此处改用 Entity.RecordGraphicsModified(true) 配合
+        /// QueueForGraphicsFlush / FlushGraphics / UpdateScreen 实现安全、局部的图形缓存刷新。
         /// </summary>
         private static List<ObjectId> TryReverseCurvesInCad(IList<ObjectId> curveIds)
         {
@@ -372,43 +378,64 @@ namespace process_pipeline.Core
             if (curveIds == null || curveIds.Count == 0)
                 return reversed;
 
-            Document doc = AcadApp.DocumentManager.MdiActiveDocument;
-            if (doc == null)
+            ObjectId firstValidId = curveIds.FirstOrDefault(id => !id.IsNull && id.IsValid && !id.IsErased);
+            if (firstValidId.IsNull)
                 return reversed;
 
+            Document activeDoc = null;
             try
             {
-                doc.Editor?.SetImpliedSelection(Array.Empty<ObjectId>());
+                activeDoc = AcadApp.DocumentManager?.MdiActiveDocument;
             }
             catch
             {
-                // 忽略预选集清理异常
+                activeDoc = null;
             }
 
-            using (process_pipeline.Utils.PaletteRefreshManager.SuppressEventsScope())
-            using (DocumentLock docLock = doc.LockDocument())
+            Database targetDb = firstValidId.Database ?? activeDoc?.Database;
+            if (targetDb == null)
+                return reversed;
+
+            bool needDocLock = activeDoc != null && activeDoc.Database == targetDb;
+            DocumentLock docLock = needDocLock ? activeDoc.LockDocument() : null;
+
+            try
             {
-                using (Transaction tr = doc.Database.TransactionManager.StartTransaction())
+                if (needDocLock)
+                {
+                    try
+                    {
+                        process_pipeline.Utils.GraphicManager.ClearAuxiliaryGraphics();
+                        activeDoc.Editor?.SetImpliedSelection(Array.Empty<ObjectId>());
+                    }
+                    catch
+                    {
+                        // 忽略预选集与瞬态图形清理异常
+                    }
+                }
+
+                using (process_pipeline.Utils.PaletteRefreshManager.SuppressEventsScope())
+                using (Transaction tr = targetDb.TransactionManager.StartTransaction())
                 {
                     try
                     {
                         foreach (ObjectId curveId in curveIds)
                         {
-                            if (curveId.IsNull || !curveId.IsValid || curveId.IsErased)
+                            if (curveId.IsNull || !curveId.IsValid || curveId.IsErased || curveId.Database != targetDb)
                                 continue;
 
-                            Curve cv = tr.GetObject(curveId, OpenMode.ForWrite) as Curve;
-                            if (cv == null)
+                            Curve cv = tr.GetObject(curveId, OpenMode.ForWrite, false) as Curve;
+                            if (cv == null || cv.IsErased)
                                 continue;
 
                             cv.ReverseCurve();
+                            cv.RecordGraphicsModified(true);
                             reversed.Add(curveId);
                         }
 
                         if (reversed.Count > 0)
                         {
                             tr.Commit();
-                            doc.Editor.Regen();
                         }
                         else
                         {
@@ -421,6 +448,17 @@ namespace process_pipeline.Core
                         reversed.Clear();
                     }
                 }
+
+                if (reversed.Count > 0 && needDocLock)
+                {
+                    try { targetDb.TransactionManager?.QueueForGraphicsFlush(); } catch { }
+                    try { activeDoc.TransactionManager?.FlushGraphics(); } catch { }
+                    try { activeDoc.Editor?.UpdateScreen(); } catch { }
+                }
+            }
+            finally
+            {
+                docLock?.Dispose();
             }
 
             return reversed;

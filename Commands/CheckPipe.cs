@@ -50,12 +50,6 @@ namespace process_pipeline.Commands
             _ed = ed;
             _db = db;
             _rule = rule ?? new FlowArrowService(db, ed, false);
-
-            var session = DocumentSessionManager.GetOrCreateSession(db);
-            if (session != null)
-            {
-                session.RegisterActiveRule(_rule);
-            }
         }
 
         protected override Dictionary<ObjectId, CheckIssueItem> Execute(ProgressContext context)
@@ -64,9 +58,8 @@ namespace process_pipeline.Commands
             var session = DocumentSessionManager.GetOrCreateSession(_db);
             if (session != null && result != null)
             {
-                // FlowArrowService 仅返回按 ObjectId 组织的字典，需同步合并至 session.IssuesById；
-                // 其他规则（PlanDataCheck / MatchGroup / MatchPipe / CompareSegment）已在 CheckAll 内部直接调用 MergeRuleIssueItems。
-                if (string.Equals(_rule.RuleId, CheckPipelineCoordinator.FlowArrowRuleId, StringComparison.OrdinalIgnoreCase))
+                session.RegisterActiveRule(_rule);
+                if (CheckPipelineCoordinator.IsDictionaryBasedRule(_rule.RuleId))
                 {
                     return session.MergeRuleIssues(_rule.RuleId, result, isIncremental: false);
                 }
@@ -86,7 +79,7 @@ namespace process_pipeline.Commands
             var result = _rule.CheckIncremental(pipeIds, currentIssues, context);
             if (session != null && result != null)
             {
-                if (string.Equals(_rule.RuleId, CheckPipelineCoordinator.FlowArrowRuleId, StringComparison.OrdinalIgnoreCase))
+                if (CheckPipelineCoordinator.IsDictionaryBasedRule(_rule.RuleId))
                 {
                     return session.MergeRuleIssues(_rule.RuleId, result, isIncremental: true);
                 }
@@ -113,7 +106,7 @@ namespace process_pipeline.Commands
             {
                 if (session != null && session.IssuesById.Count > 0)
                 {
-                    palCheckPipe.Instance.ShowIssueItems(session.GetAllIssueItems());
+                    palCheckPipe.Instance.ShowIssueItems(session.GetAllIssueItems(), _rule?.RuleId);
                 }
                 else
                 {

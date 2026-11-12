@@ -341,23 +341,22 @@ namespace process_pipeline.Core
             if (rule == null)
                 return session?.GetAllIssueItems() ?? Array.Empty<CheckIssueItem>();
 
-            session?.RegisterActiveRule(rule);
             var ruleResult = rule.CheckAll(progress);
             if (ruleResult == null)
             {
-                // 子规则因前置数据缺失返回 null 时直接终止（严禁弹出主核查面板；若面板已停靠打开则同步刷新会话状态）
+                // 子规则因前置数据缺失返回 null 时直接终止（严禁弹出主核查面板；若面板已停靠打开则同步刷新会话状态，不注册无效规则）
+                var existingIssues = session?.GetAllIssueItems() ?? Array.Empty<CheckIssueItem>();
                 if (!ConfigManager.IsHeadlessOrSuppressedUi && palCheckPipe.Instance.IsVisible)
                 {
-                    palCheckPipe.Instance.UpdateIssueItems(
-                        session?.GetAllIssueItems() ?? Array.Empty<CheckIssueItem>(),
-                        isIncremental: false);
+                    palCheckPipe.Instance.UpdateIssueItems(existingIssues, isIncremental: false);
                 }
-                return Array.Empty<CheckIssueItem>();
+                return existingIssues;
             }
 
-            // FlowArrowService 的 CheckAll 仅返回字典，需显式同步合并至 session.IssuesById
-            if (session != null &&
-                string.Equals(rule.RuleId, FlowArrowRuleId, StringComparison.OrdinalIgnoreCase))
+            session?.RegisterActiveRule(rule);
+
+            // 单实体单问题字典规则（FlowArrow / MatchGroup / PlanDataCheck）统一合并至 session.IssuesById
+            if (session != null && IsDictionaryBasedRule(rule.RuleId))
             {
                 session.MergeRuleIssues(rule.RuleId, ruleResult, isIncremental: false);
             }
@@ -367,10 +366,17 @@ namespace process_pipeline.Core
 
             if (showPalette && !ConfigManager.IsHeadlessOrSuppressedUi)
             {
-                palCheckPipe.Instance.ShowIssueItems(allIssues);
+                palCheckPipe.Instance.ShowIssueItems(allIssues, rule.RuleId);
             }
 
             return allIssues;
+        }
+
+        public static bool IsDictionaryBasedRule(string ruleId)
+        {
+            return string.Equals(ruleId, FlowArrowRuleId, StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(ruleId, MatchGroupService.DefaultRuleId, StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(ruleId, PlanDataCheckService.DefaultRuleId, StringComparison.OrdinalIgnoreCase);
         }
 
         /// <summary>
@@ -451,7 +457,7 @@ namespace process_pipeline.Core
                 var ruleResult = rule.CheckAll(progress);
 
                 if (session != null &&
-                    string.Equals(rule.RuleId, FlowArrowRuleId, StringComparison.OrdinalIgnoreCase) &&
+                    IsDictionaryBasedRule(rule.RuleId) &&
                     ruleResult != null)
                 {
                     session.MergeRuleIssues(rule.RuleId, ruleResult, isIncremental: false);
