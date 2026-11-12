@@ -169,6 +169,7 @@ namespace process_pipeline.Utils
             }
             _currentDoc = null;
             _changedObjectIds?.Clear();
+            Application.Idle -= SafeRefreshPalette_Idle;
         }
 
         // 供人工修复操作（如翻转管线）主动触发增量刷新
@@ -309,11 +310,15 @@ namespace process_pipeline.Utils
             Application.Idle -= SafeRefreshPalette_Idle;
         
             Document doc = Application.DocumentManager.MdiActiveDocument;
-            if (doc == null || _changedObjectIds == null || _changedObjectIds.Count == 0) return;
+            if (doc?.Database == null || _changedObjectIds == null || _changedObjectIds.Count == 0) return;
 
-            // 1. 把收集到的 ID 拿出来，并立刻清空集合，迎接下一次命令
-            List<ObjectId> idsToProcess = _changedObjectIds.ToList();
+            // 1. 把收集到的 ID 拿出来（仅保留属于当前活动文档 Database 的有效 ObjectId），并立刻清空集合
+            List<ObjectId> idsToProcess = _changedObjectIds
+                .Where(id => !id.IsNull && id.Database == doc.Database)
+                .ToList();
             _changedObjectIds.Clear();
+
+            if (idsToProcess.Count == 0) return;
 
             // 2. 触发面板表格的局部增量重算与单行刷新
             GraphicManager.RefreshDataGrid(doc, idsToProcess);

@@ -442,12 +442,79 @@ namespace Cad.Plugin
                             string.Equals(mainVm.SelectedTreeNode?.RuleNameFilter, "规划数据自检", StringComparison.OrdinalIgnoreCase),
                             $"[多规则并存保护] 全量核查后再单独执行 CHECKPLAN，全表 {mainVm.Rows.Count} 条多折线段与缺失段记录 100% 完整保留，且导航树自动聚焦 [{mainVm.SelectedTreeNode?.Name}]");
 
+                        // 9.4 验证多规则并存时单管线增量重算隔离（Case 5：修复管线 139 颜色合规后 CheckPlan:139:0 自动归档为 Resolved，同时不覆盖 139 的 CompareSegment 记录、不伪造 FlowArrow:139:0）
+                        ObjectId pipe139Id = ObjectId.Null;
+                        if (session.IssuesById.TryGetValue("CheckPlan:139:0", out var checkPlan139Issue) && checkPlan139Issue != null)
+                        {
+                            pipe139Id = checkPlan139Issue.TargetObjectId;
+                        }
+                        AssertTrue(
+                            !pipe139Id.IsNull && checkPlan139Issue.Status == IssueReviewStatus.Pending,
+                            $"[多规则增量前置] 管线 [139] 初始存在 CheckPlan:139:0 (Status={checkPlan139Issue?.Status})");
+
+                        using (Transaction trFixColor = planDb.TransactionManager.StartTransaction())
+                        {
+                            var ent139 = trFixColor.GetObject(pipe139Id, OpenMode.ForWrite) as Entity;
+                            if (ent139 != null)
+                            {
+                                ent139.ColorIndex = 256; // ByLayer 合规颜色
+                            }
+                            trFixColor.Commit();
+                        }
+
+                        var affectedPipe139List = new List<ObjectId> { pipe139Id };
+                        foreach (ICheckRule activeRule in session.ActiveRules.Values.Where(r => r != null).ToList())
+                        {
+                            var sameRuleDict = session.GetRuleIssueDictionary(activeRule.RuleId);
+                            var incResult = activeRule.CheckIncremental(affectedPipe139List, sameRuleDict);
+                            if (incResult != null && CheckPipelineCoordinator.IsDictionaryBasedRule(activeRule.RuleId))
+                            {
+                                session.MergeRuleIssues(activeRule.RuleId, incResult, isIncremental: true);
+                            }
+                        }
+                        mainVm.UpdateFromIssueItems(session.GetAllIssueItems(), isIncremental: true);
+
+                        bool checkPlan139Resolved =
+                            session.IssuesById.TryGetValue("CheckPlan:139:0", out var updatedCheckPlan139) &&
+                            updatedCheckPlan139 != null &&
+                            updatedCheckPlan139.Status == IssueReviewStatus.Resolved;
+                        bool compareSeg139Intact =
+                            session.IssuesById.Values.Any(i =>
+                                i != null &&
+                                string.Equals(i.RuleId, CompareSegmentService.DefaultRuleId, StringComparison.OrdinalIgnoreCase) &&
+                                string.Equals(i.TargetHandle, "139", StringComparison.OrdinalIgnoreCase) &&
+                                i.Status == IssueReviewStatus.Pending);
+                        bool noPhantomFlowArrow139 = !session.IssuesById.ContainsKey("FlowArrow:139:0");
+
+                        AssertTrue(
+                            checkPlan139Resolved && compareSeg139Intact && noPhantomFlowArrow139,
+                            $"[多规则增量重算隔离] 修改管线 [139] 为 ByLayer 后：CheckPlan:139:0 Status={updatedCheckPlan139?.Status}，CompareSegment(139) 保持 Pending={compareSeg139Intact}，无伪造 FlowArrow:139:0={noPhantomFlowArrow139}");
+
+                        // 恢复管线 139 原始颜色（ACI=3）以便后续测试环境干净
+                        using (Transaction trRestoreColor = planDb.TransactionManager.StartTransaction())
+                        {
+                            var ent139 = trRestoreColor.GetObject(pipe139Id, OpenMode.ForWrite) as Entity;
+                            if (ent139 != null)
+                            {
+                                ent139.ColorIndex = 3;
+                            }
+                            trRestoreColor.Commit();
+                        }
+
                         // ──────────────────────────────────────────────────
                         // 10. Commit 6.4：空图纸顶层统一预核查拦截（Fail-Fast）与多弹窗合并验证
                         // ──────────────────────────────────────────────────
                         Logger.Info("[测试阶段 10] 验证空图纸顶层统一预核查拦截（Fail-Fast）与单次合并提示...");
                         using (Database emptyDb = new Database(true, true))
                         {
+                            var emptySessionBefore = DocumentSessionManager.GetOrCreateSession(emptyDb);
+                            mainVm.RefreshByRule(emptyDb);
+                            AssertTrue(
+                                emptySessionBefore.ActiveRules.Count == 0 &&
+                                emptySessionBefore.ActiveRule == null &&
+                                mainVm.StatusText != null &&
+                                mainVm.StatusText.Contains("尚未执行过核查规则"),
+                                $"[空会话刷新保护] 未执行过核查的文档调用 RefreshByRule 不伪造默认规则 (ActiveRules={emptySessionBefore.ActiveRules.Count}，StatusText={mainVm.StatusText})");
                             var emptyPreCheck = PreCheckService.ValidateFullPipelinePreConditions(emptyDb, showDialogOnBlocking: false);
                             AssertTrue(
                                 emptyPreCheck != null &&

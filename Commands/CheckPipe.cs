@@ -69,14 +69,29 @@ namespace process_pipeline.Commands
 
         protected override Dictionary<ObjectId, CheckIssueItem> Execute(ProgressContext context, List<ObjectId> pipeIds)
         {
-            var session = DocumentSessionManager.GetOrCreateSession(_db);
-            var currentIssues = session?.CurrentIssues != null && session.CurrentIssues.Count > 0
-                ? new Dictionary<ObjectId, CheckIssueItem>(session.CurrentIssues)
-                : (palCheckPipe.Instance.CurrentIssues != null
-                    ? palCheckPipe.Instance.CurrentIssues.ToDictionary(kvp => kvp.Key, kvp => kvp.Value)
-                    : new Dictionary<ObjectId, CheckIssueItem>());
+            if (_rule == null)
+                return new Dictionary<ObjectId, CheckIssueItem>();
 
-            var result = _rule.CheckIncremental(pipeIds, currentIssues, context);
+            var session = DocumentSessionManager.GetOrCreateSession(_db);
+            Dictionary<ObjectId, CheckIssueItem> sameRuleIssues;
+            if (session != null)
+            {
+                sameRuleIssues = session.GetRuleIssueDictionary(_rule.RuleId);
+            }
+            else if (palCheckPipe.Instance.CurrentIssues != null)
+            {
+                sameRuleIssues = palCheckPipe.Instance.CurrentIssues
+                    .Where(kvp => kvp.Value != null &&
+                                  (string.IsNullOrWhiteSpace(kvp.Value.RuleId) ||
+                                   string.Equals(kvp.Value.RuleId, _rule.RuleId, StringComparison.OrdinalIgnoreCase)))
+                    .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+            }
+            else
+            {
+                sameRuleIssues = new Dictionary<ObjectId, CheckIssueItem>();
+            }
+
+            var result = _rule.CheckIncremental(pipeIds, sameRuleIssues, context);
             if (session != null && result != null)
             {
                 if (CheckPipelineCoordinator.IsDictionaryBasedRule(_rule.RuleId))

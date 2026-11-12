@@ -3063,10 +3063,50 @@ namespace process_pipeline.Forms
         }
 
         /// <summary>
-        /// 重新调用核查规则刷新数据。
+        /// 重新调用当前文档已激活的核查规则刷新数据（若当前文档尚未执行过任何核查规则，则提示先执行核查，不凭空构造默认规则）。
         /// </summary>
-        public void RefreshByRule()
+        public void RefreshByRule(AcadDb.Database targetDb = null)
         {
+            var doc = AcadApp.DocumentManager?.MdiActiveDocument;
+            var db = targetDb ?? doc?.Database;
+            if (db == null)
+            {
+                StatusText = "当前无活动 CAD 文档，无法刷新核查数据";
+                return;
+            }
+
+            var session = DocumentSessionManager.GetOrCreateSession(db);
+            bool hasActiveRules = session != null &&
+                                  ((session.ActiveRules != null && session.ActiveRules.Count > 0) ||
+                                   session.ActiveRule != null);
+            if (!hasActiveRules)
+            {
+                StatusText = "当前文档尚未执行过核查规则，请先执行全量核查或单项核查";
+                return;
+            }
+
+            if (targetDb != null)
+            {
+                var rulesToRun = session.ActiveRules != null && session.ActiveRules.Count > 0
+                    ? session.ActiveRules.Values.Where(r => r != null).ToList()
+                    : new List<ICheckRule> { session.ActiveRule };
+
+                foreach (ICheckRule activeRule in rulesToRun)
+                {
+                    if (activeRule == null) continue;
+                    var ruleIssues = activeRule.CheckAll();
+                    if (ruleIssues != null &&
+                        CheckPipelineCoordinator.IsDictionaryBasedRule(activeRule.RuleId))
+                    {
+                        session.MergeRuleIssues(activeRule.RuleId, ruleIssues, isIncremental: false);
+                    }
+                }
+
+                UpdateFromIssueItems(session.GetAllIssueItems(), isIncremental: false);
+                StatusText = $"已刷新当前文档已激活的 {rulesToRun.Count} 项核查规则（共 {Rows.Count} 条记录）";
+                return;
+            }
+
             palCheckPipe.Instance.RefreshData();
         }
 
@@ -3960,11 +4000,29 @@ namespace process_pipeline.Forms
             if (doc == null) return;
 
             var session = DocumentSessionManager.GetOrCreateSession(doc.Database);
-            if (session != null && session.ActiveRules.Count > 1)
+            var activeRules = new List<ICheckRule>();
+            if (session?.ActiveRules != null && session.ActiveRules.Count > 0)
             {
-                foreach (ICheckRule activeRule in session.ActiveRules.Values.ToList())
+                activeRules.AddRange(session.ActiveRules.Values.Where(r => r != null));
+            }
+            else if (session?.ActiveRule != null)
+            {
+                activeRules.Add(session.ActiveRule);
+            }
+
+            if (activeRules.Count == 0)
+            {
+                if (_currentControl?.DataContext is MainCheckWindowViewModel vm)
                 {
-                    if (activeRule == null) continue;
+                    vm.StatusText = "当前文档尚未执行过核查规则，请先执行全量核查或单项核查";
+                }
+                return;
+            }
+
+            if (activeRules.Count > 1)
+            {
+                foreach (ICheckRule activeRule in activeRules)
+                {
                     var ruleIssues = activeRule.CheckAll();
                     if (ruleIssues != null &&
                         CheckPipelineCoordinator.IsDictionaryBasedRule(activeRule.RuleId))
@@ -3977,7 +4035,7 @@ namespace process_pipeline.Forms
                 return;
             }
 
-            ICheckRule rule = session?.ActiveRule ?? new FlowArrowService(doc.Database, doc.Editor);
+            ICheckRule rule = activeRules[0];
             var newProblems = rule.CheckAll();
             if (newProblems != null)
             {

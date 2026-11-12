@@ -321,27 +321,42 @@ namespace process_pipeline.Utils
         {
             GraphicManager.ClearAuxiliaryGraphics();
 
-            // Commit 3.3 & 5.4：所有核查命令（MATCHPIPE / MATCHARROW 等）已统一收拢至主核查窗口 palCheckPipe，
-            // 当面板可见时，复用当前文档会话的 ActiveRule 执行局部增量重算与单行就地刷新
+            if (doc?.Database == null || idsToProcess == null || idsToProcess.Count == 0)
+                return;
+
+            List<ObjectId> validIds = idsToProcess
+                .Where(id => !id.IsNull && id.Database == doc.Database)
+                .Distinct()
+                .ToList();
+            if (validIds.Count == 0)
+                return;
+
+            // Commit 3.3 & 5.4：所有核查命令（MATCHPIPE / MATCHARROW 等）已统一收拢至主核查面板 palCheckPipe，
+            // 当面板可见时，复用当前文档会话的已激活规则执行局部增量重算与单行就地刷新
             if (palCheckPipe.Instance.IsVisible)
             {
                 var session = DocumentSessionManager.GetOrCreateSession(doc.Database);
-                if (session?.ActiveRules != null && session.ActiveRules.Count > 1)
+                var activeRules = new List<ICheckRule>();
+                if (session?.ActiveRules != null && session.ActiveRules.Count > 0)
                 {
-                    foreach (ICheckRule activeRule in session.ActiveRules.Values.ToList())
-                    {
-                        if (activeRule == null) continue;
-                        var service = new CheckPipeService(doc.Database, doc.Editor, activeRule);
-                        service.Run(activeRule.RuleName ?? CadConfig.TaskNames.FlowArrow, true, idsToProcess);
-                    }
+                    activeRules.AddRange(session.ActiveRules.Values.Where(r => r != null));
                 }
-                else
+                else if (session?.ActiveRule != null)
                 {
-                    var service = new CheckPipeService(doc.Database, doc.Editor, session?.ActiveRule);
-                    service.Run(CadConfig.TaskNames.FlowArrow, true, idsToProcess);
+                    activeRules.Add(session.ActiveRule);
                 }
 
-                foreach (ObjectId oid in idsToProcess)
+                // 若当前文档尚未执行过任何核查规则，静默跳过后台增量重算，防止凭空伪造 FlowArrowService 弹窗报错
+                if (activeRules.Count == 0)
+                    return;
+
+                foreach (ICheckRule activeRule in activeRules)
+                {
+                    var service = new CheckPipeService(doc.Database, doc.Editor, activeRule);
+                    service.Run(activeRule.RuleName ?? CadConfig.TaskNames.FlowArrow, true, validIds);
+                }
+
+                foreach (ObjectId oid in validIds)
                 {
                     var issuesForOid = session != null
                         ? session.GetIssuesByObjectId(oid)

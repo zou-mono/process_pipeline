@@ -682,9 +682,25 @@ namespace process_pipeline.Commands
             Dictionary<ObjectId, CheckIssueItem> currentIssues = null,
             ProgressContext context = null)
         {
-            var mergedIssues = currentIssues != null
-                ? new Dictionary<ObjectId, CheckIssueItem>(currentIssues)
+            var session = DocumentSessionManager.GetOrCreateSession(_db);
+            var mergedIssues = session != null
+                ? session.GetRuleIssueDictionary(RuleId)
                 : new Dictionary<ObjectId, CheckIssueItem>();
+
+            if (currentIssues != null)
+            {
+                foreach (var kvp in currentIssues)
+                {
+                    if (kvp.Value == null)
+                        continue;
+
+                    if (string.IsNullOrWhiteSpace(kvp.Value.RuleId) ||
+                        string.Equals(kvp.Value.RuleId, RuleId, StringComparison.OrdinalIgnoreCase))
+                    {
+                        mergedIssues[kvp.Key] = kvp.Value;
+                    }
+                }
+            }
 
             if (targetIds == null || targetIds.Count == 0)
                 return mergedIssues;
@@ -693,16 +709,19 @@ namespace process_pipeline.Commands
             if (arrowData == null || arrowData.Count == 0)
                 return mergedIssues;
 
-            // 构造仅针对目标管线的局部 ProblemItem 容器进行重算
+            // 构造仅针对目标管线的局部 ProblemItem 容器进行重算（仅对原本存在 FlowArrow 问题的管线预置 ProblemItem）
             var localProblems = new Dictionary<ObjectId, ProblemItem>();
             foreach (ObjectId id in targetIds)
             {
-                if (mergedIssues.ContainsKey(id))
+                if (mergedIssues.TryGetValue(id, out CheckIssueItem existingFlowIssue) &&
+                    existingFlowIssue != null &&
+                    (string.IsNullOrWhiteSpace(existingFlowIssue.RuleId) ||
+                     string.Equals(existingFlowIssue.RuleId, RuleId, StringComparison.OrdinalIgnoreCase)))
                 {
                     localProblems[id] = new ProblemItem
                     {
                         PipeId = id,
-                        IsFixed = mergedIssues[id].IsFixed
+                        IsFixed = existingFlowIssue.IsFixed
                     };
                 }
             }
@@ -727,7 +746,9 @@ namespace process_pipeline.Commands
                 }
             }
 
-            return ConvertProblemsToIssues(localProblems, mergedIssues);
+            var updated = ConvertProblemsToIssues(localProblems, mergedIssues);
+            session?.MergeRuleIssues(RuleId, updated, isIncremental: true);
+            return updated;
         }
 
         /// <summary>
@@ -860,16 +881,27 @@ namespace process_pipeline.Commands
             {
                 // Commit 5.4：将 MATCHARROW 增量重算结果统一合并到当前文档会话并驱动主核查面板局部刷新
                 var session = DocumentSessionManager.GetOrCreateSession(_db);
-                var existingIssues = session?.CurrentIssues != null && session.CurrentIssues.Count > 0
-                    ? new Dictionary<ObjectId, CheckIssueItem>(session.CurrentIssues)
+                var existingIssues = session != null
+                    ? session.GetRuleIssueDictionary(RuleId)
                     : (palCheckPipe.Instance.CurrentIssues != null
-                        ? palCheckPipe.Instance.CurrentIssues.ToDictionary(kvp => kvp.Key, kvp => kvp.Value)
+                        ? palCheckPipe.Instance.CurrentIssues
+                            .Where(kvp => kvp.Value != null &&
+                                          (string.IsNullOrWhiteSpace(kvp.Value.RuleId) ||
+                                           string.Equals(kvp.Value.RuleId, RuleId, StringComparison.OrdinalIgnoreCase)))
+                            .ToDictionary(kvp => kvp.Key, kvp => kvp.Value)
                         : new Dictionary<ObjectId, CheckIssueItem>());
                 var convertedIssues = ConvertProblemsToIssues(result, existingIssues);
                 var merged = session != null
                     ? session.MergeRuleIssues(RuleId, convertedIssues, isIncremental: true)
                     : convertedIssues;
-                palCheckPipe.Instance.UpdateIncrementalData(merged);
+                if (session != null && session.IssuesById.Count > 0)
+                {
+                    palCheckPipe.Instance.UpdateIssueItems(session.GetAllIssueItems(), isIncremental: true);
+                }
+                else
+                {
+                    palCheckPipe.Instance.UpdateIncrementalData(merged);
+                }
             }
             else { 
                 // 弹窗展示

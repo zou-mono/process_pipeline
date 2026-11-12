@@ -69,7 +69,7 @@ namespace process_pipeline.Core
 
         private void OnDocumentActivated(object sender, DocumentCollectionEventArgs e)
         {
-            if (e?.Document == null || !IsVisible) return;
+            if (e?.Document == null || _paletteSet == null || _paletteSet.IsDisposed) return;
             if (_listeningDoc == e.Document) return;
 
             GraphicManager.ClearAuxiliaryGraphics();
@@ -80,7 +80,10 @@ namespace process_pipeline.Core
             }
 
             _listeningDoc = e.Document;
-            _refreshManager?.StartListening(_listeningDoc);
+            if (IsVisible)
+            {
+                _refreshManager?.StartListening(_listeningDoc);
+            }
             OnActiveDocumentChanged(e.Document);
         }
 
@@ -128,6 +131,7 @@ namespace process_pipeline.Core
                 }
                 _listeningDoc = currentDoc;
                 _refreshManager.StartListening(currentDoc);
+                OnActiveDocumentChanged(currentDoc);
             }
 
             UpdateData(initialData != null ? initialData : GetInitialData());

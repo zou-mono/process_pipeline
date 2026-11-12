@@ -240,6 +240,46 @@ namespace process_pipeline.Core
         }
 
         /// <summary>
+        /// 获取当前文档会话中指定核查规则（<paramref name="ruleId"/>）按 <see cref="ObjectId"/> 索引的问题字典快照。
+        /// 从 <see cref="IssuesById"/> 与 <see cref="CurrentIssues"/> 中精确提取属于该规则的记录，
+        /// 防止多规则并存时不同规则在同一管线上的问题在增量重算中互相覆盖或串扰。
+        /// </summary>
+        public Dictionary<ObjectId, CheckIssueItem> GetRuleIssueDictionary(string ruleId)
+        {
+            var dict = new Dictionary<ObjectId, CheckIssueItem>();
+            if (string.IsNullOrWhiteSpace(ruleId))
+                return dict;
+
+            if (CurrentIssues != null)
+            {
+                foreach (var kvp in CurrentIssues)
+                {
+                    if (!kvp.Key.IsNull &&
+                        kvp.Value != null &&
+                        string.Equals(kvp.Value.RuleId, ruleId, StringComparison.OrdinalIgnoreCase))
+                    {
+                        dict[kvp.Key] = kvp.Value;
+                    }
+                }
+            }
+
+            if (IssuesById != null)
+            {
+                foreach (CheckIssueItem item in IssuesById.Values)
+                {
+                    if (item != null &&
+                        !item.TargetObjectId.IsNull &&
+                        string.Equals(item.RuleId, ruleId, StringComparison.OrdinalIgnoreCase))
+                    {
+                        dict[item.TargetObjectId] = item;
+                    }
+                }
+            }
+
+            return dict;
+        }
+
+        /// <summary>
         /// 按核查规则 ID 合并更新当前文档会话的问题字典（兼容以 ObjectId 为键的旧调用方，同时同步更新 IssuesById 与二级索引）。
         /// </summary>
         public Dictionary<ObjectId, CheckIssueItem> MergeRuleIssues(
@@ -255,18 +295,31 @@ namespace process_pipeline.Core
             if (ruleIssues == null)
                 return CurrentIssues;
 
+            var filteredRuleIssues = new Dictionary<ObjectId, CheckIssueItem>();
             foreach (var kvp in ruleIssues)
             {
-                if (kvp.Value != null && kvp.Value.TargetObjectId.IsNull && !kvp.Key.IsNull)
+                if (kvp.Value == null)
+                    continue;
+
+                if (!string.IsNullOrWhiteSpace(ruleId) &&
+                    !string.IsNullOrWhiteSpace(kvp.Value.RuleId) &&
+                    !string.Equals(kvp.Value.RuleId, ruleId, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                if (kvp.Value.TargetObjectId.IsNull && !kvp.Key.IsNull)
                 {
                     kvp.Value.TargetObjectId = kvp.Key;
                 }
+
+                filteredRuleIssues[kvp.Key] = kvp.Value;
             }
 
-            MergeRuleIssueItems(ruleId, ruleIssues.Values, isIncremental, ruleIssues.Keys);
+            MergeRuleIssueItems(ruleId, filteredRuleIssues.Values, isIncremental, filteredRuleIssues.Keys);
 
             // 确保按 ObjectId 映射的字典对当前规则的键值完全同步
-            foreach (var kvp in ruleIssues)
+            foreach (var kvp in filteredRuleIssues)
             {
                 if (kvp.Value != null)
                 {

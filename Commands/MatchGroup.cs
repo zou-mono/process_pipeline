@@ -194,11 +194,26 @@ namespace process_pipeline.Commands
             Dictionary<ObjectId, CheckIssueItem> currentIssues = null,
             ProgressContext context = null)
         {
-            var mergedIssues = currentIssues != null
-                ? new Dictionary<ObjectId, CheckIssueItem>(currentIssues)
+            var session = DocumentSessionManager.GetOrCreateSession(_db);
+            var mergedIssues = session != null
+                ? session.GetRuleIssueDictionary(RuleId)
                 : new Dictionary<ObjectId, CheckIssueItem>();
 
-            var session = DocumentSessionManager.GetOrCreateSession(_db);
+            if (currentIssues != null)
+            {
+                foreach (var kvp in currentIssues)
+                {
+                    if (kvp.Value == null)
+                        continue;
+
+                    if (string.IsNullOrWhiteSpace(kvp.Value.RuleId) ||
+                        string.Equals(kvp.Value.RuleId, RuleId, StringComparison.OrdinalIgnoreCase))
+                    {
+                        mergedIssues[kvp.Key] = kvp.Value;
+                    }
+                }
+            }
+
             session?.DatasetContext.InvalidatePreviousData();
 
             ResolveTargetLayers(out HashSet<string> pipeLayers, out HashSet<string> attrLayers, out bool isPlanTextMode);

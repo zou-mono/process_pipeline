@@ -474,11 +474,26 @@ namespace process_pipeline.Core.PreCheck
             Dictionary<ObjectId, CheckIssueItem> existingIssues,
             ProgressContext progress = null)
         {
-            var result = existingIssues != null
-                ? new Dictionary<ObjectId, CheckIssueItem>(existingIssues)
+            var session = DocumentSessionManager.GetOrCreateSession(_db);
+            var result = session != null
+                ? session.GetRuleIssueDictionary(RuleId)
                 : new Dictionary<ObjectId, CheckIssueItem>();
 
-            var session = DocumentSessionManager.GetOrCreateSession(_db);
+            if (existingIssues != null)
+            {
+                foreach (var kvp in existingIssues)
+                {
+                    if (kvp.Value == null)
+                        continue;
+
+                    if (string.IsNullOrWhiteSpace(kvp.Value.RuleId) ||
+                        string.Equals(kvp.Value.RuleId, RuleId, StringComparison.OrdinalIgnoreCase))
+                    {
+                        result[kvp.Key] = kvp.Value;
+                    }
+                }
+            }
+
             PlanDataCheckReport latestReport = InspectPlanningData(
                 Settings ?? CadConfig.PlanningData,
                 session?.DatasetContext,
@@ -522,6 +537,7 @@ namespace process_pipeline.Core.PreCheck
                 result[kvp.Key] = kvp.Value;
             }
 
+            session?.MergeRuleIssues(RuleId, result, isIncremental: true);
             return result;
         }
 
@@ -568,7 +584,8 @@ namespace process_pipeline.Core.PreCheck
 
                 // 若实体曾经在问题列表中（例如刚被移出规划图层或擦除），同样纳入重算范围
                 var session = DocumentSessionManager.GetOrCreateSession(_db);
-                if (session?.CurrentIssues != null && session.CurrentIssues.ContainsKey(ent.ObjectId))
+                if ((session?.CurrentIssues != null && session.CurrentIssues.ContainsKey(ent.ObjectId)) ||
+                    (session?.ObjectIdToIssueIds != null && session.ObjectIdToIssueIds.ContainsKey(ent.ObjectId)))
                 {
                     return new[] { ent.ObjectId };
                 }
