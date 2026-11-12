@@ -31,9 +31,18 @@ namespace process_pipeline.Commands
 
         public SelectByHandleService(Autodesk.AutoCAD.DatabaseServices.Database db, Editor ed) : base(db, ed) {
             _gripLimit = CadConfig.GripLimit;
-            
-            // 夹点上限值
-            Application.SetSystemVariable("GRIPOBJLIMIT", _gripLimit);
+            try
+            {
+                object curVal = Application.GetSystemVariable("GRIPOBJLIMIT");
+                if (curVal == null || Convert.ToInt32(curVal) != _gripLimit)
+                {
+                    Application.SetSystemVariable("GRIPOBJLIMIT", _gripLimit);
+                }
+            }
+            catch
+            {
+                // 忽略系统变量读写异常
+            }
         }
 
         protected override void ExecuteVoid(ProgressContext context, List<ObjectId> objectids) { }

@@ -99,6 +99,16 @@ namespace process_pipeline.Core
         public string NextRedoDescription => _redoStack.Count > 0 ? _redoStack.Peek().Description : string.Empty;
 
         /// <summary>
+        /// 查看栈顶即将撤销的操作实例（不弹出栈）。
+        /// </summary>
+        public IUserOperation PeekUndo() => _undoStack.Count > 0 ? _undoStack.Peek() : null;
+
+        /// <summary>
+        /// 查看栈顶即将重做的操作实例（不弹出栈）。
+        /// </summary>
+        public IUserOperation PeekRedo() => _redoStack.Count > 0 ? _redoStack.Peek() : null;
+
+        /// <summary>
         /// 执行一个新的人工可逆操作，并将其压入撤销栈，同时清空重做栈。
         /// </summary>
         public void ExecuteOperation(IUserOperation operation)
@@ -182,6 +192,7 @@ namespace process_pipeline.Core
     public class ChangeIssueStatusOperation : IUserOperation
     {
         private readonly List<(CheckIssueItem Before, CheckIssueItem After, Action<CheckIssueItem> ApplyAction)> _items;
+        private readonly Action _onBatchCompleted;
 
         public string Description { get; }
         public bool TouchesCadDatabase => false;
@@ -191,14 +202,16 @@ namespace process_pipeline.Core
             CheckIssueItem beforeSnapshot,
             CheckIssueItem afterSnapshot,
             Action<CheckIssueItem> applyIssueAction,
-            string description = null)
-            : this(new[] { (beforeSnapshot, afterSnapshot, applyIssueAction) }, description)
+            string description = null,
+            Action onBatchCompleted = null)
+            : this(new[] { (beforeSnapshot, afterSnapshot, applyIssueAction) }, description, onBatchCompleted)
         {
         }
 
         public ChangeIssueStatusOperation(
             IList<(CheckIssueItem Before, CheckIssueItem After, Action<CheckIssueItem> ApplyAction)> items,
-            string description = null)
+            string description = null,
+            Action onBatchCompleted = null)
         {
             if (items == null || items.Count == 0)
                 throw new ArgumentException("修改项集合不能为空", nameof(items));
@@ -207,6 +220,7 @@ namespace process_pipeline.Core
                 .Where(x => x.Before != null && x.After != null && x.ApplyAction != null)
                 .Select(x => (x.Before.CloneSnapshot(), x.After.CloneSnapshot(), x.ApplyAction))
                 .ToList();
+            _onBatchCompleted = onBatchCompleted;
 
             if (!string.IsNullOrWhiteSpace(description))
             {
@@ -231,6 +245,7 @@ namespace process_pipeline.Core
             {
                 item.ApplyAction(item.After.CloneSnapshot());
             }
+            _onBatchCompleted?.Invoke();
         }
 
         public void Undo()
@@ -239,6 +254,7 @@ namespace process_pipeline.Core
             {
                 item.ApplyAction(item.Before.CloneSnapshot());
             }
+            _onBatchCompleted?.Invoke();
         }
     }
 

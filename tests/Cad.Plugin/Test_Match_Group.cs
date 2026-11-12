@@ -410,6 +410,57 @@ namespace Cad.Plugin
                         AssertTrue(row71 != null && rowB8 != null && transientsFor71 >= 6 && transientsForB8 >= 6 && transientsForAll317 >= 317 * 6,
                             $"点击单行及大批量框选全部 317 行均完整生成管线(洋红)+属性块矩形外框(洋红)+辅助连线/锚圈(红)瞬态高亮 (71={transientsFor71}, B8={transientsForB8}, 全选317行={transientsForAll317})");
 
+                        // 5.0.1 验证各状态节点下右键菜单状态切换按钮的上下文感知显隐，以及标记为“已忽略”后的 Undo / Redo 完整闭环
+                        var statusTestRuleNode = vm.TreeNodes.FirstOrDefault(n => n.FilterKind == TreeFilterKind.RuleCategory);
+                        var statusTestRecheckNode = statusTestRuleNode?.Children.FirstOrDefault(c => c.StatusFilter == IssueReviewStatus.ToRecheck);
+                        var statusTestIgnoredNode = statusTestRuleNode?.Children.FirstOrDefault(c => c.StatusFilter == IssueReviewStatus.Ignored);
+
+                        vm.SelectedTreeNode = statusTestRecheckNode;
+                        vm.SetSelectedRows(new[] { row71 }, syncCadSelection: false);
+                        AssertTrue(
+                            vm.MarkToRecheckMenuVisibility == System.Windows.Visibility.Collapsed &&
+                            vm.MarkPendingMenuVisibility == System.Windows.Visibility.Visible &&
+                            vm.MarkIgnoredMenuVisibility == System.Windows.Visibility.Visible &&
+                            vm.MarkResolvedMenuVisibility == System.Windows.Visibility.Visible,
+                            "在【待复核】节点下右键菜单自动隐藏‘标记为【待复核】’，仅展示【待核查】【已忽略】【已修复】三个可切换状态");
+
+                        vm.MarkIgnoredCommand.Execute(null);
+                        AssertTrue(
+                            row71.SourceIssue.Status == IssueReviewStatus.Ignored &&
+                            !vm.GetVisibleRows().Contains(row71) &&
+                            vm.UndoCommand.CanExecute(null),
+                            "将 71 标记为【已忽略】后，该行立即从【待复核】节点移出，且 UndoCommand 处于激活可用状态");
+
+                        vm.SelectedTreeNode = statusTestIgnoredNode;
+                        vm.SetSelectedRows(new[] { row71 }, syncCadSelection: false);
+                        AssertTrue(
+                            vm.GetVisibleRows().Contains(row71) &&
+                            vm.MarkIgnoredMenuVisibility == System.Windows.Visibility.Collapsed &&
+                            vm.MarkPendingMenuVisibility == System.Windows.Visibility.Visible &&
+                            vm.MarkToRecheckMenuVisibility == System.Windows.Visibility.Visible &&
+                            vm.MarkResolvedMenuVisibility == System.Windows.Visibility.Visible,
+                            "切换到【已忽略】节点后可看到 71，且右键菜单自动隐藏‘标记为【已忽略】’，仅展示可切换的其他状态");
+
+                        vm.UndoCommand.Execute(null);
+                        AssertTrue(
+                            row71.SourceIssue.Status == IssueReviewStatus.ToRecheck &&
+                            !vm.GetVisibleRows().Contains(row71) &&
+                            vm.RedoCommand.CanExecute(null),
+                            "在【已忽略】节点下执行 Undo 撤销后，71 状态立即恢复为【待复核】并从【已忽略】节点移出，RedoCommand 激活可用");
+
+                        vm.RedoCommand.Execute(null);
+                        AssertTrue(
+                            row71.SourceIssue.Status == IssueReviewStatus.Ignored &&
+                            vm.GetVisibleRows().Contains(row71),
+                            "执行 Redo 重做后，71 状态再次变为【已忽略】并重新出现在【已忽略】节点中");
+
+                        vm.UndoCommand.Execute(null);
+                        vm.SelectedTreeNode = statusTestRuleNode;
+                        AssertTrue(
+                            row71.SourceIssue.Status == IssueReviewStatus.ToRecheck &&
+                            vm.GetVisibleRows().Count == 317,
+                            "再次 Undo 撤销并切回规则根节点后，全部 317 条记录完整恢复初始【待复核】状态");
+
                         // 5.1 先模拟用户在表格中多选前 25 行，执行右键“一键修复：批量绑定图属 Group 与 XData”
                         var firstBatchRows = vm.Rows.Take(25).ToList();
                         vm.SetSelectedRows(firstBatchRows, syncCadSelection: true);

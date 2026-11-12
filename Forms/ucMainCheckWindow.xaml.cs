@@ -192,14 +192,55 @@ namespace process_pipeline.Forms
             }
             else
             {
-                // 点击在表格空白处或表头时：保持菜单 DataContext 正确并刷新按钮可用性
+                // 点击在表格空白处或表头时：保持菜单 DataContext 正确并刷新按钮可用性（不清空跨节点选择快照）
                 if (dgIssues.ContextMenu != null)
                 {
                     CadThemes.SyncContextMenuTheme(dgIssues.ContextMenu);
                     dgIssues.ContextMenu.DataContext = _vm;
                 }
-                _vm.SyncSelectedRowsFromGrid(syncCadSelection: false);
+                _vm.NotifyUndoRedoStateChanged();
             }
+        }
+
+        private void ContextMenu_Opened(object sender, RoutedEventArgs e)
+        {
+            if (sender is ContextMenu cm)
+            {
+                CadThemes.SyncContextMenuTheme(cm);
+                cm.DataContext = _vm;
+            }
+            _vm?.NotifyUndoRedoStateChanged();
+        }
+
+        private void UserControl_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (_vm == null || e.OriginalSource is TextBox)
+                return;
+
+            if ((Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control)
+            {
+                if (e.Key == Key.Z)
+                {
+                    if (_vm.ActiveUndoRedoManager.CanUndo)
+                    {
+                        _vm.ExecuteUndo();
+                    }
+                    e.Handled = true;
+                }
+                else if (e.Key == Key.Y)
+                {
+                    if (_vm.ActiveUndoRedoManager.CanRedo)
+                    {
+                        _vm.ExecuteRedo();
+                    }
+                    e.Handled = true;
+                }
+            }
+        }
+
+        public bool SyncCadUndoRedoCommand(string cmdName)
+        {
+            return _vm != null && _vm.SyncCadUndoRedoCommand(cmdName);
         }
 
         private void DataGrid_MouseDoubleClick(object sender, MouseButtonEventArgs e)
@@ -333,6 +374,8 @@ namespace process_pipeline.Forms
         private bool _isSyncingSelection;
         private bool _pendingFilterSelectionGuard;
         private readonly HybridUndoRedoManager _fallbackUndoRedoManager = new HybridUndoRedoManager();
+        private HybridUndoRedoManager _subscribedUndoRedoManager;
+        private DateTime _lastUndoRedoTimestampUtc = DateTime.MinValue;
 
         /// <summary>
         /// 标记用户正在主动通过鼠标点击或键盘导航操作 DataGrid（解除过滤刷新后的异步选择丢失保护）。
@@ -410,8 +453,34 @@ namespace process_pipeline.Forms
         /// <summary>
         /// 获取当前活动文档会话的混合撤销/重做管理器（若在非活动文档或示例模式下则回退至本地管理器）。
         /// </summary>
-        public HybridUndoRedoManager ActiveUndoRedoManager =>
-            DocumentSessionManager.GetActiveSession()?.UndoRedoManager ?? _fallbackUndoRedoManager;
+        public HybridUndoRedoManager ActiveUndoRedoManager
+        {
+            get
+            {
+                var mgr = DocumentSessionManager.GetActiveSession()?.UndoRedoManager ?? _fallbackUndoRedoManager;
+                EnsureUndoRedoManagerSubscribed(mgr);
+                return mgr;
+            }
+        }
+
+        private void EnsureUndoRedoManagerSubscribed(HybridUndoRedoManager mgr)
+        {
+            if (mgr == null || ReferenceEquals(_subscribedUndoRedoManager, mgr))
+                return;
+
+            if (_subscribedUndoRedoManager != null)
+            {
+                _subscribedUndoRedoManager.StateChanged -= OnUndoRedoManagerStateChanged;
+            }
+
+            _subscribedUndoRedoManager = mgr;
+            _subscribedUndoRedoManager.StateChanged += OnUndoRedoManagerStateChanged;
+        }
+
+        private void OnUndoRedoManagerStateChanged(object sender, EventArgs e)
+        {
+            NotifyUndoRedoStateChanged();
+        }
 
         public IReadOnlyDictionary<ObjectId, CheckIssueItem> CurrentIssues => _currentIssues;
 
@@ -472,6 +541,7 @@ namespace process_pipeline.Forms
         public ICommand RefreshCommand { get; }
         public ICommand ZoomToCommand { get; }
         public ICommand ExportCommand { get; }
+        public ICommand MarkPendingCommand { get; }
         public ICommand MarkModifiedCommand { get; }
         public ICommand MarkToRecheckCommand { get; }
         public ICommand MarkIgnoredCommand { get; }
@@ -486,6 +556,7 @@ namespace process_pipeline.Forms
         public MainCheckWindowViewModel()
         {
             _selectedSingleRule = AvailableSingleRules.FirstOrDefault();
+            EnsureUndoRedoManagerSubscribed(_fallbackUndoRedoManager);
 
             OpenDataSourceSettingsCommand = new RelayCommand(_ => ExecuteOpenDataSourceSettings());
             RunFullCheckCommand = new RelayCommand(_ => ExecuteRunFullCheck());
@@ -494,9 +565,10 @@ namespace process_pipeline.Forms
             RefreshCommand = new RelayCommand(_ => RefreshByRule());
             ZoomToCommand = new RelayCommand(_ => ZoomToSelectedRow(isZoomTo: true));
             ExportCommand = new RelayCommand(_ => StatusText = "已导出");
-            MarkModifiedCommand = new RelayCommand(_ => ChangeSelectedRowStatus(IssueReviewStatus.Resolved), _ => GetActionTargetRows().Count > 0);
-            MarkToRecheckCommand = new RelayCommand(_ => ChangeSelectedRowStatus(IssueReviewStatus.ToRecheck), _ => GetActionTargetRows().Count > 0);
-            MarkIgnoredCommand = new RelayCommand(_ => ChangeSelectedRowStatus(IssueReviewStatus.Ignored), _ => GetActionTargetRows().Count > 0);
+            MarkPendingCommand = new RelayCommand(_ => ChangeSelectedRowStatus(IssueReviewStatus.Pending), _ => CanMarkStatus(IssueReviewStatus.Pending));
+            MarkModifiedCommand = new RelayCommand(_ => ChangeSelectedRowStatus(IssueReviewStatus.Resolved), _ => CanMarkStatus(IssueReviewStatus.Resolved));
+            MarkToRecheckCommand = new RelayCommand(_ => ChangeSelectedRowStatus(IssueReviewStatus.ToRecheck), _ => CanMarkStatus(IssueReviewStatus.ToRecheck));
+            MarkIgnoredCommand = new RelayCommand(_ => ChangeSelectedRowStatus(IssueReviewStatus.Ignored), _ => CanMarkStatus(IssueReviewStatus.Ignored));
             ReverseSelectedPipeCommand = new RelayCommand(_ => ReverseSelectedPipe(), _ => CanReverseSelectedPipe());
             BindSelectedGroupCommand = new RelayCommand(_ => BindSelectedPipeGroups(), _ => CanBindSelectedGroup());
             UndoCommand = new RelayCommand(_ => ExecuteUndo(), _ => ActiveUndoRedoManager.CanUndo);
@@ -625,6 +697,7 @@ namespace process_pipeline.Forms
             {
                 OnPropertyChanged(nameof(SelectedTreeNode));
                 RefreshFilter();
+                NotifyUndoRedoStateChanged();
             }
         }
 
@@ -1209,6 +1282,65 @@ namespace process_pipeline.Forms
             ActiveUndoRedoManager.CanRedo
                 ? $"重做：{ActiveUndoRedoManager.NextRedoDescription}"
                 : "重做核查操作";
+
+        /// <summary>
+        /// 顶部工具栏“撤销”按钮的双层卡片悬停提示文本。
+        /// </summary>
+        public string UndoToolTipText =>
+            ActiveUndoRedoManager.CanUndo
+                ? $"撤销核查操作 (Ctrl+Z)\n下一步撤销：{ActiveUndoRedoManager.NextUndoDescription}"
+                : "撤销核查操作 (Ctrl+Z)\n当前没有可撤销的核查操作";
+
+        /// <summary>
+        /// 顶部工具栏“重做”按钮的双层卡片悬停提示文本。
+        /// </summary>
+        public string RedoToolTipText =>
+            ActiveUndoRedoManager.CanRedo
+                ? $"重做核查操作 (Ctrl+Y)\n下一步重做：{ActiveUndoRedoManager.NextRedoDescription}"
+                : "重做核查操作 (Ctrl+Y)\n当前没有可重做的核查操作";
+
+        /// <summary>
+        /// 判断当前上下文（左侧选中树节点 + 当前右键目标行集合）是否应显示“标记为指定核查状态”菜单项：
+        /// 1. 若当前左侧树节点正处于该状态的专属子节点（如在“待复核”节点下），则隐藏该当前状态项，仅显示可切换的其他状态；
+        /// 2. 若当前右键目标行集合为空，则隐藏；
+        /// 3. 仅当目标行集合中至少存在一条记录的当前状态不等于 targetStatus（即确实可切换到 targetStatus）时才显示。
+        /// </summary>
+        public bool CanMarkStatus(IssueReviewStatus targetStatus)
+        {
+            if (_selectedTreeNode != null &&
+                _selectedTreeNode.FilterKind == TreeFilterKind.RuleStatus &&
+                _selectedTreeNode.StatusFilter.HasValue &&
+                _selectedTreeNode.StatusFilter.Value == targetStatus)
+            {
+                return false;
+            }
+
+            var targetRows = GetActionTargetRows();
+            if (targetRows.Count == 0)
+                return false;
+
+            return targetRows.Any(r => (r?.SourceIssue?.Status ?? IssueReviewStatus.Pending) != targetStatus);
+        }
+
+        public System.Windows.Visibility MarkPendingMenuVisibility =>
+            CanMarkStatus(IssueReviewStatus.Pending) ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+
+        public System.Windows.Visibility MarkToRecheckMenuVisibility =>
+            CanMarkStatus(IssueReviewStatus.ToRecheck) ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+
+        public System.Windows.Visibility MarkIgnoredMenuVisibility =>
+            CanMarkStatus(IssueReviewStatus.Ignored) ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+
+        public System.Windows.Visibility MarkResolvedMenuVisibility =>
+            CanMarkStatus(IssueReviewStatus.Resolved) ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+
+        public System.Windows.Visibility StatusMarkSeparatorVisibility =>
+            (CanMarkStatus(IssueReviewStatus.Pending) ||
+             CanMarkStatus(IssueReviewStatus.ToRecheck) ||
+             CanMarkStatus(IssueReviewStatus.Ignored) ||
+             CanMarkStatus(IssueReviewStatus.Resolved))
+                ? System.Windows.Visibility.Visible
+                : System.Windows.Visibility.Collapsed;
 
         public string RowCountText
         {
@@ -2068,7 +2200,7 @@ namespace process_pipeline.Forms
         public void ChangeSelectedRowStatus(IssueReviewStatus newStatus)
         {
             var targetRows = GetActionTargetRows()
-                .Where(r => r?.SourceIssue != null)
+                .Where(r => r?.SourceIssue != null && r.SourceIssue.Status != newStatus)
                 .ToList();
             if (targetRows.Count == 0) return;
 
@@ -2079,20 +2211,30 @@ namespace process_pipeline.Forms
                 CheckIssueItem beforeSnapshot = capturedRow.SourceIssue.CloneSnapshot();
                 CheckIssueItem afterSnapshot = capturedRow.SourceIssue.CloneSnapshot();
                 afterSnapshot.Status = newStatus;
-                batchItems.Add((beforeSnapshot, afterSnapshot, snapshot => ApplyIssueSnapshotToRow(capturedRow, snapshot)));
+                batchItems.Add((beforeSnapshot, afterSnapshot, snapshot => ApplyIssueSnapshotToRow(capturedRow, snapshot, refreshTreeAndFilter: false)));
             }
 
-            var op = new ChangeIssueStatusOperation(batchItems);
+            var op = new ChangeIssueStatusOperation(
+                batchItems,
+                description: null,
+                onBatchCompleted: () =>
+                {
+                    UpdateTreeCounts();
+                    RefreshFilter();
+                    NotifyUndoRedoStateChanged();
+                });
+            _lastUndoRedoTimestampUtc = DateTime.UtcNow;
             ActiveUndoRedoManager.ExecuteOperation(op);
             NotifyUndoRedoStateChanged();
 
+            PipeRowVm firstLiveRow = ResolveLiveRow(targetRows[0], targetRows[0].SourceIssue) ?? targetRows[0];
             if (targetRows.Count == 1)
             {
-                StatusText = $"已将管线 [{targetRows[0].Id}] 标记为：{targetRows[0].Status}";
+                StatusText = $"已将管线 [{firstLiveRow.Id}] 标记为：{firstLiveRow.Status}";
             }
             else
             {
-                StatusText = $"已批量将 {targetRows.Count} 条管线标记为：{targetRows[0].Status}";
+                StatusText = $"已批量将 {targetRows.Count} 条管线标记为：{firstLiveRow.Status}";
             }
         }
 
@@ -2335,12 +2477,13 @@ namespace process_pipeline.Forms
         }
 
         /// <summary>
-        /// 执行核查操作撤销（Ctrl+Z 或右键菜单触发）。
+        /// 执行核查操作撤销（Ctrl+Z、顶部工具栏按钮或右键菜单触发）。
         /// </summary>
         public void ExecuteUndo()
         {
             if (!ActiveUndoRedoManager.CanUndo) return;
 
+            _lastUndoRedoTimestampUtc = DateTime.UtcNow;
             IUserOperation undoneOp = ActiveUndoRedoManager.Undo();
             NotifyUndoRedoStateChanged();
             if (undoneOp != null)
@@ -2350,12 +2493,13 @@ namespace process_pipeline.Forms
         }
 
         /// <summary>
-        /// 执行核查操作重做（Ctrl+Y 或右键菜单触发）。
+        /// 执行核查操作重做（Ctrl+Y、顶部工具栏按钮或右键菜单触发）。
         /// </summary>
         public void ExecuteRedo()
         {
             if (!ActiveUndoRedoManager.CanRedo) return;
 
+            _lastUndoRedoTimestampUtc = DateTime.UtcNow;
             IUserOperation redoneOp = ActiveUndoRedoManager.Redo();
             NotifyUndoRedoStateChanged();
             if (redoneOp != null)
@@ -2364,13 +2508,92 @@ namespace process_pipeline.Forms
             }
         }
 
+        /// <summary>
+        /// 当用户在 AutoCAD 宿主中按下 Ctrl+Z / Ctrl+Y 或点击 CAD 顶部撤销/重做按钮触发 U / UNDO / REDO / MREDO 命令时，
+        /// 自动同步执行面板的 Undo / Redo 栈（带 300ms 去重防抖保护，避免与面板内部快捷键重复触发）。
+        /// </summary>
+        public bool SyncCadUndoRedoCommand(string cmdName)
+        {
+            if (string.IsNullOrWhiteSpace(cmdName))
+                return false;
+
+            if ((DateTime.UtcNow - _lastUndoRedoTimestampUtc).TotalMilliseconds < 300.0)
+                return true;
+
+            if (string.Equals(cmdName, "U", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(cmdName, "UNDO", StringComparison.OrdinalIgnoreCase))
+            {
+                if (ActiveUndoRedoManager.CanUndo)
+                {
+                    ExecuteUndo();
+                    return true;
+                }
+            }
+            else if (string.Equals(cmdName, "REDO", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(cmdName, "MREDO", StringComparison.OrdinalIgnoreCase))
+            {
+                if (ActiveUndoRedoManager.CanRedo)
+                {
+                    ExecuteRedo();
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private PipeRowVm ResolveLiveRow(PipeRowVm candidateRow, CheckIssueItem snapshot)
+        {
+            if (candidateRow != null && Rows.Contains(candidateRow))
+                return candidateRow;
+
+            if (snapshot != null)
+            {
+                if (!string.IsNullOrWhiteSpace(snapshot.IssueId) &&
+                    _issueIdToRowMap.TryGetValue(snapshot.IssueId, out PipeRowVm byIssueId) &&
+                    byIssueId != null)
+                {
+                    return byIssueId;
+                }
+
+                if (!snapshot.TargetObjectId.IsNull &&
+                    _objectIdToRowMap.TryGetValue(snapshot.TargetObjectId, out PipeRowVm byOid) &&
+                    byOid != null)
+                {
+                    return byOid;
+                }
+            }
+
+            if (candidateRow?.SourceIssue != null &&
+                !string.IsNullOrWhiteSpace(candidateRow.SourceIssue.IssueId) &&
+                _issueIdToRowMap.TryGetValue(candidateRow.SourceIssue.IssueId, out PipeRowVm byCandidateIssueId) &&
+                byCandidateIssueId != null)
+            {
+                return byCandidateIssueId;
+            }
+
+            return candidateRow;
+        }
+
         private void ApplyIssueSnapshotToRow(PipeRowVm row, CheckIssueItem snapshot, bool refreshTreeAndFilter = true)
         {
-            if (row == null || snapshot == null) return;
+            if (snapshot == null) return;
 
-            UnindexRowObjectIds(row);
-            row.ApplyFromIssue(snapshot);
-            IndexRowObjectIds(row);
+            PipeRowVm liveRow = ResolveLiveRow(row, snapshot);
+            if (liveRow == null) return;
+
+            if (row != null && !ReferenceEquals(row, liveRow) && _selectedFilterSnapshot.Remove(row))
+            {
+                _selectedFilterSnapshot.Add(liveRow);
+            }
+
+            UnindexRowObjectIds(liveRow);
+            liveRow.ApplyFromIssue(snapshot);
+            if (!string.IsNullOrWhiteSpace(snapshot.IssueId))
+            {
+                _issueIdToRowMap[snapshot.IssueId] = liveRow;
+            }
+            IndexRowObjectIds(liveRow);
             var activeSession = DocumentSessionManager.GetActiveSession();
 
             if (!string.IsNullOrWhiteSpace(snapshot.IssueId) && activeSession != null)
@@ -2394,15 +2617,30 @@ namespace process_pipeline.Forms
             }
         }
 
-        private void NotifyUndoRedoStateChanged()
+        public void NotifyUndoRedoStateChanged()
         {
             OnPropertyChanged(nameof(UndoMenuHeader));
             OnPropertyChanged(nameof(RedoMenuHeader));
+            OnPropertyChanged(nameof(UndoToolTipText));
+            OnPropertyChanged(nameof(RedoToolTipText));
             OnPropertyChanged(nameof(ReversePipeMenuVisibility));
             OnPropertyChanged(nameof(ReversePipeMenuHeader));
             OnPropertyChanged(nameof(BindGroupMenuVisibility));
             OnPropertyChanged(nameof(BindGroupMenuHeader));
-            CommandManager.InvalidateRequerySuggested();
+            OnPropertyChanged(nameof(MarkPendingMenuVisibility));
+            OnPropertyChanged(nameof(MarkToRecheckMenuVisibility));
+            OnPropertyChanged(nameof(MarkIgnoredMenuVisibility));
+            OnPropertyChanged(nameof(MarkResolvedMenuVisibility));
+            OnPropertyChanged(nameof(StatusMarkSeparatorVisibility));
+
+            (UndoCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            (RedoCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            (MarkPendingCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            (MarkToRecheckCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            (MarkIgnoredCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            (MarkModifiedCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            (ReverseSelectedPipeCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            (BindSelectedGroupCommand as RelayCommand)?.RaiseCanExecuteChanged();
         }
 
         /// <summary>
@@ -3502,6 +3740,22 @@ namespace process_pipeline.Forms
         {
             Show(new Dictionary<ObjectId, CheckIssueItem>());
             UpdateIssueItems(items, isIncremental: false);
+        }
+
+        /// <summary>
+        /// 同步响应 AutoCAD 宿主的 U / UNDO / REDO / MREDO 命令，将其桥接至面板的混合 Undo/Redo 栈。
+        /// </summary>
+        public bool SyncCadUndoRedoCommand(string cmdName)
+        {
+            if (_currentControl == null || string.IsNullOrWhiteSpace(cmdName))
+                return false;
+
+            if (!_currentControl.Dispatcher.CheckAccess())
+            {
+                return _currentControl.Dispatcher.Invoke(() => _currentControl.SyncCadUndoRedoCommand(cmdName));
+            }
+
+            return _currentControl.SyncCadUndoRedoCommand(cmdName);
         }
 
         public override void RefreshData()

@@ -1,4 +1,4 @@
-﻿using Autodesk.AutoCAD.EditorInput;
+using Autodesk.AutoCAD.EditorInput;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -60,6 +60,7 @@ namespace process_pipeline.Core
     {
         private readonly Action<object> _execute;
         private readonly Predicate<object> _canExecute;
+        private event EventHandler _canExecuteChanged;
 
         public RelayCommand(Action<object> execute, Predicate<object> canExecute = null)
         {
@@ -72,8 +73,26 @@ namespace process_pipeline.Core
 
         public event EventHandler CanExecuteChanged
         {
-            add => CommandManager.RequerySuggested += value;
-            remove => CommandManager.RequerySuggested -= value;
+            add
+            {
+                _canExecuteChanged += value;
+                CommandManager.RequerySuggested += value;
+            }
+            remove
+            {
+                _canExecuteChanged -= value;
+                CommandManager.RequerySuggested -= value;
+            }
+        }
+
+        /// <summary>
+        /// 显式触发 CanExecuteChanged 事件（解决 AutoCAD WinForms ElementHost / PaletteSet 宿主下
+        /// CommandManager.RequerySuggested 无法及时唤醒脱离主视觉树的 ContextMenu 菜单项的问题）。
+        /// </summary>
+        public void RaiseCanExecuteChanged()
+        {
+            _canExecuteChanged?.Invoke(this, EventArgs.Empty);
+            CommandManager.InvalidateRequerySuggested();
         }
     }
 }

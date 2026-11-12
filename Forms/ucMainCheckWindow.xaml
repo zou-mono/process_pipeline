@@ -13,7 +13,13 @@
              mc:Ignorable="d" 
              d:DesignHeight="450" d:DesignWidth="800"
              Background="{DynamicResource Brush.Palette.ContainerBackground}"
+             PreviewKeyDown="UserControl_PreviewKeyDown"
              Loaded="UserControl_Loaded">
+
+  <UserControl.InputBindings>
+    <KeyBinding Key="Z" Modifiers="Control" Command="{Binding UndoCommand}" />
+    <KeyBinding Key="Y" Modifiers="Control" Command="{Binding RedoCommand}" />
+  </UserControl.InputBindings>
 
   <UserControl.Resources>
     <ResourceDictionary>
@@ -736,6 +742,17 @@
         <ContentControl Template="{StaticResource IconTemplate.ExportReport}" Width="20" Height="20" Focusable="False"/>
       </Button>
       <Border Style="{StaticResource CadToolbarSeparatorStyle}"/>
+      <Button Style="{StaticResource CadToolbarIconButtonStyle}"
+              Command="{Binding UndoCommand}"
+              ToolTip="{Binding UndoToolTipText}">
+        <ContentControl Template="{StaticResource IconTemplate.UndoAction}" Width="16" Height="16" Focusable="False"/>
+      </Button>
+      <Button Style="{StaticResource CadToolbarIconButtonStyle}"
+              Command="{Binding RedoCommand}"
+              ToolTip="{Binding RedoToolTipText}">
+        <ContentControl Template="{StaticResource IconTemplate.RedoAction}" Width="16" Height="16" Focusable="False"/>
+      </Button>
+      <Border Style="{StaticResource CadToolbarSeparatorStyle}"/>
       <!-- 工具栏内嵌搜索框 (对齐 AdUiPalettes.dll PaletteSearchActiveTopColor->BottomColor + ControlBorderColor) -->
       <Border Height="20"
               Background="{DynamicResource Brush.TextBox.Background}"
@@ -887,7 +904,8 @@
             </DataGrid.InputBindings>
 
             <DataGrid.ContextMenu>
-              <ContextMenu Style="{StaticResource CadContextMenuStyle}">
+              <ContextMenu Style="{StaticResource CadContextMenuStyle}"
+                           Opened="ContextMenu_Opened">
                 <ContextMenu.Resources>
                   <ResourceDictionary>
                     <ResourceDictionary.MergedDictionaries>
@@ -934,22 +952,37 @@
                   </MenuItem.Icon>
                 </MenuItem>
                 <Separator Style="{StaticResource CadContextMenuSeparatorStyle}" Visibility="{Binding BindGroupMenuVisibility}" />
-                <MenuItem Header="人工判定：标记为【已修复】" Command="{Binding MarkModifiedCommand}">
+                <!-- 人工判定状态切换区：根据当前树节点与选中行状态动态展示可切换的目标状态（隐藏已处于当前状态的按钮） -->
+                <MenuItem Header="人工判定：标记为【待核查】"
+                          Command="{Binding MarkPendingCommand}"
+                          Visibility="{Binding MarkPendingMenuVisibility}">
                   <MenuItem.Icon>
-                    <ContentControl Template="{StaticResource IconTemplate.StatusResolved}" Width="16" Height="16" Focusable="False"/>
+                    <ContentControl Template="{StaticResource IconTemplate.StatusPending}" Width="16" Height="16" Focusable="False"/>
                   </MenuItem.Icon>
                 </MenuItem>
-                <MenuItem Header="人工判定：标记为【待复核】" Command="{Binding MarkToRecheckCommand}">
+                <MenuItem Header="人工判定：标记为【待复核】"
+                          Command="{Binding MarkToRecheckCommand}"
+                          Visibility="{Binding MarkToRecheckMenuVisibility}">
                   <MenuItem.Icon>
                     <ContentControl Template="{StaticResource IconTemplate.StatusRecheck}" Width="16" Height="16" Focusable="False"/>
                   </MenuItem.Icon>
                 </MenuItem>
-                <MenuItem Header="人工判定：标记为【已忽略】" Command="{Binding MarkIgnoredCommand}">
+                <MenuItem Header="人工判定：标记为【已忽略】"
+                          Command="{Binding MarkIgnoredCommand}"
+                          Visibility="{Binding MarkIgnoredMenuVisibility}">
                   <MenuItem.Icon>
                     <ContentControl Template="{StaticResource IconTemplate.StatusIgnored}" Width="16" Height="16" Focusable="False"/>
                   </MenuItem.Icon>
                 </MenuItem>
-                <Separator Style="{StaticResource CadContextMenuSeparatorStyle}" />
+                <MenuItem Header="人工判定：标记为【已修复】"
+                          Command="{Binding MarkModifiedCommand}"
+                          Visibility="{Binding MarkResolvedMenuVisibility}">
+                  <MenuItem.Icon>
+                    <ContentControl Template="{StaticResource IconTemplate.StatusResolved}" Width="16" Height="16" Focusable="False"/>
+                  </MenuItem.Icon>
+                </MenuItem>
+                <Separator Style="{StaticResource CadContextMenuSeparatorStyle}"
+                           Visibility="{Binding StatusMarkSeparatorVisibility}" />
                 <MenuItem Header="{Binding UndoMenuHeader}" Command="{Binding UndoCommand}" InputGestureText="Ctrl+Z">
                   <MenuItem.Icon>
                     <ContentControl Template="{StaticResource IconTemplate.UndoAction}" Width="16" Height="16" Focusable="False"/>

@@ -256,6 +256,21 @@ namespace process_pipeline.Utils
         // 命令结束时的统一结算
         private void Doc_CommandEnded(object sender, CommandEventArgs e)
         {
+            string cmdName = e?.GlobalCommandName?.Trim().TrimStart('_');
+            if (!string.IsNullOrWhiteSpace(cmdName) && palCheckPipe.Instance.IsVisible)
+            {
+                if (string.Equals(cmdName, "U", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(cmdName, "UNDO", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(cmdName, "REDO", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(cmdName, "MREDO", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (palCheckPipe.Instance.SyncCadUndoRedoCommand(cmdName))
+                    {
+                        return;
+                    }
+                }
+            }
+
             if (_changedObjectIds != null && _changedObjectIds.Count > 0)
             {
                 Application.Idle -= SafeRefreshPalette_Idle;

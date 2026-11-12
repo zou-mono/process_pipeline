@@ -526,6 +526,24 @@
     </ControlTemplate.Triggers>
   </ControlTemplate>
 
+  <ControlTemplate x:Key="IconTemplate.StatusPending">
+    <Grid SnapsToDevicePixels="True" UseLayoutRounding="True">
+      <Image x:Name="NativeImg" Width="16" Height="16" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center" SnapsToDevicePixels="True" UseLayoutRounding="True" RenderOptions.BitmapScalingMode="NearestNeighbor" Source="{DynamicResource NativeIcon.StatusPending}"/>
+      <Viewbox x:Name="FallbackVec" Visibility="Collapsed" Stretch="Uniform" SnapsToDevicePixels="True" UseLayoutRounding="True">
+        <Canvas Width="24" Height="24">
+          <Path Data="{StaticResource Geo.Icon.ConfirmSave.Primary}" Stroke="{DynamicResource Brush.Icon.Danger}" StrokeThickness="1.25"/>
+          <Ellipse Canvas.Left="9.5" Canvas.Top="9.5" Width="5" Height="5" Fill="{DynamicResource Brush.Icon.Danger}"/>
+        </Canvas>
+      </Viewbox>
+    </Grid>
+    <ControlTemplate.Triggers>
+      <Trigger SourceName="NativeImg" Property="Source" Value="{x:Null}">
+        <Setter TargetName="NativeImg" Property="Visibility" Value="Collapsed"/>
+        <Setter TargetName="FallbackVec" Property="Visibility" Value="Visible"/>
+      </Trigger>
+    </ControlTemplate.Triggers>
+  </ControlTemplate>
+
   <ControlTemplate x:Key="IconTemplate.StatusResolved">
     <Grid SnapsToDevicePixels="True" UseLayoutRounding="True">
       <Image x:Name="NativeImg" Width="16" Height="16" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center" SnapsToDevicePixels="True" UseLayoutRounding="True" RenderOptions.BitmapScalingMode="NearestNeighbor" Source="{DynamicResource NativeIcon.StatusResolved}"/>
