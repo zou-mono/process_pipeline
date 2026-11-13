@@ -739,7 +739,7 @@
       </Button>
       <Button Style="{StaticResource CadToolbarIconButtonStyle}"
               Command="{Binding ExportCommand}"
-              ToolTip="导出报表&#x0a;将当前核查问题记录列表导出为报表文件以便存档或提交复核。">
+              ToolTip="导出报表&#x0a;将当前核查问题记录导出为 Excel 工作簿（按左侧核查类型分 Sheet）或 CSV 报表文件。">
         <ContentControl Template="{StaticResource IconTemplate.ExportReport}" Width="20" Height="20" Focusable="False"/>
       </Button>
       <Border Style="{StaticResource CadToolbarSeparatorStyle}"/>

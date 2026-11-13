@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Packaging;
 using System.Linq;
+using System.Text;
 using Autodesk.AutoCAD.Colors;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Geometry;
@@ -878,6 +880,98 @@ namespace Cad.Plugin
                             origEnd0.DistanceTo(undoEnd0) < 1e-4 &&
                             realVm.Rows.All(r => r.SourceIssue.Status == IssueReviewStatus.Pending),
                             $"批量翻转后执行 Undo 成功恢复管线起终点与待核查状态");
+
+                        // Commit 6：验证核查报表导出（未核查文档拦截提示 + 按左侧树核查类型分 Sheet 导出 .xlsx + 带 UTF-8 BOM 导出 .csv）
+                        using (var uncheckedDb = new Database(true, true))
+                        {
+                            realVm.SwitchActiveDatabase(uncheckedDb);
+                            bool uncheckedExported = realVm.ExecuteExportReport();
+                            AssertTrue(
+                                !uncheckedExported &&
+                                realVm.StatusText.Contains("当前文档尚未执行核查") &&
+                                realVm.StatusText.Contains("一键全量核查"),
+                                $"未执行核查的文档点击【导出报表】不弹窗且状态栏给出引导提示 (StatusText='{realVm.StatusText}')");
+                        }
+
+                        realVm.SwitchActiveDatabase(Doc.Database);
+
+                        // 构造包含两个左侧树【核查类型】根节点（图属匹配核查 + 流向箭头核查）的核查列表并测试导出
+                        var matchIssueForExport = new CheckIssueItem
+                        {
+                            IssueId = $"MatchGroup:{curveId0.Handle}:0",
+                            RuleId = MatchGroupService.DefaultRuleId,
+                            RuleName = MatchGroupService.DefaultRuleName,
+                            TargetObjectId = curveId0,
+                            TargetHandle = curveId0.Handle.ToString(),
+                            LayerName = flowIssue0.LayerName,
+                            Status = IssueReviewStatus.Pending,
+                            Remark = "管线与配对属性块尚未建立 CAD Group 编组",
+                            Description = "管线与配对属性块尚未建立 CAD Group 编组"
+                        };
+                        realWin.UpdateIssueItems(new[] { matchIssueForExport, flowIssue0, flowIssue1 }, isIncremental: false);
+
+                        string tempDir = Path.Combine(Path.GetTempPath(), "process_pipeline_export_test_" + Guid.NewGuid().ToString("N"));
+                        Directory.CreateDirectory(tempDir);
+                        try
+                        {
+                            string tempXlsxPath = Path.Combine(tempDir, "核查报表测试.xlsx");
+                            bool xlsxExported = realVm.ExecuteExportReport(tempXlsxPath);
+                            AssertTrue(
+                                xlsxExported && File.Exists(tempXlsxPath) && new FileInfo(tempXlsxPath).Length > 0,
+                                $"成功导出多 Sheet Excel 报表 (.xlsx): {Path.GetFileName(tempXlsxPath)} (StatusText='{realVm.StatusText}')");
+
+                            string workbookXmlContent;
+                            string sheet1XmlContent;
+                            string sheet2XmlContent;
+                            using (Package pkg = Package.Open(tempXlsxPath, FileMode.Open, FileAccess.Read))
+                            {
+                                PackagePart wbPart = pkg.GetPart(new Uri("/xl/workbook.xml", UriKind.Relative));
+                                using (var sr = new StreamReader(wbPart.GetStream(), Encoding.UTF8))
+                                {
+                                    workbookXmlContent = sr.ReadToEnd();
+                                }
+
+                                PackagePart s1Part = pkg.GetPart(new Uri("/xl/worksheets/sheet1.xml", UriKind.Relative));
+                                using (var sr = new StreamReader(s1Part.GetStream(), Encoding.UTF8))
+                                {
+                                    sheet1XmlContent = sr.ReadToEnd();
+                                }
+
+                                PackagePart s2Part = pkg.GetPart(new Uri("/xl/worksheets/sheet2.xml", UriKind.Relative));
+                                using (var sr = new StreamReader(s2Part.GetStream(), Encoding.UTF8))
+                                {
+                                    sheet2XmlContent = sr.ReadToEnd();
+                                }
+                            }
+
+                            AssertTrue(
+                                workbookXmlContent.Contains("name=\"图属匹配核查\"") &&
+                                workbookXmlContent.Contains("name=\"流向箭头核查\"") &&
+                                sheet1XmlContent.Contains("管线与配对属性块尚未建立 CAD Group 编组") &&
+                                sheet2XmlContent.Contains("流向与箭头相反"),
+                                "Excel (.xlsx) 工作簿按左侧树根节点准确划分为【图属匹配核查】与【流向箭头核查】两个 Sheet 且 UTF-8 中文内容完整无乱码");
+
+                            string tempCsvPath = Path.Combine(tempDir, "核查报表测试.csv");
+                            bool csvExported = realVm.ExecuteExportReport(tempCsvPath);
+                            byte[] csvBytes = File.ReadAllBytes(tempCsvPath);
+                            bool hasUtf8Bom = csvBytes.Length >= 3 &&
+                                              csvBytes[0] == 0xEF &&
+                                              csvBytes[1] == 0xBB &&
+                                              csvBytes[2] == 0xBF;
+                            string csvText = Encoding.UTF8.GetString(csvBytes);
+                            AssertTrue(
+                                csvExported &&
+                                hasUtf8Bom &&
+                                csvText.Contains("序号,核查类型,编号,核查状态,所属图层,位置坐标,问题描述 / 备注,推荐解决方案") &&
+                                csvText.Contains("图属匹配核查") &&
+                                csvText.Contains("流向箭头核查") &&
+                                csvText.Contains("流向与箭头相反"),
+                                $"CSV (.csv) 报表包含标准 UTF-8 BOM (EF BB BF) 且中文内容完整无乱码 (Bytes={csvBytes.Length})");
+                        }
+                        finally
+                        {
+                            try { Directory.Delete(tempDir, recursive: true); } catch { }
+                        }
                     }
                 }
                 finally

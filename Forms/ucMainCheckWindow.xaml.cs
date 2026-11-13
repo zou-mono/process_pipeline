@@ -628,7 +628,7 @@ namespace process_pipeline.Forms
             ToggleTreeCommand = new RelayCommand(_ => ToggleTree());
             RefreshCommand = new RelayCommand(_ => RefreshByRule());
             ZoomToCommand = new RelayCommand(_ => ZoomToSelectedRow(isZoomTo: true));
-            ExportCommand = new RelayCommand(_ => StatusText = "已导出");
+            ExportCommand = new RelayCommand(_ => ExecuteExportReport());
             MarkPendingCommand = new RelayCommand(_ => ChangeSelectedRowStatus(IssueReviewStatus.Pending), _ => CanMarkStatus(IssueReviewStatus.Pending));
             MarkModifiedCommand = new RelayCommand(_ => ChangeSelectedRowStatus(IssueReviewStatus.Resolved), _ => CanMarkStatus(IssueReviewStatus.Resolved));
             MarkToRecheckCommand = new RelayCommand(_ => ChangeSelectedRowStatus(IssueReviewStatus.ToRecheck), _ => CanMarkStatus(IssueReviewStatus.ToRecheck));
@@ -3287,6 +3287,131 @@ namespace process_pipeline.Forms
             }
 
             palCheckPipe.Instance.RefreshData();
+        }
+
+        /// <summary>
+        /// 按左侧导航树【核查类型】根节点顺序构建导出工作表数据列表。
+        /// 每个 <see cref="TreeFilterKind.RuleCategory"/> 根节点对应 Excel 中的一个 Sheet。
+        /// </summary>
+        public IReadOnlyList<CheckReportSheetData> BuildExportSheetDataList()
+        {
+            var sheets = new List<CheckReportSheetData>();
+            var addedRules = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (TreeNodeVm node in TreeNodes)
+            {
+                if (node == null || node.FilterKind != TreeFilterKind.RuleCategory)
+                    continue;
+
+                string ruleName = !string.IsNullOrWhiteSpace(node.RuleNameFilter) ? node.RuleNameFilter : node.Name;
+                if (string.IsNullOrWhiteSpace(ruleName) || !addedRules.Add(ruleName))
+                    continue;
+
+                var ruleRows = Rows
+                    .Where(r => r != null && string.Equals(r.RuleName, ruleName, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+
+                sheets.Add(new CheckReportSheetData
+                {
+                    RuleName = ruleName,
+                    Rows = ruleRows
+                });
+            }
+
+            foreach (var group in Rows.Where(r => r != null && !string.IsNullOrWhiteSpace(r.RuleName))
+                                      .GroupBy(r => r.RuleName, StringComparer.OrdinalIgnoreCase))
+            {
+                if (addedRules.Add(group.Key))
+                {
+                    sheets.Add(new CheckReportSheetData
+                    {
+                        RuleName = group.Key,
+                        Rows = group.ToList()
+                    });
+                }
+            }
+
+            return sheets;
+        }
+
+        /// <summary>
+        /// 响应工具栏 `[导出报表]` 按钮：
+        /// 1. 若当前文档尚未执行过任何核查（左侧树无核查类型根节点），不弹出文件选择框，直接在状态栏给出明确引导提示；
+        /// 2. 支持在保存对话框中选择导出 <c>.xlsx</c>（默认，按左侧树核查类型根节点分 Sheet）或 <c>.csv</c>（带 UTF-8 BOM 合并单表，Excel 打开中文零乱码）。
+        /// </summary>
+        public bool ExecuteExportReport(string explicitFilePath = null)
+        {
+            IReadOnlyList<CheckReportSheetData> sheets = BuildExportSheetDataList();
+            if (sheets.Count == 0)
+            {
+                StatusText = "当前文档尚未执行核查，暂无可导出的核查记录，请先点击工具栏【一键全量核查】或【单项核查】";
+                return false;
+            }
+
+            string targetFilePath = explicitFilePath;
+            if (string.IsNullOrWhiteSpace(targetFilePath))
+            {
+                string docBaseName = "管线图纸";
+                try
+                {
+                    var db = _activeDatabase ?? AcadApp.DocumentManager?.MdiActiveDocument?.Database;
+                    if (db != null && !string.IsNullOrWhiteSpace(db.Filename))
+                    {
+                        docBaseName = System.IO.Path.GetFileNameWithoutExtension(db.Filename);
+                    }
+                }
+                catch
+                {
+                    // 忽略文件名读取异常
+                }
+
+                var dlg = new Microsoft.Win32.SaveFileDialog
+                {
+                    Title = "导出管线核查报表",
+                    Filter = "Excel 工作簿 (*.xlsx)|*.xlsx|CSV 逗号分隔值 (*.csv)|*.csv",
+                    DefaultExt = ".xlsx",
+                    FilterIndex = 1,
+                    AddExtension = true,
+                    OverwritePrompt = true,
+                    FileName = $"{docBaseName}_管线核查报表_{DateTime.Now:yyyyMMdd_HHmm}.xlsx"
+                };
+
+                if (dlg.ShowDialog() != true || string.IsNullOrWhiteSpace(dlg.FileName))
+                {
+                    StatusText = "已取消导出核查报表";
+                    return false;
+                }
+
+                targetFilePath = dlg.FileName;
+            }
+
+            try
+            {
+                string ext = System.IO.Path.GetExtension(targetFilePath) ?? string.Empty;
+                int totalRecords = sheets.Sum(s => s?.Rows?.Count ?? 0);
+                string shortFileName = System.IO.Path.GetFileName(targetFilePath);
+
+                using (var progress = ProgressContext.StartScope("正在导出核查报表"))
+                {
+                    if (string.Equals(ext, ".csv", StringComparison.OrdinalIgnoreCase))
+                    {
+                        CheckReportExporter.ExportToCsv(targetFilePath, sheets, progress);
+                        StatusText = $"已导出 CSV 核查报表：{shortFileName}（共 {sheets.Count} 类核查、{totalRecords} 条记录）";
+                    }
+                    else
+                    {
+                        CheckReportExporter.ExportToExcelXlsx(targetFilePath, sheets, progress);
+                        StatusText = $"已导出 Excel 核查报表：{shortFileName}（共 {sheets.Count} 个工作表、{totalRecords} 条记录）";
+                    }
+                }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                StatusText = $"导出核查报表失败：{ex.Message}";
+                return false;
+            }
         }
 
         /// <summary>
