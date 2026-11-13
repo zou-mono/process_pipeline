@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
+using Autodesk.AutoCAD.Runtime;
 using process_pipeline.Core.Config;
 using AcadApp = Autodesk.AutoCAD.ApplicationServices.Application;
 
@@ -22,6 +23,8 @@ namespace process_pipeline.Core.DataSource
     /// </summary>
     public class DataSourceService
     {
+        private static readonly RXClass CurveRxClass = RXObject.GetClass(typeof(Curve));
+
         /// <summary>
         /// 判定同一图纸内存在完整数据集的最小管线实体数阈值。
         /// 说明：新版数据.dwg 中可能残留 1~2 条未清理干净的旧图层图元（如 0污水-已核实需新增 上的 2 个块参照），
@@ -48,9 +51,28 @@ namespace process_pipeline.Core.DataSource
 
             bool allResolved = true;
 
+            int? precomputedPrevSameCount = null;
+            int? precomputedSurveySameCount = null;
+            bool needPrevResolve = needPreviousData && (context?.PreviousDataSource == null || !context.PreviousDataSource.IsValid);
+            bool needSurveyResolve = needSurveyData && (context?.SurveyDataSource == null || !context.SurveyDataSource.IsValid);
+
+            if (needPrevResolve && needSurveyResolve && CadConfig.DataSources.PreferSameDrawingLayers)
+            {
+                int[] counts = CountCurveEntitiesByLayerGroups(
+                    activePlanDb,
+                    new IEnumerable<string>[]
+                    {
+                        CadConfig.PreviousData.PipeLayers,
+                        CadConfig.SurveyData.PipeLayers
+                    },
+                    MinSameDrawingEntityCount);
+                precomputedPrevSameCount = counts[0];
+                precomputedSurveySameCount = counts[1];
+            }
+
             if (needPreviousData)
             {
-                DataSourceDescriptor prevDesc = ResolvePreviousDataSource(activePlanDb, context?.PreviousDataSource);
+                DataSourceDescriptor prevDesc = ResolvePreviousDataSource(activePlanDb, context?.PreviousDataSource, precomputedPrevSameCount);
                 if (context != null)
                 {
                     context.PreviousDataSource = prevDesc;
@@ -63,7 +85,7 @@ namespace process_pipeline.Core.DataSource
 
             if (needSurveyData)
             {
-                DataSourceDescriptor surveyDesc = ResolveSurveyDataSource(activePlanDb, context?.SurveyDataSource);
+                DataSourceDescriptor surveyDesc = ResolveSurveyDataSource(activePlanDb, context?.SurveyDataSource, precomputedSurveySameCount);
                 if (context != null)
                 {
                     context.SurveyDataSource = surveyDesc;
@@ -82,7 +104,8 @@ namespace process_pipeline.Core.DataSource
         /// </summary>
         public DataSourceDescriptor ResolvePreviousDataSource(
             Database activePlanDb,
-            DataSourceDescriptor existingDescriptor = null)
+            DataSourceDescriptor existingDescriptor = null,
+            int? knownSameDrawingCount = null)
         {
             var pipeLayers = new List<string>(CadConfig.PreviousData.PipeLayers ?? new List<string>());
             var attrLayers = new List<string>(CadConfig.PreviousData.AttributeLayers ?? new List<string>());
@@ -99,7 +122,7 @@ namespace process_pipeline.Core.DataSource
             // 优先级 1：检查当前规划图纸内部是否已合并包含完整的上版数据图层
             if (CadConfig.DataSources.PreferSameDrawingLayers && activePlanDb != null)
             {
-                int count = CountCurveEntitiesOnLayers(activePlanDb, pipeLayers, MinSameDrawingEntityCount);
+                int count = knownSameDrawingCount ?? CountCurveEntitiesOnLayers(activePlanDb, pipeLayers, MinSameDrawingEntityCount);
                 if (count >= MinSameDrawingEntityCount)
                 {
                     return new DataSourceDescriptor
@@ -155,7 +178,8 @@ namespace process_pipeline.Core.DataSource
         /// </summary>
         public DataSourceDescriptor ResolveSurveyDataSource(
             Database activePlanDb,
-            DataSourceDescriptor existingDescriptor = null)
+            DataSourceDescriptor existingDescriptor = null,
+            int? knownSameDrawingCount = null)
         {
             var pipeLayers = new List<string>(CadConfig.SurveyData.PipeLayers ?? new List<string>());
             var attrLayers = new List<string>(CadConfig.SurveyData.AttributeLayers ?? new List<string>());
@@ -172,7 +196,7 @@ namespace process_pipeline.Core.DataSource
             // 优先级 1：检查当前规划图纸内部是否已合并包含完整的勘测管线图层
             if (CadConfig.DataSources.PreferSameDrawingLayers && activePlanDb != null)
             {
-                int count = CountCurveEntitiesOnLayers(activePlanDb, pipeLayers, MinSameDrawingEntityCount);
+                int count = knownSameDrawingCount ?? CountCurveEntitiesOnLayers(activePlanDb, pipeLayers, MinSameDrawingEntityCount);
                 if (count >= MinSameDrawingEntityCount)
                 {
                     return new DataSourceDescriptor
@@ -307,31 +331,79 @@ namespace process_pipeline.Core.DataSource
             if (db == null || targetLayers == null)
                 return 0;
 
-            var layerSet = new HashSet<string>(
-                targetLayers.Where(l => !string.IsNullOrWhiteSpace(l)),
-                StringComparer.OrdinalIgnoreCase);
+            int[] results = CountCurveEntitiesByLayerGroups(
+                db,
+                new IEnumerable<string>[] { targetLayers },
+                stopAtCount);
+            return results.Length > 0 ? results[0] : 0;
+        }
 
-            if (layerSet.Count == 0)
-                return 0;
+        /// <summary>
+        /// 在单次事务与单遍 ModelSpace 扫描中，同时统计多组目标图层上的曲线（Curve）实体数量。
+        /// 支持：
+        /// 1. 先检查 LayerTable 是否存在目标图层，完全不存在的图层组直接判定为 0；
+        /// 2. 通过 <see cref="ObjectId.ObjectClass"/> 先过滤非 Curve 图元，避免对文字/块参照等执行无意义的 <c>tr.GetObject</c>；
+        /// 3. 当所有激活图层组均达到 <paramref name="stopAtCountPerGroup"/> 时提前终止扫描。
+        /// </summary>
+        public static int[] CountCurveEntitiesByLayerGroups(
+            Database db,
+            IList<IEnumerable<string>> layerGroups,
+            int stopAtCountPerGroup = int.MaxValue)
+        {
+            if (layerGroups == null || layerGroups.Count == 0)
+                return Array.Empty<int>();
 
-            int count = 0;
+            int groupCount = layerGroups.Count;
+            var counts = new int[groupCount];
+            if (db == null || stopAtCountPerGroup <= 0)
+                return counts;
+
+            var layerSets = new HashSet<string>[groupCount];
+            var groupActive = new bool[groupCount];
+            int activeGroupCount = 0;
+
+            for (int i = 0; i < groupCount; i++)
+            {
+                if (layerGroups[i] == null)
+                    continue;
+
+                var set = new HashSet<string>(
+                    layerGroups[i].Where(l => !string.IsNullOrWhiteSpace(l)),
+                    StringComparer.OrdinalIgnoreCase);
+
+                if (set.Count > 0)
+                {
+                    layerSets[i] = set;
+                }
+            }
+
             try
             {
                 using (Transaction tr = db.TransactionManager.StartOpenCloseTransaction())
                 {
                     LayerTable lt = (LayerTable)tr.GetObject(db.LayerTableId, OpenMode.ForRead);
-                    bool anyLayerExists = false;
-                    foreach (string layerName in layerSet)
+                    for (int i = 0; i < groupCount; i++)
                     {
-                        if (lt.Has(layerName))
+                        var set = layerSets[i];
+                        if (set == null)
+                            continue;
+
+                        foreach (string layerName in set)
                         {
-                            anyLayerExists = true;
-                            break;
+                            if (lt.Has(layerName))
+                            {
+                                groupActive[i] = true;
+                                activeGroupCount++;
+                                break;
+                            }
                         }
                     }
 
-                    if (!anyLayerExists)
-                        return 0;
+                    if (activeGroupCount == 0)
+                    {
+                        tr.Commit();
+                        return counts;
+                    }
 
                     BlockTable bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
                     BlockTableRecord ms = (BlockTableRecord)tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForRead);
@@ -339,14 +411,32 @@ namespace process_pipeline.Core.DataSource
                     foreach (ObjectId objId in ms)
                     {
                         if (objId.IsErased) continue;
+                        if (CurveRxClass != null && !objId.ObjectClass.IsDerivedFrom(CurveRxClass))
+                            continue;
 
                         Entity ent = tr.GetObject(objId, OpenMode.ForRead, false) as Entity;
-                        if (ent is Curve && !string.IsNullOrEmpty(ent.Layer) && layerSet.Contains(ent.Layer))
+                        if (!(ent is Curve) || string.IsNullOrEmpty(ent.Layer))
+                            continue;
+
+                        string entLayer = ent.Layer;
+                        for (int i = 0; i < groupCount; i++)
                         {
-                            count++;
-                            if (count >= stopAtCount)
-                                break;
+                            if (!groupActive[i])
+                                continue;
+
+                            if (layerSets[i].Contains(entLayer))
+                            {
+                                counts[i]++;
+                                if (counts[i] >= stopAtCountPerGroup)
+                                {
+                                    groupActive[i] = false;
+                                    activeGroupCount--;
+                                }
+                            }
                         }
+
+                        if (activeGroupCount <= 0)
+                            break;
                     }
 
                     tr.Commit();
@@ -357,7 +447,7 @@ namespace process_pipeline.Core.DataSource
                 // 忽略异常，返回已统计数量
             }
 
-            return count;
+            return counts;
         }
 
         private static DataSourceDescriptor CreateExternalFileDescriptor(

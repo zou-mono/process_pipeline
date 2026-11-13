@@ -408,13 +408,18 @@ namespace process_pipeline.Forms
                 PlanningDocDisplayName = "当前激活图纸";
             }
 
-            PlanningCurveCount = DataSourceService.CountCurveEntitiesOnLayers(_activePlanDb, planLayers);
-            PreviousSameDrawingCurveCount = DataSourceService.CountCurveEntitiesOnLayers(
+            int[] sameDrawingCounts = DataSourceService.CountCurveEntitiesByLayerGroups(
                 _activePlanDb,
-                CadConfig.PreviousData.PipeLayers);
-            SurveySameDrawingCurveCount = DataSourceService.CountCurveEntitiesOnLayers(
-                _activePlanDb,
-                CadConfig.SurveyData.PipeLayers);
+                new IEnumerable<string>[]
+                {
+                    planLayers,
+                    CadConfig.PreviousData.PipeLayers,
+                    CadConfig.SurveyData.PipeLayers
+                });
+
+            PlanningCurveCount = sameDrawingCounts.Length > 0 ? sameDrawingCounts[0] : 0;
+            PreviousSameDrawingCurveCount = sameDrawingCounts.Length > 1 ? sameDrawingCounts[1] : 0;
+            SurveySameDrawingCurveCount = sameDrawingCounts.Length > 2 ? sameDrawingCounts[2] : 0;
         }
 
         /// <summary>
@@ -459,14 +464,16 @@ namespace process_pipeline.Forms
                             ? Path.GetFileName(filePath)
                             : Path.GetFileName(doc.Name ?? "未命名.dwg");
 
-                        int prevCount = DataSourceService.CountCurveEntitiesOnLayers(
+                        int[] mdiCounts = DataSourceService.CountCurveEntitiesByLayerGroups(
                             doc.Database,
-                            CadConfig.PreviousData.PipeLayers,
-                            stopAtCount: 500);
-                        int surveyCount = DataSourceService.CountCurveEntitiesOnLayers(
-                            doc.Database,
-                            CadConfig.SurveyData.PipeLayers,
-                            stopAtCount: 500);
+                            new IEnumerable<string>[]
+                            {
+                                CadConfig.PreviousData.PipeLayers,
+                                CadConfig.SurveyData.PipeLayers
+                            },
+                            stopAtCountPerGroup: 500);
+                        int prevCount = mdiCounts.Length > 0 ? mdiCounts[0] : 0;
+                        int surveyCount = mdiCounts.Length > 1 ? mdiCounts[1] : 0;
 
                         OpenMdiDocuments.Add(new MdiDocumentOptionItem
                         {
@@ -504,11 +511,11 @@ namespace process_pipeline.Forms
 
             DataSourceDescriptor prevDesc = (_datasetContext?.PreviousDataSource != null && _datasetContext.PreviousDataSource.IsValid)
                 ? _datasetContext.PreviousDataSource
-                : _dataSourceService.ResolvePreviousDataSource(_activePlanDb, null);
+                : _dataSourceService.ResolvePreviousDataSource(_activePlanDb, null, PreviousSameDrawingCurveCount);
 
             DataSourceDescriptor surveyDesc = (_datasetContext?.SurveyDataSource != null && _datasetContext.SurveyDataSource.IsValid)
                 ? _datasetContext.SurveyDataSource
-                : _dataSourceService.ResolveSurveyDataSource(_activePlanDb, null);
+                : _dataSourceService.ResolveSurveyDataSource(_activePlanDb, null, SurveySameDrawingCurveCount);
 
             ApplyPreviousDescriptorToVm(prevDesc);
             ApplySurveyDescriptorToVm(surveyDesc);
@@ -527,8 +534,8 @@ namespace process_pipeline.Forms
                 CadConfig.DataSources.PreferSameDrawingLayers = PreferSameDrawingLayers;
                 CadConfig.DataSources.PreferOpenMdiDocuments = PreferOpenMdiDocuments;
 
-                DataSourceDescriptor prevDesc = _dataSourceService.ResolvePreviousDataSource(_activePlanDb, null);
-                DataSourceDescriptor surveyDesc = _dataSourceService.ResolveSurveyDataSource(_activePlanDb, null);
+                DataSourceDescriptor prevDesc = _dataSourceService.ResolvePreviousDataSource(_activePlanDb, null, PreviousSameDrawingCurveCount);
+                DataSourceDescriptor surveyDesc = _dataSourceService.ResolveSurveyDataSource(_activePlanDb, null, SurveySameDrawingCurveCount);
 
                 ApplyPreviousDescriptorToVm(prevDesc);
                 ApplySurveyDescriptorToVm(surveyDesc);
