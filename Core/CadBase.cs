@@ -16,42 +16,220 @@ using process_pipeline.Forms;
 
 namespace process_pipeline.Core
 {
-   public class ProgressContext
+    public class ProgressContext : IDisposable
     {
+        private const long UiPumpIntervalMs = 40;
+        private const int MaxMeterTicks = 100;
+
         private readonly ProgressMeter _pm;
         private readonly CancellationTokenSource _cts;
+        private readonly bool _ownsResources;
+        private readonly bool _allowCancel;
+        private readonly bool _isHeadless;
+        private readonly System.Diagnostics.Stopwatch _throttleWatch;
+        private long _lastUiPumpMs;
         private int _currentProgress = 0;
+        private int _total = 100;
+        private int _meterLimit = 100;
+        private int _lastMeterTick = 0;
+        private System.Windows.Input.Cursor _previousCursor;
+        private bool _hasOverriddenCursor;
+        private bool _disposed;
 
-        public CancellationToken Token => _cts.Token;
+        public CancellationToken Token => _cts != null ? _cts.Token : CancellationToken.None;
 
-        public ProgressContext(ProgressMeter pm, CancellationTokenSource cts)
+        public bool IsCancelled => _cts != null && _cts.IsCancellationRequested;
+
+        public ProgressContext(ProgressMeter pm, CancellationTokenSource cts, bool ownsResources = false, bool allowCancel = true)
         {
             _pm = pm;
-            _cts = cts;
+            _cts = cts ?? new CancellationTokenSource();
+            _ownsResources = ownsResources;
+            _allowCancel = allowCancel;
+            _isHeadless = Core.Config.ConfigManager.IsHeadlessOrSuppressedUi;
+            _throttleWatch = System.Diagnostics.Stopwatch.StartNew();
+            _lastUiPumpMs = 0;
         }
 
-        public void SetTotal(int total) { 
-            _pm.SetLimit(total);
-            System.Windows.Forms.Application.DoEvents();
-        } 
+        /// <summary>
+        /// 开启一个自动管理生命周期的 CAD 系统状态栏进度条与等待光标作用域（支持 using 自动释放）。
+        /// 在无头测试环境（ConfigManager.IsHeadlessOrSuppressedUi = true）下自动降级为纯内存无 UI 进度上下文。
+        /// </summary>
+        public static ProgressContext StartScope(string taskTitle, bool allowCancel = true)
+        {
+            var cts = new CancellationTokenSource();
+            bool isHeadless = Core.Config.ConfigManager.IsHeadlessOrSuppressedUi;
+            ProgressMeter pm = null;
+            System.Windows.Input.Cursor prevCursor = null;
+            bool cursorOverridden = false;
+
+            if (!isHeadless)
+            {
+                try
+                {
+                    prevCursor = System.Windows.Input.Mouse.OverrideCursor;
+                    System.Windows.Input.Mouse.OverrideCursor = System.Windows.Input.Cursors.Wait;
+                    cursorOverridden = true;
+                }
+                catch
+                {
+                    cursorOverridden = false;
+                }
+
+                try
+                {
+                    pm = new ProgressMeter();
+                    string label = allowCancel
+                        ? $"{taskTitle}，按 [ESC] 键可中途取消..."
+                        : $"{taskTitle}...";
+                    pm.Start(label);
+                    pm.SetLimit(MaxMeterTicks);
+                    System.Windows.Forms.Application.DoEvents();
+                }
+                catch
+                {
+                    pm?.Dispose();
+                    pm = null;
+                }
+            }
+
+            var ctx = new ProgressContext(pm, cts, ownsResources: true, allowCancel: allowCancel)
+            {
+                _previousCursor = prevCursor,
+                _hasOverriddenCursor = cursorOverridden
+            };
+            return ctx;
+        }
+
+        /// <summary>
+        /// 切换多阶段进度条的当前阶段标题并重置当前阶段进度。
+        /// </summary>
+        public void SetStage(string stageTitle, int total = 0)
+        {
+            _currentProgress = 0;
+            _lastMeterTick = 0;
+            _total = Math.Max(1, total > 0 ? total : MaxMeterTicks);
+            _meterLimit = Math.Min(_total, MaxMeterTicks);
+
+            if (!_isHeadless && _pm != null)
+            {
+                try
+                {
+                    _pm.Stop();
+                    string label = _allowCancel
+                        ? $"{stageTitle}，按 [ESC] 键可中途取消..."
+                        : $"{stageTitle}...";
+                    _pm.Start(label);
+                    _pm.SetLimit(_meterLimit);
+                    System.Windows.Forms.Application.DoEvents();
+                    _lastUiPumpMs = _throttleWatch.ElapsedMilliseconds;
+                }
+                catch
+                {
+                    // 忽略进度条阶段标题切换异常
+                }
+            }
+        }
+
+        public void SetTotal(int total)
+        {
+            _currentProgress = 0;
+            _lastMeterTick = 0;
+            _total = Math.Max(1, total);
+            _meterLimit = Math.Min(_total, MaxMeterTicks);
+
+            if (!_isHeadless && _pm != null)
+            {
+                try
+                {
+                    _pm.SetLimit(_meterLimit);
+                    long nowMs = _throttleWatch.ElapsedMilliseconds;
+                    if (nowMs - _lastUiPumpMs >= UiPumpIntervalMs)
+                    {
+                        _lastUiPumpMs = nowMs;
+                        System.Windows.Forms.Application.DoEvents();
+                    }
+                }
+                catch
+                {
+                    // 忽略进度条上限设置异常
+                }
+            }
+        }
 
         public void Step()
         {
-            _pm.MeterProgress();
             _currentProgress++;
 
-            // 统一在这里检测 ESC 键
-            if ((WINAPI.GetAsyncKeyState(WINAPI.VK_ESCAPE) & 0x8000) != 0)
+            if (!_isHeadless && _pm != null && _total > 0)
             {
-                _cts.Cancel();
+                int targetTick = Math.Min(_meterLimit, (int)((long)_currentProgress * _meterLimit / _total));
+                while (_lastMeterTick < targetTick)
+                {
+                    _pm.MeterProgress();
+                    _lastMeterTick++;
+                }
             }
 
-            _cts.Token.ThrowIfCancellationRequested();
-
-            // 统一的 UI 喘息机制
-            if (_currentProgress % 10 == 0)
+            // 按时间片（40ms = 25FPS）节流执行 ESC 按键检测与 UI 消息泵喘息，杜绝大图纸数千次高频 DoEvents 拖慢核查速度
+            if (!_isHeadless)
             {
-                System.Windows.Forms.Application.DoEvents();
+                long nowMs = _throttleWatch.ElapsedMilliseconds;
+                if (nowMs - _lastUiPumpMs >= UiPumpIntervalMs)
+                {
+                    _lastUiPumpMs = nowMs;
+
+                    if (_allowCancel && (WINAPI.GetAsyncKeyState(WINAPI.VK_ESCAPE) & 0x8000) != 0)
+                    {
+                        _cts?.Cancel();
+                    }
+
+                    System.Windows.Forms.Application.DoEvents();
+                }
+            }
+
+            _cts?.Token.ThrowIfCancellationRequested();
+        }
+
+        public void Dispose()
+        {
+            if (_disposed)
+                return;
+            _disposed = true;
+
+            if (_ownsResources)
+            {
+                try
+                {
+                    _pm?.Stop();
+                    _pm?.Dispose();
+                }
+                catch
+                {
+                    // 忽略进度条停止异常
+                }
+
+                try
+                {
+                    _cts?.Dispose();
+                }
+                catch
+                {
+                    // 忽略 CTS 释放异常
+                }
+
+                if (_hasOverriddenCursor)
+                {
+                    try
+                    {
+                        System.Windows.Input.Mouse.OverrideCursor = _previousCursor;
+                    }
+                    catch
+                    {
+                        // 忽略光标恢复异常
+                    }
+                    _hasOverriddenCursor = false;
+                }
             }
         }
     }

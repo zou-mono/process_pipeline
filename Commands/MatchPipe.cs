@@ -478,7 +478,8 @@ namespace process_pipeline.Commands
             PipeSpatialMatchSummary textMatchSummary = _spatialMatcher.MatchAndEnrichPlanTextLabels(
                 _db,
                 ctx,
-                CadConfig.PlanningData);
+                CadConfig.PlanningData,
+                progress: progress);
 
             RebuildTextToPlanPipeMap(textMatchSummary);
 
@@ -502,11 +503,16 @@ namespace process_pipeline.Commands
                 .ToList();
 
             report.TotalPlanPipeCount = orderedPlanPipes.Count;
+            progress?.SetTotal(Math.Max(1, orderedPlanPipes.Count));
 
             foreach (EnrichedPlanPipeInfo planInfo in orderedPlanPipes)
             {
-                if (progress != null && progress.Token.IsCancellationRequested)
-                    break;
+                if (progress != null)
+                {
+                    if (progress.Token.IsCancellationRequested)
+                        break;
+                    progress.Step();
+                }
 
                 string catId = !string.IsNullOrWhiteSpace(planInfo.ResolvedCategoryId)
                     ? planInfo.ResolvedCategoryId

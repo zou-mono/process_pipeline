@@ -143,9 +143,9 @@ namespace process_pipeline.Commands
             var options = MatchOptions ?? PipeSpatialMatchOptions.FromConfig();
             PipeSpatialMatchSummary summary = isPlanTextMode
                 ? (PipeLayerNames != null && PipeLayerNames.Count > 0 && AttributeLayerNames != null && AttributeLayerNames.Count > 0
-                    ? _matcher.MatchDatabaseTextLabels(_db, pipeLayers, attrLayers, options)
-                    : _matcher.MatchAndEnrichPlanTextLabels(_db, session?.DatasetContext, CadConfig.PlanningData, options))
-                : _matcher.MatchDatabaseBlockAttributes(_db, pipeLayers, attrLayers, options);
+                    ? _matcher.MatchDatabaseTextLabels(_db, pipeLayers, attrLayers, options, context)
+                    : _matcher.MatchAndEnrichPlanTextLabels(_db, session?.DatasetContext, CadConfig.PlanningData, options, context))
+                : _matcher.MatchDatabaseBlockAttributes(_db, pipeLayers, attrLayers, options, context);
             LastSummary = summary;
 
             if (summary.TotalPipeCount == 0 && summary.TotalAttachmentCount == 0)

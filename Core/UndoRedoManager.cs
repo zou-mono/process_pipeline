@@ -415,12 +415,17 @@ namespace process_pipeline.Core
                 }
 
                 using (process_pipeline.Utils.PaletteRefreshManager.SuppressEventsScope())
+                using (ProgressContext progress = curveIds.Count >= 10
+                    ? ProgressContext.StartScope($"正在批量翻转 {curveIds.Count} 条管线流向", allowCancel: false)
+                    : null)
                 using (Transaction tr = targetDb.TransactionManager.StartTransaction())
                 {
                     try
                     {
+                        progress?.SetTotal(curveIds.Count);
                         foreach (ObjectId curveId in curveIds)
                         {
+                            progress?.Step();
                             if (curveId.IsNull || !curveId.IsValid || curveId.IsErased || curveId.Database != targetDb)
                                 continue;
 
@@ -623,7 +628,11 @@ namespace process_pipeline.Core
                 }
 
                 using (process_pipeline.Utils.PaletteRefreshManager.SuppressEventsScope())
+                using (ProgressContext progress = _records.Count >= 10
+                    ? ProgressContext.StartScope($"正在批量绑定 {_records.Count} 组图属 Group 与 XData", allowCancel: false)
+                    : null)
                 {
+                    progress?.SetTotal(_records.Count * 2);
                     var validRecords = new List<BindPairExecutionRecord>(_records.Count);
 
                     // 阶段 1（XData 事务）：独立打开管线与属性块图元写入双向 PIPE_CHECK_LINK XData 并立即提交关闭，
@@ -636,6 +645,7 @@ namespace process_pipeline.Core
 
                             foreach (BindPairExecutionRecord rec in _records)
                             {
+                                progress?.Step();
                                 if (!rec.PipeId.IsValid || rec.PipeId.IsErased ||
                                     !rec.AttachmentId.IsValid || rec.AttachmentId.IsErased)
                                 {
@@ -735,6 +745,7 @@ namespace process_pipeline.Core
                             int boundCount = 0;
                             foreach (BindPairExecutionRecord rec in validRecords)
                             {
+                                progress?.Step();
                                 string baseGroupName = $"PIPE_GRP_{rec.PipeHandle}_{rec.AttachmentHandle}";
                                 string groupName = AllocateGroupName(groupDict, baseGroupName);
 

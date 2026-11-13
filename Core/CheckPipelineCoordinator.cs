@@ -360,31 +360,54 @@ namespace process_pipeline.Core
             if (rule == null)
                 return session?.GetAllIssueItems() ?? Array.Empty<CheckIssueItem>();
 
-            var ruleResult = rule.CheckAll(progress);
-            if (ruleResult == null)
+            string ruleTitle = option?.DisplayName ?? rule.RuleName ?? ruleId;
+            using (ProgressContext ownedProgress = progress == null
+                ? ProgressContext.StartScope($"正在执行 [{ruleTitle}]")
+                : null)
             {
-                // 子规则因前置数据缺失返回 null 时直接终止（严禁弹出主核查面板或清空当前文档已有的其他规则核查结果）
-                return session?.GetAllIssueItems() ?? Array.Empty<CheckIssueItem>();
+                ProgressContext activeProgress = progress ?? ownedProgress;
+                Dictionary<ObjectId, CheckIssueItem> ruleResult;
+                try
+                {
+                    ruleResult = rule.CheckAll(activeProgress);
+                }
+                catch (OperationCanceledException)
+                {
+                    ed?.WriteMessage($"\n*** [{ruleTitle}] 已由用户中途取消 ***\n");
+                    return session?.GetAllIssueItems() ?? Array.Empty<CheckIssueItem>();
+                }
+
+                if (activeProgress != null && activeProgress.IsCancelled)
+                {
+                    ed?.WriteMessage($"\n*** [{ruleTitle}] 已由用户中途取消 ***\n");
+                    return session?.GetAllIssueItems() ?? Array.Empty<CheckIssueItem>();
+                }
+
+                if (ruleResult == null)
+                {
+                    // 子规则因前置数据缺失返回 null 时直接终止（严禁弹出主核查面板或清空当前文档已有的其他规则核查结果）
+                    return session?.GetAllIssueItems() ?? Array.Empty<CheckIssueItem>();
+                }
+
+                ruleExecuted = true;
+                session?.RegisterActiveRule(rule);
+
+                // 单实体单问题字典规则（FlowArrow / MatchGroup / PlanDataCheck）统一合并至 session.IssuesById
+                if (session != null && IsDictionaryBasedRule(rule.RuleId))
+                {
+                    session.MergeRuleIssues(rule.RuleId, ruleResult, isIncremental: false);
+                }
+
+                var allIssues = session?.GetAllIssueItems() ??
+                                (IReadOnlyList<CheckIssueItem>)(ruleResult.Values.ToList());
+
+                if (showPalette && !ConfigManager.IsHeadlessOrSuppressedUi)
+                {
+                    palCheckPipe.Instance.ShowIssueItems(allIssues, rule.RuleId);
+                }
+
+                return allIssues;
             }
-
-            ruleExecuted = true;
-            session?.RegisterActiveRule(rule);
-
-            // 单实体单问题字典规则（FlowArrow / MatchGroup / PlanDataCheck）统一合并至 session.IssuesById
-            if (session != null && IsDictionaryBasedRule(rule.RuleId))
-            {
-                session.MergeRuleIssues(rule.RuleId, ruleResult, isIncremental: false);
-            }
-
-            var allIssues = session?.GetAllIssueItems() ??
-                            (IReadOnlyList<CheckIssueItem>)(ruleResult.Values.ToList());
-
-            if (showPalette && !ConfigManager.IsHeadlessOrSuppressedUi)
-            {
-                palCheckPipe.Instance.ShowIssueItems(allIssues, rule.RuleId);
-            }
-
-            return allIssues;
         }
 
         public static bool IsDictionaryBasedRule(string ruleId)
@@ -450,42 +473,75 @@ namespace process_pipeline.Core
             summary.SurveyDataSource = ctx.SurveyDataSource;
 
             // 2. 依次调度各核查规则并合并至当前文档会话（子规则启用 suppressBlockingDialog = true，避免批量中途重复弹窗）
-            foreach (CheckRuleOptionItem opt in _ruleOptions)
+            using (ProgressContext ownedProgress = progress == null
+                ? ProgressContext.StartScope("正在执行一键全量核查")
+                : null)
             {
-                if (opt.RequiresSurveyData && (ctx.SurveyDataSource == null || !ctx.SurveyDataSource.IsValid))
+                ProgressContext activeProgress = progress ?? ownedProgress;
+                int totalRuleCount = _ruleOptions.Count;
+
+                for (int ruleIdx = 0; ruleIdx < totalRuleCount; ruleIdx++)
                 {
-                    ed?.WriteMessage($"\n[一键全量核查] 勘测数据源未就绪，已跳过 [{opt.DisplayName}]。");
-                    continue;
+                    CheckRuleOptionItem opt = _ruleOptions[ruleIdx];
+                    if (activeProgress != null && activeProgress.IsCancelled)
+                    {
+                        ed?.WriteMessage("\n*** [一键全量核查] 已由用户中途取消 ***\n");
+                        break;
+                    }
+
+                    if (opt.RequiresSurveyData && (ctx.SurveyDataSource == null || !ctx.SurveyDataSource.IsValid))
+                    {
+                        ed?.WriteMessage($"\n[一键全量核查] 勘测数据源未就绪，已跳过 [{opt.DisplayName}]。");
+                        continue;
+                    }
+
+                    if (opt.RequiresPreviousData && (ctx.PreviousDataSource == null || !ctx.PreviousDataSource.IsValid))
+                    {
+                        ed?.WriteMessage($"\n[一键全量核查] 上版数据源未就绪，已跳过 [{opt.DisplayName}]。");
+                        continue;
+                    }
+
+                    ICheckRule rule = CreateRuleInstance(opt.RuleId, db, ed, suppressBlockingDialog: true);
+                    if (rule == null)
+                        continue;
+
+                    activeProgress?.SetStage($"正在执行全量核查 ({ruleIdx + 1}/{totalRuleCount}): {opt.DisplayName}");
+
+                    Dictionary<ObjectId, CheckIssueItem> ruleResult;
+                    try
+                    {
+                        ruleResult = rule.CheckAll(activeProgress);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        ed?.WriteMessage("\n*** [一键全量核查] 已由用户中途取消 ***\n");
+                        break;
+                    }
+
+                    if (activeProgress != null && activeProgress.IsCancelled)
+                    {
+                        ed?.WriteMessage("\n*** [一键全量核查] 已由用户中途取消 ***\n");
+                        break;
+                    }
+
+                    session?.RegisterActiveRule(rule);
+
+                    if (session != null &&
+                        IsDictionaryBasedRule(rule.RuleId) &&
+                        ruleResult != null)
+                    {
+                        session.MergeRuleIssues(rule.RuleId, ruleResult, isIncremental: false);
+                    }
+
+                    summary.ExecutedRuleIds.Add(rule.RuleId);
+
+                    int ruleIssueCount = session != null
+                        ? session.IssuesById.Values.Count(i =>
+                            i != null && string.Equals(i.RuleId, rule.RuleId, StringComparison.OrdinalIgnoreCase))
+                        : (ruleResult?.Count ?? 0);
+
+                    summary.IssueCountByRuleId[rule.RuleId] = ruleIssueCount;
                 }
-
-                if (opt.RequiresPreviousData && (ctx.PreviousDataSource == null || !ctx.PreviousDataSource.IsValid))
-                {
-                    ed?.WriteMessage($"\n[一键全量核查] 上版数据源未就绪，已跳过 [{opt.DisplayName}]。");
-                    continue;
-                }
-
-                ICheckRule rule = CreateRuleInstance(opt.RuleId, db, ed, suppressBlockingDialog: true);
-                if (rule == null)
-                    continue;
-
-                session?.RegisterActiveRule(rule);
-                var ruleResult = rule.CheckAll(progress);
-
-                if (session != null &&
-                    IsDictionaryBasedRule(rule.RuleId) &&
-                    ruleResult != null)
-                {
-                    session.MergeRuleIssues(rule.RuleId, ruleResult, isIncremental: false);
-                }
-
-                summary.ExecutedRuleIds.Add(rule.RuleId);
-
-                int ruleIssueCount = session != null
-                    ? session.IssuesById.Values.Count(i =>
-                        i != null && string.Equals(i.RuleId, rule.RuleId, StringComparison.OrdinalIgnoreCase))
-                    : (ruleResult?.Count ?? 0);
-
-                summary.IssueCountByRuleId[rule.RuleId] = ruleIssueCount;
             }
 
             summary.AllMergedIssues = session?.GetAllIssueItems() ?? Array.Empty<CheckIssueItem>();

@@ -3163,14 +3163,30 @@ namespace process_pipeline.Forms
                     ? session.ActiveRules.Values.Where(r => r != null).ToList()
                     : new List<ICheckRule> { session.ActiveRule };
 
-                foreach (ICheckRule activeRule in rulesToRun)
+                using (var progress = ProgressContext.StartScope("正在刷新核查数据"))
                 {
-                    if (activeRule == null) continue;
-                    var ruleIssues = activeRule.CheckAll();
-                    if (ruleIssues != null &&
-                        CheckPipelineCoordinator.IsDictionaryBasedRule(activeRule.RuleId))
+                    for (int i = 0; i < rulesToRun.Count; i++)
                     {
-                        session.MergeRuleIssues(activeRule.RuleId, ruleIssues, isIncremental: false);
+                        ICheckRule activeRule = rulesToRun[i];
+                        if (activeRule == null) continue;
+                        if (rulesToRun.Count > 1)
+                        {
+                            progress.SetStage($"正在刷新核查数据 ({i + 1}/{rulesToRun.Count}): {activeRule.RuleName ?? activeRule.RuleId}");
+                        }
+
+                        try
+                        {
+                            var ruleIssues = activeRule.CheckAll(progress);
+                            if (ruleIssues != null &&
+                                CheckPipelineCoordinator.IsDictionaryBasedRule(activeRule.RuleId))
+                            {
+                                session.MergeRuleIssues(activeRule.RuleId, ruleIssues, isIncremental: false);
+                            }
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            break;
+                        }
                     }
                 }
 
@@ -4093,13 +4109,26 @@ namespace process_pipeline.Forms
 
             if (activeRules.Count > 1)
             {
-                foreach (ICheckRule activeRule in activeRules)
+                using (var progress = ProgressContext.StartScope("正在刷新核查数据"))
                 {
-                    var ruleIssues = activeRule.CheckAll();
-                    if (ruleIssues != null &&
-                        CheckPipelineCoordinator.IsDictionaryBasedRule(activeRule.RuleId))
+                    for (int i = 0; i < activeRules.Count; i++)
                     {
-                        session.MergeRuleIssues(activeRule.RuleId, ruleIssues, isIncremental: false);
+                        ICheckRule activeRule = activeRules[i];
+                        if (activeRule == null) continue;
+                        progress.SetStage($"正在刷新核查数据 ({i + 1}/{activeRules.Count}): {activeRule.RuleName ?? activeRule.RuleId}");
+                        try
+                        {
+                            var ruleIssues = activeRule.CheckAll(progress);
+                            if (ruleIssues != null &&
+                                CheckPipelineCoordinator.IsDictionaryBasedRule(activeRule.RuleId))
+                            {
+                                session.MergeRuleIssues(activeRule.RuleId, ruleIssues, isIncremental: false);
+                            }
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            break;
+                        }
                     }
                 }
 
@@ -4108,7 +4137,19 @@ namespace process_pipeline.Forms
             }
 
             ICheckRule rule = activeRules[0];
-            var newProblems = rule.CheckAll();
+            Dictionary<ObjectId, CheckIssueItem> newProblems = null;
+            using (var progress = ProgressContext.StartScope($"正在刷新 [{rule.RuleName ?? rule.RuleId}]"))
+            {
+                try
+                {
+                    newProblems = rule.CheckAll(progress);
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
+            }
+
             if (newProblems != null)
             {
                 if (session != null &&

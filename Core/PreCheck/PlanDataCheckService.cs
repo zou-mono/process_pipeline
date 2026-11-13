@@ -292,13 +292,25 @@ namespace process_pipeline.Core.PreCheck
                     BlockTableRecord ms = tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForRead) as BlockTableRecord;
                     if (ms != null)
                     {
-                        foreach (ObjectId objId in ms)
+                        var msIds = new List<ObjectId>();
+                        foreach (ObjectId id in ms)
                         {
-                            if (progress != null && progress.Token.IsCancellationRequested)
-                                break;
+                            if (!id.IsNull && !id.IsErased)
+                            {
+                                msIds.Add(id);
+                            }
+                        }
 
-                            if (objId.IsNull || objId.IsErased)
-                                continue;
+                        progress?.SetTotal(Math.Max(1, msIds.Count));
+
+                        foreach (ObjectId objId in msIds)
+                        {
+                            if (progress != null)
+                            {
+                                if (progress.Token.IsCancellationRequested)
+                                    break;
+                                progress.Step();
+                            }
 
                             Entity ent = tr.GetObject(objId, OpenMode.ForRead) as Entity;
                             if (ent == null || ent.IsErased || string.IsNullOrWhiteSpace(ent.Layer))

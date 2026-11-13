@@ -272,7 +272,8 @@ namespace process_pipeline.Geometry
             Database db,
             IEnumerable<string> pipeLayers,
             IEnumerable<string> blockLayers,
-            PipeSpatialMatchOptions options = null)
+            PipeSpatialMatchOptions options = null,
+            ProgressContext progress = null)
         {
             if (db == null)
                 throw new ArgumentNullException(nameof(db));
@@ -586,7 +587,7 @@ namespace process_pipeline.Geometry
 
             if (remainingPipes.Count > 0 || remainingAttachments.Count > 0)
             {
-                MatchRemainingBySpatialProximity(remainingPipes, remainingAttachments, options, summary);
+                MatchRemainingBySpatialProximity(remainingPipes, remainingAttachments, options, summary, progress);
             }
 
             return summary;
@@ -600,7 +601,8 @@ namespace process_pipeline.Geometry
             Database db,
             IEnumerable<string> pipeLayers,
             IEnumerable<string> textLayers,
-            PipeSpatialMatchOptions options = null)
+            PipeSpatialMatchOptions options = null,
+            ProgressContext progress = null)
         {
             if (db == null)
                 throw new ArgumentNullException(nameof(db));
@@ -947,7 +949,7 @@ namespace process_pipeline.Geometry
 
             if (remainingPipes.Count > 0 || remainingAttachments.Count > 0)
             {
-                MatchRemainingBySpatialProximity(remainingPipes, remainingAttachments, textMatchOpts, summary);
+                MatchRemainingBySpatialProximity(remainingPipes, remainingAttachments, textMatchOpts, summary, progress);
             }
 
             return summary;
@@ -961,7 +963,8 @@ namespace process_pipeline.Geometry
             Database db,
             PipeDatasetContext datasetContext,
             PlanningDataSettings planningSettings = null,
-            PipeSpatialMatchOptions options = null)
+            PipeSpatialMatchOptions options = null,
+            ProgressContext progress = null)
         {
             if (db == null)
                 throw new ArgumentNullException(nameof(db));
@@ -977,7 +980,7 @@ namespace process_pipeline.Geometry
                 foreach (PlanPipeCategoryRule cat in cfg.Categories)
                 {
                     if (cat == null) continue;
-                    var catSummary = MatchDatabaseTextLabels(db, cat.PipeLayers, cat.TextLayers, options);
+                    var catSummary = MatchDatabaseTextLabels(db, cat.PipeLayers, cat.TextLayers, options, progress);
                     MergeMatchSummaries(summary, catSummary);
                 }
             }
@@ -985,7 +988,7 @@ namespace process_pipeline.Geometry
             {
                 var allPipeLayers = cfg.GetAllPipeLayers();
                 var allTextLayers = cfg.GetAllTextLayers();
-                summary = MatchDatabaseTextLabels(db, allPipeLayers, allTextLayers, options);
+                summary = MatchDatabaseTextLabels(db, allPipeLayers, allTextLayers, options, progress);
             }
 
             if (datasetContext != null)
@@ -1105,10 +1108,13 @@ namespace process_pipeline.Geometry
             IReadOnlyList<SpatialPipeTarget> pipes,
             IReadOnlyList<SpatialAttachmentItem> attachments,
             PipeSpatialMatchOptions options,
-            PipeSpatialMatchSummary summary)
+            PipeSpatialMatchSummary summary,
+            ProgressContext progress = null)
         {
             if (pipes.Count == 0 && attachments.Count == 0)
                 return;
+
+            progress?.SetTotal(Math.Max(1, attachments.Count + pipes.Count));
 
             // 构建管线空间索引：同时索引“管线外包框扩展区”与“外包框中心点扩展区”
             var pipeTree = new STRtree<SpatialPipeTarget>();
@@ -1128,6 +1134,7 @@ namespace process_pipeline.Geometry
 
             foreach (SpatialAttachmentItem att in attachments)
             {
+                progress?.Step();
                 if (att == null) continue;
 
                 var ptEnv = new Envelope(att.Position.X, att.Position.X, att.Position.Y, att.Position.Y);
@@ -1252,6 +1259,7 @@ namespace process_pipeline.Geometry
             // 生成每条管线的配对结果并检测是否存在空间歧义、一管多标或不规范文字标注
             foreach (SpatialPipeTarget pipe in pipes)
             {
+                progress?.Step();
                 if (assignedPipes.TryGetValue(pipe.Handle, out CandidatePair best))
                 {
                     var pipeCands = candidatesByPipe.TryGetValue(pipe.Handle, out var list)

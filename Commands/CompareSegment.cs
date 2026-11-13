@@ -695,7 +695,8 @@ namespace process_pipeline.Commands
             PipeSpatialMatchSummary planTextSummary = _spatialMatcher.MatchAndEnrichPlanTextLabels(
                 _db,
                 ctx,
-                CadConfig.PlanningData);
+                CadConfig.PlanningData,
+                progress: progress);
             RebuildPlanTextMap(planTextSummary);
 
             // 2. 加载或复用可编辑上版数据动态缓存（含 Group + XData + 空间邻近三级提取的 19 项 ws 属性）
@@ -750,11 +751,16 @@ namespace process_pipeline.Commands
 
             // 4. 识别同源管线配对（Plan Pipe <-> Previous Pipe）并执行 19 项属性继承与核心属性对比
             _prevHandleToPlanPipeIds.Clear();
+            progress?.SetTotal(Math.Max(1, planPipes.Count));
 
             foreach (EnrichedPlanPipeInfo planInfo in planPipes)
             {
-                if (progress != null && progress.Token.IsCancellationRequested)
-                    break;
+                if (progress != null)
+                {
+                    if (progress.Token.IsCancellationRequested)
+                        break;
+                    progress.Step();
+                }
 
                 CadPolyline planPoly = planInfo.Polyline;
                 if (planPoly?.Segments == null || planPoly.Segments.Count == 0)
