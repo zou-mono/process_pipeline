@@ -233,7 +233,7 @@ namespace process_pipeline.Models
                 case "FlowArrow":
                     return "流向箭头核查";
                 case "MatchGroup":
-                    return "图属Group核查";
+                    return "图属匹配核查";
                 case "CheckPlan":
                     return "规划数据自检";
                 case "MatchPipe":

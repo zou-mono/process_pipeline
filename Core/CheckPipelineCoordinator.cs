@@ -72,7 +72,7 @@ namespace process_pipeline.Core
             new CheckRuleOptionItem
             {
                 RuleId = MatchGroupService.DefaultRuleId,
-                DisplayName = "图属与文字配对 (MATCHGROUP)",
+                DisplayName = "图属匹配核查 (MATCHGROUP)",
                 CommandName = "MATCHGROUP",
                 RequiresPreviousData = false,
                 RequiresSurveyData = false

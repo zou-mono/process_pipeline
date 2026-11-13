@@ -47,7 +47,7 @@ namespace process_pipeline.Commands
     public class MatchGroupService : CadBase<Dictionary<ObjectId, CheckIssueItem>>, ICheckRule
     {
         public const string DefaultRuleId = "MatchGroup";
-        public const string DefaultRuleName = "图属Group核查";
+        public const string DefaultRuleName = "图属匹配核查";
 
         private readonly AcadDb.Database _db;
         private readonly Editor _ed;
