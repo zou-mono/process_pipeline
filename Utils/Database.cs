@@ -70,6 +70,9 @@ namespace process_pipeline.Utils
     {
         // 用来存储发生变化的特定受影响目标管线 ID（HashSet 自动去重）
         private static HashSet<ObjectId> _changedObjectIds = new HashSet<ObjectId>();
+        // 按每项已激活核查规则（RuleId）分别记录各自受影响的 ObjectId 集合，避免单图元修改连带触发无关规则全量重算
+        private static Dictionary<string, HashSet<ObjectId>> _changedObjectIdsByRuleId =
+            new Dictionary<string, HashSet<ObjectId>>(StringComparer.OrdinalIgnoreCase);
         private static int _suppressEventDepth = 0;
         private Document _currentDoc;
         private AcadDb.Database _currentDb;
@@ -169,6 +172,7 @@ namespace process_pipeline.Utils
             }
             _currentDoc = null;
             _changedObjectIds?.Clear();
+            _changedObjectIdsByRuleId?.Clear();
             Application.Idle -= SafeRefreshPalette_Idle;
         }
 
@@ -193,9 +197,17 @@ namespace process_pipeline.Utils
             foreach (ObjectId id in ids)
             {
                 _changedObjectIds.Remove(id);
+                if (_changedObjectIdsByRuleId != null)
+                {
+                    foreach (var ruleSet in _changedObjectIdsByRuleId.Values)
+                    {
+                        ruleSet?.Remove(id);
+                    }
+                }
             }
             if (_changedObjectIds.Count == 0)
             {
+                _changedObjectIdsByRuleId?.Clear();
                 Application.Idle -= SafeRefreshPalette_Idle;
             }
         }
@@ -227,6 +239,8 @@ namespace process_pipeline.Utils
             if (obj == null) return;
 
             _changedObjectIds = _changedObjectIds ?? new HashSet<ObjectId>();
+            _changedObjectIdsByRuleId = _changedObjectIdsByRuleId ??
+                                        new Dictionary<string, HashSet<ObjectId>>(StringComparer.OrdinalIgnoreCase);
 
             var session = DocumentSessionManager.GetOrCreateSession(_currentDb);
             if (session != null)
@@ -270,11 +284,21 @@ namespace process_pipeline.Utils
                 var affected = rule.GetAffectedTargetIds(obj);
                 if (affected == null) continue;
 
+                string ruleKey = rule.RuleId ?? string.Empty;
                 foreach (ObjectId targetId in affected)
                 {
                     if (!targetId.IsNull)
                     {
                         _changedObjectIds.Add(targetId);
+                        if (!string.IsNullOrWhiteSpace(ruleKey))
+                        {
+                            if (!_changedObjectIdsByRuleId.TryGetValue(ruleKey, out HashSet<ObjectId> ruleSet))
+                            {
+                                ruleSet = new HashSet<ObjectId>();
+                                _changedObjectIdsByRuleId[ruleKey] = ruleSet;
+                            }
+                            ruleSet.Add(targetId);
+                        }
                     }
                 }
             }
@@ -316,12 +340,33 @@ namespace process_pipeline.Utils
             List<ObjectId> idsToProcess = _changedObjectIds
                 .Where(id => !id.IsNull && id.Database == doc.Database)
                 .ToList();
+
+            var affectedByRuleId = new Dictionary<string, List<ObjectId>>(StringComparer.OrdinalIgnoreCase);
+            if (_changedObjectIdsByRuleId != null)
+            {
+                foreach (var kvp in _changedObjectIdsByRuleId)
+                {
+                    if (string.IsNullOrWhiteSpace(kvp.Key) || kvp.Value == null)
+                        continue;
+
+                    var validRuleIds = kvp.Value
+                        .Where(id => !id.IsNull && id.Database == doc.Database)
+                        .Distinct()
+                        .ToList();
+                    if (validRuleIds.Count > 0)
+                    {
+                        affectedByRuleId[kvp.Key] = validRuleIds;
+                    }
+                }
+                _changedObjectIdsByRuleId.Clear();
+            }
+
             _changedObjectIds.Clear();
 
             if (idsToProcess.Count == 0) return;
 
-            // 2. 触发面板表格的局部增量重算与单行刷新
-            GraphicManager.RefreshDataGrid(doc, idsToProcess);
+            // 2. 触发面板表格的局部增量重算与单行刷新（仅重算真正受图元变更影响的规则）
+            GraphicManager.RefreshDataGrid(doc, idsToProcess, affectedByRuleId);
         }
     }
 }

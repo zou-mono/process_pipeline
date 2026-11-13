@@ -317,7 +317,10 @@ namespace process_pipeline.Utils
             AddGraphic(new Line(p4, p1) { ColorIndex = colorIndex, LineWeight = lineWeight });
         }
 
-        public static void RefreshDataGrid(Document doc, List<ObjectId> idsToProcess)
+        public static void RefreshDataGrid(
+            Document doc,
+            List<ObjectId> idsToProcess,
+            Dictionary<string, List<ObjectId>> affectedIdsByRuleId = null)
         {
             GraphicManager.ClearAuxiliaryGraphics();
 
@@ -350,10 +353,28 @@ namespace process_pipeline.Utils
                 if (activeRules.Count == 0)
                     return;
 
+                bool hasRuleSpecificFilter = affectedIdsByRuleId != null && affectedIdsByRuleId.Count > 0;
                 foreach (ICheckRule activeRule in activeRules)
                 {
+                    if (activeRule == null)
+                        continue;
+
+                    List<ObjectId> ruleTargets = validIds;
+                    if (hasRuleSpecificFilter)
+                    {
+                        string ruleKey = activeRule.RuleId ?? string.Empty;
+                        if (!affectedIdsByRuleId.TryGetValue(ruleKey, out List<ObjectId> specificIds) ||
+                            specificIds == null ||
+                            specificIds.Count == 0)
+                        {
+                            // 本次 CAD 图元变更未影响该规则，跳过重算以避免无关规则连带全图扫描
+                            continue;
+                        }
+                        ruleTargets = specificIds;
+                    }
+
                     var service = new CheckPipeService(doc.Database, doc.Editor, activeRule);
-                    service.Run(activeRule.RuleName ?? CadConfig.TaskNames.FlowArrow, true, validIds);
+                    service.Run(activeRule.RuleName ?? CadConfig.TaskNames.FlowArrow, true, ruleTargets);
                 }
 
                 foreach (ObjectId oid in validIds)
