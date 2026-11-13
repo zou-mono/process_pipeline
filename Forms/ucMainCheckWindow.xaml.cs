@@ -1067,36 +1067,38 @@ namespace process_pipeline.Forms
                         _grid.SelectedCells.Clear();
                     }
                     _grid.SelectedItems.Clear();
-                    foreach (PipeRowVm row in targetList)
-                    {
-                        _grid.SelectedItems.Add(row);
-                    }
 
-                    _grid.UpdateLayout();
-
-                    if (scrollIntoView && targetList.Count > 0)
+                    if (targetList.Count > 0)
                     {
-                        _grid.ScrollIntoView(targetList[0]);
-                        _grid.UpdateLayout();
-                    }
-
-                    if (_grid.SelectedItems.Count != targetList.Count)
-                    {
-                        _grid.SelectedItems.Clear();
                         foreach (PipeRowVm row in targetList)
                         {
                             _grid.SelectedItems.Add(row);
                         }
-                        _grid.UpdateLayout();
-                    }
 
-                    // 显式加固已生成 DataGridRow 容器的 IsSelected 状态，确保跨左侧树根节点切换后选中高亮不丢失
-                    foreach (PipeRowVm row in targetList)
-                    {
-                        if (_grid.ItemContainerGenerator.ContainerFromItem(row) is DataGridRow rowContainer &&
-                            !rowContainer.IsSelected)
+                        if (scrollIntoView)
                         {
-                            rowContainer.IsSelected = true;
+                            _grid.ScrollIntoView(targetList[0]);
+                            _grid.UpdateLayout();
+                        }
+
+                        if (_grid.SelectedItems.Count != targetList.Count)
+                        {
+                            _grid.UpdateLayout();
+                            _grid.SelectedItems.Clear();
+                            foreach (PipeRowVm row in targetList)
+                            {
+                                _grid.SelectedItems.Add(row);
+                            }
+                        }
+
+                        // 显式加固已生成 DataGridRow 容器的 IsSelected 状态，确保跨左侧树根节点切换后选中高亮不丢失
+                        foreach (PipeRowVm row in targetList)
+                        {
+                            if (_grid.ItemContainerGenerator.ContainerFromItem(row) is DataGridRow rowContainer &&
+                                !rowContainer.IsSelected)
+                            {
+                                rowContainer.IsSelected = true;
+                            }
                         }
                     }
                 }
@@ -1561,6 +1563,8 @@ namespace process_pipeline.Forms
             return true;
         }
 
+        private bool _isPendingFilterIdleRefresh;
+
         /// <summary>
         /// 触发内存视图过滤刷新，清理已被隐藏行的选中残留，并同步底部状态栏记录数与连续行号。
         /// 在 _rowsView.Refresh() 期间开启 _isSyncingSelection 保护，并从跨节点持久选择集快照 _selectedFilterSnapshot 恢复所有当前可见的选中行（Stage 7 Commit 7.6）。
@@ -1568,6 +1572,7 @@ namespace process_pipeline.Forms
         public void RefreshFilter()
         {
             _pendingFilterSelectionGuard = true;
+            InvalidateActionTargetsCache();
             bool prevSyncing = _isSyncingSelection;
             _isSyncingSelection = true;
             try
@@ -1604,11 +1609,16 @@ namespace process_pipeline.Forms
                 _isSyncingSelection = prevSyncing;
             }
 
-            if (_grid != null)
+            if (_grid != null && !_isPendingFilterIdleRefresh)
             {
-                // 异步刷新虚拟化可见行的连续行号（1, 2, 3...）并在布局稳定后二次加固选中容器状态
+                _isPendingFilterIdleRefresh = true;
+                // 异步刷新虚拟化可见行的连续行号（1, 2, 3...）并在布局稳定后二次加固选中容器状态（合并同一帧内多次触发）
                 _grid.Dispatcher.BeginInvoke(new Action(() =>
                 {
+                    _isPendingFilterIdleRefresh = false;
+                    if (_grid == null)
+                        return;
+
                     bool prev = _isSyncingSelection;
                     _isSyncingSelection = true;
                     try

@@ -780,7 +780,7 @@
                    Foreground="{DynamicResource Brush.DataGrid.Text.Foreground}"
                    CaretBrush="{DynamicResource Brush.DataGrid.Text.Foreground}"
                    VerticalContentAlignment="Center"
-                   Text="{Binding Keyword, UpdateSourceTrigger=PropertyChanged}"/>
+                   Text="{Binding Keyword, UpdateSourceTrigger=PropertyChanged, Delay=150}"/>
         </StackPanel>
       </Border>
     </ToolBar>
