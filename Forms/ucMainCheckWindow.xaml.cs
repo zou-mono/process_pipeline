@@ -495,6 +495,8 @@ namespace process_pipeline.Forms
 
         public IReadOnlyDictionary<ObjectId, CheckIssueItem> CurrentIssues => _currentIssues;
 
+        private AcadDb.Database _activeDatabase;
+
         //private double _leftPanelToggleX;  // GridSplitter距离左侧的偏移值
 
         public ObservableCollection<TreeNodeVm> TreeNodes { get; } = new ObservableCollection<TreeNodeVm>();
@@ -598,7 +600,7 @@ namespace process_pipeline.Forms
             // Stage 6 Commit 6.6：移除初始化时的 Mock 假数据（PL001~PL003），保持初始空状态干净（Rows.Count == 0）
             RebuildNavigationTreeNodes();
             RefreshDataSourceSummaryText();
-            StatusText = "就绪（请加载管线图纸后执行核查）";
+            StatusText = "当前文档尚未执行核查，请点击工具栏【一键全量核查】或【单项核查】";
         }
 
         private void InitializeMockData()
@@ -1862,16 +1864,34 @@ namespace process_pipeline.Forms
         /// </summary>
         public void OnActiveDocumentSwitched(Autodesk.AutoCAD.ApplicationServices.Document newDoc)
         {
+            if (newDoc?.Database == null)
+                return;
+
+            SwitchActiveDatabase(newDoc.Database);
+        }
+
+        /// <summary>
+        /// 切换主核查窗口绑定的目标 CAD 数据库会话（供 MDI 文档切换及无头多文档测试调用）。
+        /// </summary>
+        public void SwitchActiveDatabase(AcadDb.Database targetDb)
+        {
             _selectedFilterSnapshot.Clear();
             _selectedRows.Clear();
             _selectedRow = null;
             ContextTargetRow = null;
 
-            if (newDoc?.Database == null)
+            if (targetDb == null)
                 return;
 
-            var session = DocumentSessionManager.GetOrCreateSession(newDoc.Database);
+            _activeDatabase = targetDb;
+            var session = DocumentSessionManager.GetOrCreateSession(targetDb);
             EnsureUndoRedoManagerSubscribed(session?.UndoRedoManager ?? _fallbackUndoRedoManager);
+
+            bool hasExecutedRules = session != null &&
+                                    ((session.ActiveRules != null && session.ActiveRules.Count > 0) ||
+                                     session.ActiveRule != null ||
+                                     session.IssuesById.Count > 0 ||
+                                     session.CurrentIssues.Count > 0);
 
             if (session != null && session.IssuesById.Count > 0)
             {
@@ -1891,8 +1911,17 @@ namespace process_pipeline.Forms
                 ActivateRuleInView(session.ActiveRule.RuleId);
             }
 
-            RefreshDataSourceSummaryText(newDoc.Database);
+            RefreshDataSourceSummaryText(targetDb);
             NotifyUndoRedoStateChanged();
+
+            if (!hasExecutedRules)
+            {
+                StatusText = "当前文档尚未执行核查，请点击工具栏【一键全量核查】或【单项核查】";
+            }
+            else
+            {
+                StatusText = $"已切换至当前文档：共 {Rows.Count} 条核查记录";
+            }
         }
 
         private void RemoveRowInternal(PipeRowVm row, string issueId, ObjectId targetId)
@@ -2166,9 +2195,48 @@ namespace process_pipeline.Forms
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
+            var targetDb = _activeDatabase ?? AcadApp.DocumentManager?.MdiActiveDocument?.Database;
+            var session = targetDb != null ? DocumentSessionManager.GetOrCreateSession(targetDb) : null;
+            if (session != null)
+            {
+                if (session.ActiveRules != null && session.ActiveRules.Count > 0)
+                {
+                    foreach (ICheckRule rule in session.ActiveRules.Values)
+                    {
+                        if (rule == null) continue;
+                        string ruleDisplayName = ResolveRuleDisplayName(
+                            !string.IsNullOrWhiteSpace(rule.RuleId) ? rule.RuleId : rule.RuleName);
+                        if (!string.IsNullOrWhiteSpace(ruleDisplayName) &&
+                            !distinctRules.Any(r => string.Equals(r, ruleDisplayName, StringComparison.OrdinalIgnoreCase)))
+                        {
+                            distinctRules.Add(ruleDisplayName);
+                        }
+                    }
+                }
+                else if (session.ActiveRule != null)
+                {
+                    string ruleDisplayName = ResolveRuleDisplayName(
+                        !string.IsNullOrWhiteSpace(session.ActiveRule.RuleId) ? session.ActiveRule.RuleId : session.ActiveRule.RuleName);
+                    if (!string.IsNullOrWhiteSpace(ruleDisplayName) &&
+                        !distinctRules.Any(r => string.Equals(r, ruleDisplayName, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        distinctRules.Add(ruleDisplayName);
+                    }
+                }
+            }
+
             if (distinctRules.Count == 0)
             {
-                distinctRules.Add("流向箭头核查");
+                var emptyPlaceholderNode = new TreeNodeVm("暂未执行核查")
+                {
+                    FilterKind = TreeFilterKind.AllSummary,
+                    IsExpanded = false,
+                    IsSelected = true
+                };
+                TreeNodes.Add(emptyPlaceholderNode);
+                SelectedTreeNode = emptyPlaceholderNode;
+                StatusText = "当前文档尚未执行核查，请点击工具栏【一键全量核查】或【单项核查】";
+                return;
             }
 
             TreeNodeVm nodeToSelect = null;
@@ -2988,6 +3056,8 @@ namespace process_pipeline.Forms
                 return new FullPipelineCheckSummary();
             }
 
+            _activeDatabase = db;
+
             FullPipelineCheckSummary summary = CheckPipelineCoordinator.ExecuteFullPipelineCheck(
                 db,
                 ed,
@@ -3029,6 +3099,8 @@ namespace process_pipeline.Forms
                 StatusText = "当前无活动 CAD 文档，无法执行单项核查";
                 return Array.Empty<CheckIssueItem>();
             }
+
+            _activeDatabase = db;
 
             IReadOnlyList<CheckIssueItem> mergedIssues = CheckPipelineCoordinator.ExecuteSingleRule(
                 db,

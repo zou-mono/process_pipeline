@@ -508,6 +508,15 @@ namespace Cad.Plugin
                         using (Database emptyDb = new Database(true, true))
                         {
                             var emptySessionBefore = DocumentSessionManager.GetOrCreateSession(emptyDb);
+                            mainVm.SwitchActiveDatabase(emptyDb);
+                            AssertTrue(
+                                mainVm.Rows.Count == 0 &&
+                                mainVm.TreeNodes.Count == 1 &&
+                                mainVm.TreeNodes[0].Name == "暂未执行核查" &&
+                                mainVm.TreeNodes[0].Children.Count == 0 &&
+                                mainVm.StatusText == "当前文档尚未执行核查，请点击工具栏【一键全量核查】或【单项核查】",
+                                $"[多文档切换未核查占位状态] 切换至未执行过核查的图纸时，左侧树仅显示单行无子节点占位项 [{mainVm.TreeNodes.FirstOrDefault()?.Name}] (TreeNodes.Count={mainVm.TreeNodes.Count})，状态栏提示={mainVm.StatusText}");
+
                             mainVm.RefreshByRule(emptyDb);
                             AssertTrue(
                                 emptySessionBefore.ActiveRules.Count == 0 &&
@@ -515,6 +524,8 @@ namespace Cad.Plugin
                                 mainVm.StatusText != null &&
                                 mainVm.StatusText.Contains("尚未执行过核查规则"),
                                 $"[空会话刷新保护] 未执行过核查的文档调用 RefreshByRule 不伪造默认规则 (ActiveRules={emptySessionBefore.ActiveRules.Count}，StatusText={mainVm.StatusText})");
+
+                            mainVm.SwitchActiveDatabase(planDb);
                             var emptyPreCheck = PreCheckService.ValidateFullPipelinePreConditions(emptyDb, showDialogOnBlocking: false);
                             AssertTrue(
                                 emptyPreCheck != null &&
