@@ -94,6 +94,10 @@ namespace process_pipeline.Themes
             }
         }
 
+        private static readonly Dictionary<string, ResourceDictionary> _themeDictCache =
+            new Dictionary<string, ResourceDictionary>(StringComparer.OrdinalIgnoreCase);
+        private static ResourceDictionary _cachedBaseAppDict;
+
         /// <summary>
         /// 为指定的 WPF 控件或窗体应用 AutoCAD 当前的主题配色与原生图标（COLORTHEME: 0=Dark, 1=Light），
         /// 并同步更新其挂载的所有 ContextMenu（解决 WPF PopupRoot 独立视觉树无法向上查找 UserControl.Resources 的问题）。
@@ -109,8 +113,7 @@ namespace process_pipeline.Themes
                 string themeName = NormalizeThemeName(explicitThemeName ?? CadThemeName());
                 RefreshTheme(themeName);
 
-                ResourceDictionary newThemeDict = CreateThemeDictionary(themeName);
-                ApplyThemeDictionaryToResources(element.Resources, newThemeDict, ensureBaseAppDict: false);
+                ApplyThemeDictionaryToResources(element.Resources, themeName, ensureBaseAppDict: false);
 
                 // 同步所有挂载在当前控件或子控件（如 DataGrid）上的 ContextMenu，避免 PopupRoot 隔离导致配色/图标冲突
                 SyncDescendantContextMenus(element, themeName);
@@ -123,6 +126,7 @@ namespace process_pipeline.Themes
 
         /// <summary>
         /// 显式同步指定 ContextMenu 的主题资源字典与 AutoCAD 2019 原生图标（供右键弹出前或初始化时调用）。
+        /// 若当前 ContextMenu 已挂载目标主题字典且未发生主题切换，直接 O(1) 短路返回，杜绝右键弹出瞬间重建视觉树样式。
         /// </summary>
         public static void SyncContextMenuTheme(ContextMenu contextMenu, string explicitThemeName = null)
         {
@@ -132,8 +136,7 @@ namespace process_pipeline.Themes
             {
                 EnsurePackUriRegistered();
                 string themeName = NormalizeThemeName(explicitThemeName ?? _lastActiveThemeName ?? CadThemeName());
-                ResourceDictionary newThemeDict = CreateThemeDictionary(themeName);
-                ApplyThemeDictionaryToResources(contextMenu.Resources, newThemeDict, ensureBaseAppDict: true);
+                ApplyThemeDictionaryToResources(contextMenu.Resources, themeName, ensureBaseAppDict: true);
             }
             catch (Exception ex)
             {
@@ -141,46 +144,81 @@ namespace process_pipeline.Themes
             }
         }
 
-        private static ResourceDictionary CreateThemeDictionary(string themeName)
+        private static ResourceDictionary GetOrCreateThemeDictionary(string themeName)
         {
+            if (_themeDictCache.TryGetValue(themeName, out ResourceDictionary cached) && cached != null)
+            {
+                return cached;
+            }
+
             string uriPath = $"pack://application:,,,/process_pipeline;component/Themes/{themeName}.xaml";
-            return new ResourceDictionary
+            var dict = new ResourceDictionary
             {
                 Source = new Uri(uriPath, UriKind.Absolute)
             };
+            _themeDictCache[themeName] = dict;
+            return dict;
+        }
+
+        private static ResourceDictionary GetOrCreateBaseAppDictionary()
+        {
+            if (_cachedBaseAppDict != null)
+                return _cachedBaseAppDict;
+
+            _cachedBaseAppDict = new ResourceDictionary
+            {
+                Source = new Uri("pack://application:,,,/process_pipeline;component/Themes/App.xaml", UriKind.Absolute)
+            };
+            return _cachedBaseAppDict;
         }
 
         private static void ApplyThemeDictionaryToResources(
             ResourceDictionary targetResources,
-            ResourceDictionary newThemeDict,
+            string themeName,
             bool ensureBaseAppDict)
         {
-            if (targetResources == null || newThemeDict == null) return;
+            if (targetResources == null || string.IsNullOrWhiteSpace(themeName)) return;
 
             var dictionaries = targetResources.MergedDictionaries;
+            string expectedToken = $"{themeName}.xaml";
+            string oppositeToken = string.Equals(themeName, "Light", StringComparison.OrdinalIgnoreCase)
+                ? "Dark.xaml"
+                : "Light.xaml";
 
-            if (ensureBaseAppDict)
+            bool hasAppDict = false;
+            bool hasExpectedTheme = false;
+            bool hasOppositeTheme = false;
+
+            for (int i = 0; i < dictionaries.Count; i++)
             {
-                bool hasAppDict = false;
-                for (int i = 0; i < dictionaries.Count; i++)
+                string src = dictionaries[i]?.Source?.OriginalString;
+                if (string.IsNullOrEmpty(src)) continue;
+
+                if (src.IndexOf("Themes/App.xaml", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    src.IndexOf("Themes/Common.xaml", StringComparison.OrdinalIgnoreCase) >= 0)
                 {
-                    string src = dictionaries[i]?.Source?.OriginalString;
-                    if (!string.IsNullOrEmpty(src) &&
-                        (src.IndexOf("Themes/App.xaml", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                         src.IndexOf("Themes/Common.xaml", StringComparison.OrdinalIgnoreCase) >= 0))
-                    {
-                        hasAppDict = true;
-                        break;
-                    }
+                    hasAppDict = true;
                 }
 
-                if (!hasAppDict)
+                if (src.IndexOf(expectedToken, StringComparison.OrdinalIgnoreCase) >= 0)
                 {
-                    dictionaries.Insert(0, new ResourceDictionary
-                    {
-                        Source = new Uri("pack://application:,,,/process_pipeline;component/Themes/App.xaml", UriKind.Absolute)
-                    });
+                    hasExpectedTheme = true;
                 }
+                else if (src.IndexOf(oppositeToken, StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    hasOppositeTheme = true;
+                }
+            }
+
+            // O(1) 短路：若目标资源集合已挂载当前主题且不存在相反主题（且满足基础字典要求），无需移除重挂，避免触发 WPF 菜单样式树重排
+            if (hasExpectedTheme && !hasOppositeTheme && (!ensureBaseAppDict || hasAppDict))
+            {
+                return;
+            }
+
+            if (ensureBaseAppDict && !hasAppDict)
+            {
+                dictionaries.Insert(0, GetOrCreateBaseAppDictionary());
             }
 
             for (int i = dictionaries.Count - 1; i >= 0; i--)
@@ -194,7 +232,7 @@ namespace process_pipeline.Themes
                 }
             }
 
-            dictionaries.Add(newThemeDict);
+            dictionaries.Add(GetOrCreateThemeDictionary(themeName));
         }
 
         private static void SyncDescendantContextMenus(DependencyObject root, string themeName)

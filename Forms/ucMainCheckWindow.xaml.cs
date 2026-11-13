@@ -126,8 +126,12 @@ namespace process_pipeline.Forms
             _vm?.NotifyUserGridInteraction();
         }
 
+        private bool _suppressRightClickSelectionChanged;
+
         private void DataGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
+            if (_suppressRightClickSelectionChanged)
+                return;
             _vm?.OnGridSelectionChanged(e);
         }
 
@@ -189,16 +193,31 @@ namespace process_pipeline.Forms
                 }
                 else
                 {
-                    // 单行未选中情况下右键：直接选中该行并同步右键菜单状态
-                    dgIssues.SelectedItems.Clear();
-                    row.IsSelected = true;
+                    // 单行未选中情况下右键：屏蔽 SelectionChanged 引起的同步双倍调用，
+                    // 先完成纯内存选中状态同步使右键菜单 0ms 瞬时弹出，再在后台空闲帧异步高亮 CAD 视口图元
+                    _suppressRightClickSelectionChanged = true;
+                    try
+                    {
+                        dgIssues.SelectedItems.Clear();
+                        row.IsSelected = true;
+                    }
+                    finally
+                    {
+                        _suppressRightClickSelectionChanged = false;
+                    }
+
                     _vm.SelectedRow = row.Item as PipeRowVm;
-                    _vm.SyncSelectedRowsFromGrid(syncCadSelection: true);
+                    _vm.SyncSelectedRowsFromGrid(syncCadSelection: false);
                     if (dgIssues.ContextMenu != null)
                     {
                         CadThemes.SyncContextMenuTheme(dgIssues.ContextMenu);
                         dgIssues.ContextMenu.DataContext = _vm;
                     }
+
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        _vm?.ZoomToSelectedRow(isZoomTo: false);
+                    }), System.Windows.Threading.DispatcherPriority.Background);
                 }
             }
             else
@@ -404,9 +423,27 @@ namespace process_pipeline.Forms
             return row != null && _selectedFilterSnapshot.Contains(row);
         }
 
+        private PipeRowVm _contextTargetRow;
+        private int _actionTargetsCacheVersion = 1;
+        private int _cachedActionTargetsVersion = -1;
+        private IReadOnlyList<PipeRowVm> _cachedActionTargetRows = Array.Empty<PipeRowVm>();
+        private int _cachedReversibleTargetsVersion = -1;
+        private IReadOnlyList<PipeRowVm> _cachedReversibleTargetRows = Array.Empty<PipeRowVm>();
+        private int _cachedBindableTargetsVersion = -1;
+        private IReadOnlyList<PipeRowVm> _cachedBindableGroupTargetRows = Array.Empty<PipeRowVm>();
+
+        private void InvalidateActionTargetsCache()
+        {
+            unchecked
+            {
+                _actionTargetsCacheVersion++;
+            }
+        }
+
         /// <summary>
         /// 将种子行及其同一 CAD 管线要素（相同 TargetObjectId）在其他核查规则/树节点下的活动行一并纳入持久选择集快照，
         /// 实现仿 ArcGIS 跨左侧树根节点切换时同一选中要素行始终保持选中状态（Stage 7 Commit 7.6）。
+        /// 通过二级索引 _objectIdToRowsMap 实现 O(1) 定位，杜绝每次选择变化时 O(N) 全表遍历。
         /// </summary>
         private void UpdateSelectionSnapshotWithSameFeatureRows(IEnumerable<PipeRowVm> seedRows, bool clearExisting)
         {
@@ -434,18 +471,21 @@ namespace process_pipeline.Forms
 
             if (primaryPipeIds.Count > 0)
             {
-                foreach (PipeRowVm candidate in Rows)
+                foreach (ObjectId pipeId in primaryPipeIds)
                 {
-                    if (candidate == null || IsOrphanAttachmentRow(candidate))
-                        continue;
-
-                    IssueReviewStatus status = candidate.SourceIssue?.Status ?? IssueReviewStatus.Pending;
-                    if (status == IssueReviewStatus.Resolved)
-                        continue;
-
-                    if (!candidate.TargetObjectId.IsNull && primaryPipeIds.Contains(candidate.TargetObjectId))
+                    if (_objectIdToRowsMap.TryGetValue(pipeId, out List<PipeRowVm> candidates) && candidates != null)
                     {
-                        _selectedFilterSnapshot.Add(candidate);
+                        foreach (PipeRowVm candidate in candidates)
+                        {
+                            if (candidate == null || candidate.TargetObjectId != pipeId || IsOrphanAttachmentRow(candidate))
+                                continue;
+
+                            IssueReviewStatus status = candidate.SourceIssue?.Status ?? IssueReviewStatus.Pending;
+                            if (status == IssueReviewStatus.Resolved)
+                                continue;
+
+                            _selectedFilterSnapshot.Add(candidate);
+                        }
                     }
                 }
             }
@@ -454,7 +494,18 @@ namespace process_pipeline.Forms
         /// <summary>
         /// 右键点击时鼠标落点所在的行（用于未多选时定位右键目标行）。
         /// </summary>
-        public PipeRowVm ContextTargetRow { get; set; }
+        public PipeRowVm ContextTargetRow
+        {
+            get => _contextTargetRow;
+            set
+            {
+                if (!ReferenceEquals(_contextTargetRow, value))
+                {
+                    _contextTargetRow = value;
+                    InvalidateActionTargetsCache();
+                }
+            }
+        }
 
         public void AttachGrid(DataGrid grid)
         {
@@ -872,10 +923,12 @@ namespace process_pipeline.Forms
             {
                 if (Set(ref _selectedRow, value))
                 {
-                    OnPropertyChanged(nameof(ReversePipeMenuVisibility));
-                    OnPropertyChanged(nameof(ReversePipeMenuHeader));
-                    OnPropertyChanged(nameof(SelectionRecordSummaryText));
-                    NotifyUndoRedoStateChanged();
+                    InvalidateActionTargetsCache();
+                    if (!_isSyncingSelection)
+                    {
+                        OnPropertyChanged(nameof(SelectionRecordSummaryText));
+                        NotifyUndoRedoStateChanged();
+                    }
                 }
             }
         }
@@ -1055,10 +1108,7 @@ namespace process_pipeline.Forms
                 _isSyncingSelection = prevSync;
             }
 
-            OnPropertyChanged(nameof(ReversePipeMenuVisibility));
-            OnPropertyChanged(nameof(ReversePipeMenuHeader));
-            OnPropertyChanged(nameof(BindGroupMenuVisibility));
-            OnPropertyChanged(nameof(BindGroupMenuHeader));
+            InvalidateActionTargetsCache();
             OnPropertyChanged(nameof(SelectionRecordSummaryText));
             OnPropertyChanged(nameof(RowCountText));
             NotifyUndoRedoStateChanged();
@@ -1158,10 +1208,7 @@ namespace process_pipeline.Forms
                 UpdateSelectionSnapshotWithSameFeatureRows(_selectedRows, clearExisting: true);
             }
 
-            OnPropertyChanged(nameof(ReversePipeMenuVisibility));
-            OnPropertyChanged(nameof(ReversePipeMenuHeader));
-            OnPropertyChanged(nameof(BindGroupMenuVisibility));
-            OnPropertyChanged(nameof(BindGroupMenuHeader));
+            InvalidateActionTargetsCache();
             OnPropertyChanged(nameof(SelectionRecordSummaryText));
             NotifyUndoRedoStateChanged();
 
@@ -1217,23 +1264,40 @@ namespace process_pipeline.Forms
 
         /// <summary>
         /// 获取当前右键动作的目标行集合（优先使用表格多选集合，未多选时回退至右键落点行或当前焦点行，并过滤已隐藏行）。
+        /// 采用基于版本号的单帧缓存，使 NotifyUndoRedoStateChanged 期间 18 个菜单绑定属性的重复读取降至 O(1)。
         /// </summary>
         public IReadOnlyList<PipeRowVm> GetActionTargetRows()
         {
+            if (_cachedActionTargetsVersion == _actionTargetsCacheVersion)
+            {
+                return _cachedActionTargetRows;
+            }
+
+            IReadOnlyList<PipeRowVm> computed = Array.Empty<PipeRowVm>();
             if (_selectedRows.Count > 0)
             {
                 var visibleSelected = _selectedRows.Where(r => FilterRow(r)).ToList();
                 if (visibleSelected.Count > 0)
-                    return visibleSelected;
+                {
+                    computed = visibleSelected;
+                }
             }
 
-            if (ContextTargetRow != null && FilterRow(ContextTargetRow))
-                return new[] { ContextTargetRow };
+            if (computed.Count == 0)
+            {
+                if (ContextTargetRow != null && FilterRow(ContextTargetRow))
+                {
+                    computed = new[] { ContextTargetRow };
+                }
+                else if (SelectedRow != null && FilterRow(SelectedRow))
+                {
+                    computed = new[] { SelectedRow };
+                }
+            }
 
-            if (SelectedRow != null && FilterRow(SelectedRow))
-                return new[] { SelectedRow };
-
-            return Array.Empty<PipeRowVm>();
+            _cachedActionTargetRows = computed;
+            _cachedActionTargetsVersion = _actionTargetsCacheVersion;
+            return _cachedActionTargetRows;
         }
 
         /// <summary>
@@ -2444,13 +2508,21 @@ namespace process_pipeline.Forms
         /// </summary>
         public IReadOnlyList<PipeRowVm> GetReversibleTargetRows()
         {
-            return GetActionTargetRows()
+            var targets = GetActionTargetRows();
+            if (_cachedReversibleTargetsVersion == _actionTargetsCacheVersion)
+            {
+                return _cachedReversibleTargetRows;
+            }
+
+            _cachedReversibleTargetRows = targets
                 .Where(r => r?.SourceIssue != null &&
                             !string.Equals(r.SourceIssue.RuleId, MatchGroupService.DefaultRuleId, StringComparison.OrdinalIgnoreCase) &&
                             !string.Equals(r.SourceIssue.RuleId, PlanDataCheckService.DefaultRuleId, StringComparison.OrdinalIgnoreCase) &&
                             (r.SourceIssue.Type == ProblemType.DirectionConflict ||
                              r.SourceIssue.Type == ProblemType.OneToMany))
                 .ToList();
+            _cachedReversibleTargetsVersion = _actionTargetsCacheVersion;
+            return _cachedReversibleTargetRows;
         }
 
         /// <summary>
@@ -2466,7 +2538,13 @@ namespace process_pipeline.Forms
         /// </summary>
         public IReadOnlyList<PipeRowVm> GetBindableGroupTargetRows()
         {
-            return GetActionTargetRows()
+            var targets = GetActionTargetRows();
+            if (_cachedBindableTargetsVersion == _actionTargetsCacheVersion)
+            {
+                return _cachedBindableGroupTargetRows;
+            }
+
+            _cachedBindableGroupTargetRows = targets
                 .Where(r => r?.SourceIssue != null &&
                             string.Equals(r.SourceIssue.RuleId, MatchGroupService.DefaultRuleId, StringComparison.OrdinalIgnoreCase) &&
                             !r.TargetObjectId.IsNull &&
@@ -2474,6 +2552,8 @@ namespace process_pipeline.Forms
                             r.SourceIssue.RelatedObjectIds.Count > 0 &&
                             !r.SourceIssue.RelatedObjectIds[0].IsNull)
                 .ToList();
+            _cachedBindableTargetsVersion = _actionTargetsCacheVersion;
+            return _cachedBindableGroupTargetRows;
         }
 
         /// <summary>
@@ -2853,6 +2933,7 @@ namespace process_pipeline.Forms
 
         public void NotifyUndoRedoStateChanged()
         {
+            InvalidateActionTargetsCache();
             OnPropertyChanged(nameof(UndoMenuHeader));
             OnPropertyChanged(nameof(RedoMenuHeader));
             OnPropertyChanged(nameof(UndoToolTipText));
